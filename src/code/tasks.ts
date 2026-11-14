@@ -1,0 +1,384 @@
+// Coding tasks, with Jarvis as the PM (#191).
+//
+// Jarvis doesn't hold the code's details: Claude Code does, in its own
+// session, with the repo's CLAUDE.md and STATUS.md. Jarvis keeps the list:
+// what each task is for, its branch, its Claude Code session, its status, its
+// last report and its pull request. He passes on Renato's instructions by
+// resuming that session, and brings back reports and decisions.
+//
+// Renato's OK is asked before: starting a task (it runs on his Claude plan and
+// runs commands on a copy), pushing it and opening or updating its pull
+// request, and closing it (its copy, with any unpushed work, is deleted).
+// Following up ("continue", "use X instead") needs no OK: nothing leaves the
+// copy. One task works at a time; the others wait their turn.
+//
+// Each task: a fresh copy of the repo at data/tasks/<id>/repo, from the base
+// branch (staging when the repo has one), on a new branch agent/<slug>-<id>.
+// The list is kept in data/tasks/tasks.json (no code, no reports' secrets:
+// reports are Claude Code's own words about the work).
+
+import { randomBytes } from "node:crypto";
+import path from "node:path";
+import type { LlmTool } from "../llm/types.js";
+import { err, ok, type Result } from "../result.js";
+import type { Logger } from "../types.js";
+import { maskEmails } from "../gcloud/gcloud.js";
+import { fixGitEnv, slug, type RunOut } from "./fix.js";
+import type { TaskRunner } from "./task-runner.js";
+
+export type TaskStatus = "preparing" | "queued" | "working" | "waiting" | "idle" | "done" | "failed" | "closed";
+
+export type Task = {
+  readonly id: string;
+  readonly repo: string;
+  readonly title: string;
+  readonly goal: string;
+  readonly base: string;
+  readonly branch: string;
+  readonly status: TaskStatus;
+  readonly createdAt: string;
+  readonly updatedAt: string;
+  readonly sessionId?: string;
+  /** Claude Code's last report, its own words. */
+  readonly report?: string;
+  /** While working: its latest step. */
+  readonly step?: string;
+  readonly costUsd: number;
+  readonly turns: number;
+  readonly prUrl?: string;
+  readonly prNumber?: number;
+  /** Why it failed, safe to show. */
+  readonly message?: string;
+};
+
+export type TaskStore = { readonly read: () => Promise<readonly Task[]>; readonly write: (tasks: readonly Task[]) => Promise<void> };
+
+const REPO = /^([A-Za-z0-9-]{1,39})\/([A-Za-z0-9_.-]{1,100})$/;
+const BRANCH = /^[A-Za-z0-9._/-]{1,100}$/;
+
+const repoProp = { type: "string", description: 'The repo as "owner/name"' };
+const idProp = { type: "string", description: "The task's id, from task_list" };
+
+export const TASK_START_TOOL: LlmTool = {
+  name: "task_start",
+  description:
+    "Start a coding task: Claude Code works on it in its own copy of the repo, on a new branch, with the repo's own setup (CLAUDE.md, skills, agents), and can run its tests. Nothing starts by this call: it shows him a card. Use it when he wants something built, changed or refactored that's more than a quick fix. You manage the task; Claude Code does the work and keeps the code's details.",
+  inputSchema: {
+    type: "object",
+    properties: {
+      repo: repoProp,
+      title: { type: "string", description: "A short name for the task" },
+      goal: { type: "string", description: "What he wants done, in his words, with anything he said about how; Claude Code reads the repo's own notes for the rest" },
+      base: { type: "string", description: "The branch to start from; leave out for staging (or the default branch if there's no staging)" },
+    },
+    required: ["repo", "title", "goal"],
+    additionalProperties: false,
+  },
+};
+
+export const TASK_LIST_TOOL: LlmTool = {
+  name: "task_list",
+  description: "His coding tasks: each one's status (working, waiting for him, idle, done), last report, branch and pull request. Use it for \"how's it going?\" before asking a task anything.",
+  inputSchema: { type: "object", properties: { all: { type: "boolean", description: "Also closed tasks" } }, additionalProperties: false },
+};
+
+export const TASK_TELL_TOOL: LlmTool = {
+  name: "task_tell",
+  description:
+    "Pass a message to a task's Claude Code, which carries on in the same session (it remembers its work): his answer to its question, \"continue\", a change of plan, or a question about how it's going. It works in the background; its report comes back to the task list.",
+  inputSchema: { type: "object", properties: { id: idProp, message: { type: "string", description: "His words, or a faithful summary of them" } }, required: ["id", "message"], additionalProperties: false },
+};
+
+export const TASK_PUBLISH_TOOL: LlmTool = {
+  name: "task_publish",
+  description: "Push a task's branch and open its pull request into the base branch (or update it). Nothing is pushed by this call: it shows him the commits and asks.",
+  inputSchema: { type: "object", properties: { id: idProp }, required: ["id"], additionalProperties: false },
+};
+
+export const TASK_CLOSE_TOOL: LlmTool = {
+  name: "task_close",
+  description: "Close a task: stop it and delete its copy (its pull request, if any, stays). It shows him a card first, since unpushed work is lost.",
+  inputSchema: { type: "object", properties: { id: idProp }, required: ["id"], additionalProperties: false },
+};
+
+export const TASK_TOOLS: readonly LlmTool[] = [TASK_START_TOOL, TASK_LIST_TOOL, TASK_TELL_TOOL, TASK_PUBLISH_TOOL, TASK_CLOSE_TOOL];
+
+export type StartRequest = { readonly owner: string; readonly name: string; readonly title: string; readonly goal: string; readonly base?: string };
+
+export const checkStart = (v: unknown): Result<StartRequest, string> => {
+  const o = typeof v === "object" && v !== null ? (v as Record<string, unknown>) : {};
+  const repo = typeof o.repo === "string" && !o.repo.includes("..") ? REPO.exec(o.repo.trim()) : null;
+  if (!repo) return err("not a repo (owner/name)");
+  const title = typeof o.title === "string" ? o.title.replace(/\s+/g, " ").trim() : "";
+  if (title === "" || title.length > 100) return err("a title of up to 100 characters");
+  const goal = typeof o.goal === "string" ? o.goal.trim() : "";
+  if (goal.length < 10 || goal.length > 4000) return err("a goal of 10 to 4000 characters");
+  let base: string | undefined;
+  if (o.base !== undefined && o.base !== "") {
+    if (typeof o.base !== "string" || !BRANCH.test(o.base) || o.base.includes("..")) return err("not a branch name");
+    base = o.base;
+  }
+  return ok({ owner: repo[1] ?? "", name: repo[2] ?? "", title, goal, ...(base ? { base } : {}) });
+};
+
+/** For the brain: one task in a few lines. */
+export const taskForBrain = (t: Task, detail: boolean): string => {
+  const what = { preparing: "copying the repo", queued: "waiting for another task to finish", working: `working${t.step ? ` (${t.step})` : ""}`, waiting: "waiting for Renato", idle: "idle, ready for the next instruction", done: "says it's done", failed: `failed: ${t.message ?? "unknown"}`, closed: "closed" }[t.status];
+  const report = t.report ? maskEmails(t.report.trim()) : "";
+  return [
+    `${t.id} · ${t.title} · ${t.repo} · ${what}. Branch ${t.branch} from ${t.base}${t.prUrl ? `, pull request ${t.prUrl}` : ", not pushed yet"}. ${t.turns} steps, about $${t.costUsd.toFixed(2)} so far.`,
+    ...(report ? [`Last report: ${detail ? report.slice(0, 3000) : (report.split("\n").find((l) => l.trim() !== "") ?? "").slice(0, 300)}`] : []),
+  ].join("\n");
+};
+
+export type TaskCard = { readonly ok: boolean; readonly text: string; readonly job?: string; readonly url?: string; readonly tool?: string };
+
+export type Tasks = {
+  readonly list: (all?: boolean) => Promise<readonly Task[]>;
+  readonly canStart: (owner: string) => Promise<boolean>;
+  /** Cards: a proposal waits 30 minutes for his answer. */
+  readonly proposeStart: (r: StartRequest) => string;
+  readonly proposePublish: (id: string) => Promise<Result<{ readonly card: string; readonly label: string }, string>>;
+  readonly proposeClose: (id: string) => Promise<Result<{ readonly card: string; readonly label: string }, string>>;
+  readonly decide: (card: string, decision: "yes" | "no") => Promise<TaskCard>;
+  /** Pass his words on; the turn runs in the background. */
+  readonly tell: (id: string, message: string) => Promise<Result<string, string>>;
+  readonly stop: (id: string) => boolean;
+};
+
+type Card = { readonly kind: "start"; readonly r: StartRequest; readonly until: number } | { readonly kind: "publish" | "close"; readonly id: string; readonly until: number };
+
+export const makeTasks = (deps: {
+  readonly runner: TaskRunner;
+  readonly store: TaskStore;
+  readonly readToken: (owner: string) => Promise<string | undefined>;
+  readonly writeToken: (owner: string) => Promise<string | undefined>;
+  readonly isEc: (text: string) => boolean;
+  readonly root: string;
+  readonly run: RunOut;
+  readonly remove: (dir: string) => Promise<void>;
+  readonly maxUsd: number;
+  readonly maxTurns: number;
+  readonly fetch?: typeof fetch;
+  readonly now?: () => Date;
+  readonly newId?: () => string;
+  readonly log?: Logger;
+}): Tasks => {
+  const now = deps.now ?? (() => new Date());
+  const newId = deps.newId ?? (() => randomBytes(4).toString("hex"));
+  const doFetch = deps.fetch ?? fetch;
+  const cards = new Map<string, Card>();
+  const running = new Map<string, AbortController>();
+  /** One task works at a time: turns queue on this. */
+  let queue: Promise<unknown> = Promise.resolve();
+  /** Writes to the list queue too, so two never cross. */
+  let saving: Promise<unknown> = Promise.resolve();
+
+  const dirOf = (id: string): string => path.join(deps.root, id, "repo");
+  const all = async (): Promise<Task[]> => [...(await deps.store.read().catch(() => []))];
+  const update = (id: string, change: Partial<Task>): Promise<Task | undefined> => {
+    const next = saving.then(async () => {
+      const tasks = await all();
+      const i = tasks.findIndex((t) => t.id === id);
+      if (i === -1) return undefined;
+      const t: Task = { ...(tasks[i] as Task), ...change, updatedAt: now().toISOString() };
+      tasks[i] = t;
+      await deps.store.write(tasks);
+      return t;
+    });
+    saving = next.catch(() => undefined);
+    return next;
+  };
+  const add = (t: Task): Promise<void> => {
+    const next = saving.then(async () => deps.store.write([...(await all()), t]));
+    saving = next.catch(() => undefined);
+    return next;
+  };
+  const find = async (id: string): Promise<Task | undefined> => (await all()).find((t) => t.id === id);
+  const card = (c: Card): string => {
+    for (const [k, v] of cards) if (v.until <= now().getTime()) cards.delete(k);
+    const id = randomBytes(12).toString("hex");
+    cards.set(id, c);
+    return id;
+  };
+  const gh = (token: string) => ({ authorization: `Bearer ${token}`, accept: "application/vnd.github+json", "x-github-api-version": "2022-11-28", "user-agent": "jarvis" });
+
+  /** One turn of Claude Code on the task, queued behind any other. */
+  const turn = (id: string, prompt: string): void => {
+    void update(id, { status: "queued" });
+    queue = queue
+      .then(async () => {
+        const t = await find(id);
+        if (!t || t.status === "closed") return;
+        const controller = new AbortController();
+        running.set(id, controller);
+        await update(id, { status: "working", step: "starting" });
+        const got = await deps.runner({
+          dir: dirOf(id),
+          prompt,
+          ...(t.sessionId ? { sessionId: t.sessionId } : {}),
+          maxUsd: deps.maxUsd,
+          maxTurns: deps.maxTurns,
+          signal: controller.signal,
+          onProgress: (s) => void update(id, { step: `${s.tool} ${s.target}`.trim() }),
+        });
+        running.delete(id);
+        const latest = await find(id);
+        if (!latest || latest.status === "closed") return;
+        if (!got.ok) {
+          await update(id, { status: got.error.code === "cancelled" ? "idle" : "failed", step: undefined, message: got.error.message });
+          deps.log?.warn("task turn failed", { id, code: got.error.code });
+          return;
+        }
+        const status: TaskStatus = got.value.state === "done" ? "done" : got.value.state === "waiting" ? "waiting" : "idle";
+        await update(id, { status, step: undefined, sessionId: got.value.sessionId, report: got.value.report.slice(0, 8000), costUsd: latest.costUsd + got.value.costUsd, turns: latest.turns + got.value.turns });
+        deps.log?.info("task turn done", { id, state: got.value.state, turns: got.value.turns, costUsd: Math.round(got.value.costUsd * 100) / 100 });
+      })
+      .catch(() => update(id, { status: "failed", step: undefined, message: "The task stopped with an error" }));
+  };
+
+  /** A fresh copy on a new branch, then the first turn. */
+  const begin = async (t: Task): Promise<void> => {
+    const [owner, name] = t.repo.split("/");
+    const token = await deps.readToken(owner ?? "");
+    if (!owner || !name || !token) {
+      await update(t.id, { status: "failed", message: `Jarvis can't read ${t.repo} (npm run github:connect -- ${owner})` });
+      return;
+    }
+    const env = fixGitEnv(token);
+    const dir = dirOf(t.id);
+    const url = `https://github.com/${owner}/${name}.git`;
+    let cloned = await deps.run("git", ["clone", "--depth", "50", "--quiet", "--no-tags", "--branch", t.base, url, dir], { env });
+    let base = t.base;
+    if (cloned.code !== 0) {
+      // No such branch (staging): the default branch then.
+      await deps.remove(dir).catch(() => undefined);
+      cloned = await deps.run("git", ["clone", "--depth", "50", "--quiet", "--no-tags", url, dir], { env });
+      const head = await deps.run("git", ["rev-parse", "--abbrev-ref", "HEAD"], { cwd: dir, env });
+      base = head.stdout.trim();
+    }
+    if (cloned.code !== 0 || !BRANCH.test(base)) {
+      await update(t.id, { status: "failed", message: `Couldn't copy ${t.repo} from GitHub` });
+      return;
+    }
+    const branched = await deps.run("git", ["checkout", "--quiet", "-b", t.branch], { cwd: dir, env });
+    if (branched.code !== 0) {
+      await update(t.id, { status: "failed", message: "Couldn't create the task's branch" });
+      return;
+    }
+    await update(t.id, { base, status: "queued", step: undefined });
+    turn(t.id, [`Task from Renato: ${t.title}`, "", t.goal, "", `You're on branch ${t.branch}, from ${base}. Read the repository's CLAUDE.md and the relevant STATUS.md first.`].join("\n"));
+  };
+
+  const publish = async (t: Task): Promise<TaskCard> => {
+    const [owner, name] = t.repo.split("/");
+    const token = await deps.writeToken(owner ?? "");
+    if (!owner || !name || !token) return { ok: false, text: `I can't write to ${t.repo}: run npm run github:connect -- ${owner} --write. Nothing was pushed.` };
+    const dir = dirOf(t.id);
+    const env = fixGitEnv(token);
+    // His work is committed by Claude Code; anything left uncommitted stays out.
+    const push = await deps.run("git", ["push", "--quiet", "origin", `HEAD:refs/heads/${t.branch}`], { cwd: dir, env });
+    if (push.code !== 0) return { ok: false, text: "GitHub refused the push (the write token needs Contents: Read and write on that repo, and the branch can't have moved on GitHub). Nothing changed." };
+    if (t.prUrl) {
+      await update(t.id, {});
+      deps.log?.info("task pushed", { id: t.id });
+      return { ok: true, text: `Pushed: pull request ${t.prUrl} is updated.`, url: t.prUrl, tool: `task_publish ${t.repo} → pushed` };
+    }
+    const body = [
+      `${maskEmails(t.goal)}`,
+      "",
+      "## Claude Code's report",
+      maskEmails(t.report ?? "(no report)").slice(0, 6000),
+      "",
+      "---",
+      "Built by Claude Code, managed by Jarvis, pushed after Renato's OK.",
+    ].join("\n");
+    const res = await doFetch(`https://api.github.com/repos/${owner}/${name}/pulls`, {
+      method: "POST",
+      headers: { ...gh(token), "content-type": "application/json" },
+      body: JSON.stringify({ title: t.title, head: t.branch, base: t.base, body }),
+    }).catch(() => undefined);
+    if (!res?.ok) return { ok: false, text: `The branch ${t.branch} is pushed, but GitHub didn't open the pull request${res ? ` (${res.status})` : ""}. You can open it from the branch on GitHub.` };
+    const pr = (await res.json().catch(() => ({}))) as { html_url?: unknown; number?: unknown };
+    const prUrl = typeof pr.html_url === "string" && pr.html_url.startsWith("https://github.com/") ? pr.html_url : undefined;
+    await update(t.id, { ...(prUrl ? { prUrl } : {}), ...(typeof pr.number === "number" ? { prNumber: pr.number } : {}) });
+    deps.log?.info("task pull request opened", { id: t.id });
+    return { ok: true, text: `Pull request opened into ${t.base}${prUrl ? `: ${prUrl}` : ""}. Nothing was merged.`, ...(prUrl ? { url: prUrl } : {}), tool: `task_publish ${t.repo} → pull request` };
+  };
+
+  const commitsAhead = async (t: Task): Promise<string> => {
+    const log = await deps.run("git", ["log", "--oneline", "--no-decorate", `origin/${t.base}..HEAD`], { cwd: dirOf(t.id), env: { PATH: process.env.PATH ?? "/usr/bin:/bin", HOME: process.env.HOME ?? "", GIT_CONFIG_NOSYSTEM: "1", GIT_CONFIG_GLOBAL: "/dev/null" } });
+    const lines = log.stdout.split("\n").filter((l) => l.trim() !== "");
+    return lines.length === 0 ? "no commits yet" : `${lines.length} ${lines.length === 1 ? "commit" : "commits"}: ${lines.slice(0, 3).map((l) => l.slice(8, 80)).join("; ")}${lines.length > 3 ? "…" : ""}`;
+  };
+
+  return {
+    list: async (everything) => (await all()).filter((t) => everything === true || t.status !== "closed"),
+    canStart: async (owner) => (await deps.readToken(owner)) !== undefined,
+    proposeStart: (r) => card({ kind: "start", r, until: now().getTime() + 30 * 60_000 }),
+    proposePublish: async (id) => {
+      const t = await find(id);
+      if (!t || t.status === "closed") return err("no such open task");
+      if (t.status === "working" || t.status === "queued" || t.status === "preparing") return err("it's still working; publish when it reports");
+      return ok({ card: card({ kind: "publish", id, until: now().getTime() + 30 * 60_000 }), label: `${t.title} (${t.repo}, ${await commitsAhead(t)})${t.prUrl ? `, updating ${t.prUrl}` : `, a new pull request into ${t.base}`}` });
+    },
+    proposeClose: async (id) => {
+      const t = await find(id);
+      if (!t || t.status === "closed") return err("no such open task");
+      return ok({ card: card({ kind: "close", id, until: now().getTime() + 30 * 60_000 }), label: `${t.title} (${t.repo})${t.prUrl ? "" : ", never pushed"}` });
+    },
+    decide: async (cardId, decision) => {
+      const c = cards.get(cardId);
+      cards.delete(cardId);
+      if (!c || c.until <= now().getTime()) return { ok: false, text: "That request has expired or was already answered, so nothing happened." };
+      if (decision === "no") return { ok: true, text: c.kind === "start" ? "Okay, not started." : c.kind === "publish" ? "Okay, nothing was pushed." : "Okay, the task stays open." };
+      if (c.kind === "start") {
+        const r = c.r;
+        if (deps.isEc(`${r.owner}/${r.name} ${r.title} ${r.goal}`)) return { ok: false, text: "That's EC work, which Kiro handles, so nothing was started." };
+        if (!(await deps.readToken(r.owner))) return { ok: false, text: `Jarvis can't read ${r.owner}'s repos (npm run github:connect -- ${r.owner}). Nothing was started.` };
+        const id = newId();
+        const t: Task = {
+          id,
+          repo: `${r.owner}/${r.name}`,
+          title: r.title,
+          goal: r.goal,
+          base: r.base ?? "staging",
+          branch: `agent/${slug(r.title)}-${id}`,
+          status: "preparing",
+          createdAt: now().toISOString(),
+          updatedAt: now().toISOString(),
+          costUsd: 0,
+          turns: 0,
+        };
+        await add(t);
+        deps.log?.info("task started", { id, repo: t.repo });
+        void begin(t).catch(() => update(id, { status: "failed", message: "Preparing the task stopped with an error" }));
+        return { ok: true, text: `Started "${t.title}" on ${t.repo} (task ${id}). Claude Code is getting a copy and will report here.`, job: id, tool: `task_start ${t.repo} → ${id}` };
+      }
+      const t = await find(c.id);
+      if (!t || t.status === "closed") return { ok: false, text: "That task isn't open any more." };
+      if (c.kind === "publish") {
+        if (t.status === "working" || t.status === "queued") return { ok: false, text: "It's working again; publish when it reports. Nothing was pushed." };
+        return publish(t);
+      }
+      running.get(t.id)?.abort();
+      await update(t.id, { status: "closed", step: undefined });
+      await deps.remove(path.join(deps.root, t.id)).catch(() => undefined);
+      deps.log?.info("task closed", { id: t.id });
+      return { ok: true, text: `Closed "${t.title}" and deleted its copy.${t.prUrl ? ` Its pull request (${t.prUrl}) is still open on GitHub.` : ""}`, tool: `task_close ${t.id}` };
+    },
+    tell: async (id, message) => {
+      const t = await find(id);
+      if (!t || t.status === "closed") return err("no such open task");
+      if (t.status === "preparing" || t.status === "working" || t.status === "queued") return err("it's busy; tell it when it reports, or stop it");
+      if (t.status === "failed" && !t.sessionId) return err(`it failed before starting: ${t.message ?? "unknown"}`);
+      turn(id, `From Renato, through Jarvis: ${message}`);
+      return ok(`Passed on to "${t.title}"; it's working on it.`);
+    },
+    stop: (id) => {
+      const c = running.get(id);
+      c?.abort();
+      return c !== undefined;
+    },
+  };
+};

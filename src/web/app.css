@@ -1703,3 +1703,14 @@ li[data-status="waiting"] > .t-leaf .t-result {
 .morning-head h2 { margin: 0; font-size: 1rem; }
 .morning p { margin: 0.5rem 0 0; line-height: 1.45; }
 .morning .morning-summary { font-size: 0.85em; color: var(--muted, #888); }
+
+/* #191: coding tasks, above the conversation. */
+.tasks { margin: 0 0 1rem; padding: 0.75rem 1rem; border-radius: 12px; border: 1px solid rgba(127, 127, 127, 0.25); }
+.tasks h2 { margin: 0 0 0.5rem; font-size: 1rem; }
+.tasks ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.6rem; }
+.tasks .task-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.5rem; }
+.tasks .task-repo { font-size: 0.85em; color: var(--muted, #888); }
+.tasks li[data-status="waiting"] .task-repo { color: #d08a1e; font-weight: 600; }
+.tasks li[data-status="failed"] .task-repo { color: #d0453a; }
+.tasks p { margin: 0.25rem 0 0; font-size: 0.9em; }
+.tasks button { margin-left: auto; }

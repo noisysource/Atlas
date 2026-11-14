@@ -183,6 +183,15 @@ export const reachView = async (input: ReachInput): Promise<readonly ReachNode[]
         { name: "code_notes", does: "read his note on code he's studied" },
         { name: "code_study", does: "study a repo or app in the background" },
         { name: "code_ask", does: "ask a question about a repo's code" },
+        ...(config.codeAgent.tasks.enabled
+          ? [
+              { name: "task_start", does: "start a coding task for Claude Code, after your OK" },
+              { name: "task_list", does: "the tasks and how they're going" },
+              { name: "task_tell", does: "pass your words on to a task" },
+              { name: "task_publish", does: "push a task and open its pull request, after your OK" },
+              { name: "task_close", does: "close a task, after your OK" },
+            ]
+          : []),
         ...(config.codeAgent.fix.enabled ? [{ name: "code_fix", does: "propose a fix: prepared after your OK, a draft pull request after your second" }] : []),
       ],
       studied: [

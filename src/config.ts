@@ -175,6 +175,14 @@ export type Config = {
      * owner (npm run github:connect -- <owner> --write, in writeTokensPath).
      * CODE_FIX_MAX_USD (default 2) and CODE_FIX_MAX_TURNS (default 60) per fix.
      */
+    /**
+     * CODE_TASKS=on (#191): Jarvis manages coding tasks that Claude Code works
+     * on, with the repo's own setup, in copies under data/tasks, running a
+     * list of commands (tests, typecheck, build, local git). Each start, push
+     * and close needs his OK. CODE_TASK_MAX_USD (default 3) and
+     * CODE_TASK_MAX_TURNS (default 80) cap each turn.
+     */
+    readonly tasks: { readonly enabled: boolean; readonly maxUsd: number; readonly maxTurns: number; readonly path: string };
     readonly fix: { readonly enabled: boolean; readonly maxUsd: number; readonly maxTurns: number; readonly writeTokensPath: string; readonly fixesPath: string };
   };
   /**
@@ -360,6 +368,15 @@ const EnvSchema = z.object({
     (v) => (typeof v === "string" && v.trim() === "" ? undefined : v),
     z.coerce.number({ error: "must be a whole number from 0 to 10" }).int({ error: "must be a whole number from 0 to 10" }).min(0, { error: "must be a whole number from 0 to 10" }).max(10, { error: "must be a whole number from 0 to 10" }).default(2),
   ),
+  CODE_TASKS: onOff,
+  CODE_TASK_MAX_USD: z.preprocess(
+    (v) => (typeof v === "string" && v.trim() === "" ? undefined : v),
+    z.coerce.number({ error: "must be a number from 0.5 to 50" }).min(0.5, { error: "must be a number from 0.5 to 50" }).max(50, { error: "must be a number from 0.5 to 50" }).default(3),
+  ),
+  CODE_TASK_MAX_TURNS: z.preprocess(
+    (v) => (typeof v === "string" && v.trim() === "" ? undefined : v),
+    z.coerce.number({ error: "must be a whole number from 10 to 500" }).int({ error: "must be a whole number from 10 to 500" }).min(10, { error: "must be a whole number from 10 to 500" }).max(500, { error: "must be a whole number from 10 to 500" }).default(80),
+  ),
   CODE_FIX: onOff,
   CODE_FIX_MAX_USD: z.preprocess(
     (v) => (typeof v === "string" && v.trim() === "" ? undefined : v),
@@ -513,6 +530,10 @@ export const loadConfig = (env: Env): Result<Config, string> => {
     if (raw("BARE_MODE") !== "on") errors.push("GMAIL: needs BARE_MODE=on for now");
   }
   if (raw("CODE_AGENT") === "on" && raw("GITHUB") !== "on") errors.push("CODE_AGENT: needs GITHUB=on (it reads the repos GitHub reaches)");
+  if (raw("CODE_TASKS") === "on") {
+    if (raw("CODE_AGENT") !== "on") errors.push("CODE_TASKS: needs CODE_AGENT=on (Claude Code does the work)");
+    if (production) errors.push("CODE_TASKS: local only (Claude Code runs on this Mac)");
+  }
   if (raw("CODE_FIX") === "on") {
     if (raw("CODE_AGENT") !== "on") errors.push("CODE_FIX: needs CODE_AGENT=on (the code agent makes the fix)");
     if (production) errors.push("CODE_FIX: local only for now (its write tokens are files on this Mac)");
@@ -575,7 +596,7 @@ export const loadConfig = (env: Env): Result<Config, string> => {
     gcloud: { enabled: e.GCLOUD === "on", keysPath: "data/gcloud" },
     vendus: { enabled: e.VENDUS === "on", keyPath: "data/vendus.json" },
     house: { enabled: e.HOUSE === "on" && e.GCLOUD === "on", env: e.HOUSE_ENV },
-    codeAgent: { enabled: e.GITHUB === "on" && e.CODE_AGENT === "on", maxUsd: e.CODE_AGENT_MAX_USD, maxTurns: e.CODE_AGENT_MAX_TURNS, reposPath: "data/repos", auth: e.CODE_AGENT_AUTH, model: e.CODE_AGENT_MODEL, study: { maxUsd: e.CODE_STUDY_MAX_USD, maxTurns: e.CODE_STUDY_MAX_TURNS, notesPath: "data/code" }, refresh: { mode: e.CODE_REFRESH, maxStudies: e.CODE_REFRESH_MAX }, fix: { enabled: e.GITHUB === "on" && e.CODE_AGENT === "on" && e.CODE_FIX === "on", maxUsd: e.CODE_FIX_MAX_USD, maxTurns: e.CODE_FIX_MAX_TURNS, writeTokensPath: "data/github-write-tokens.json", fixesPath: "data/fixes" } },
+    codeAgent: { enabled: e.GITHUB === "on" && e.CODE_AGENT === "on", maxUsd: e.CODE_AGENT_MAX_USD, maxTurns: e.CODE_AGENT_MAX_TURNS, reposPath: "data/repos", auth: e.CODE_AGENT_AUTH, model: e.CODE_AGENT_MODEL, study: { maxUsd: e.CODE_STUDY_MAX_USD, maxTurns: e.CODE_STUDY_MAX_TURNS, notesPath: "data/code" }, refresh: { mode: e.CODE_REFRESH, maxStudies: e.CODE_REFRESH_MAX }, tasks: { enabled: e.GITHUB === "on" && e.CODE_AGENT === "on" && e.CODE_TASKS === "on", maxUsd: e.CODE_TASK_MAX_USD, maxTurns: e.CODE_TASK_MAX_TURNS, path: "data/tasks" }, fix: { enabled: e.GITHUB === "on" && e.CODE_AGENT === "on" && e.CODE_FIX === "on", maxUsd: e.CODE_FIX_MAX_USD, maxTurns: e.CODE_FIX_MAX_TURNS, writeTokensPath: "data/github-write-tokens.json", fixesPath: "data/fixes" } },
     ollamaThink: e.OLLAMA_THINK === "on",
     userName: e.JARVIS_USER_NAME,
     tts: { provider: e.TTS_PROVIDER ?? DEFAULTS.ttsProvider, voice: e.TTS_VOICE ?? "", kokoroUrl, piperUrl },

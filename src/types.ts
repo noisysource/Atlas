@@ -4,6 +4,7 @@
 // context id is a branded string that only the contexts parser should create.
 
 import type { Fixes } from "./code/fix.js";
+import type { Tasks } from "./code/tasks.js";
 import type { MorningBriefs } from "./morning.js";
 import type { CodeRefresh } from "./code/freshness.js";
 import type { PrCloser } from "./github/pr-close.js";
@@ -139,7 +140,7 @@ export type PathStep =
        * card with "Add it" / "Don't add", and POSTs `id` to /calendar/confirm.
        * Page only: the path is never logged.
        */
-      readonly confirm?: { readonly id: string; readonly label: string; readonly kind?: "calendar" | "skill" | "email" | "draft-delete" | "fix" | "pr-close" };
+      readonly confirm?: { readonly id: string; readonly label: string; readonly kind?: "calendar" | "skill" | "email" | "draft-delete" | "fix" | "pr-close" | "task-start" | "task-publish" | "task-close" };
     }
   | {
       readonly kind: "guard";
@@ -343,6 +344,8 @@ export type Deps = {
   readonly codeMaps?: () => Promise<readonly CodeMapView[]>;
   /** #162: fixes as pull requests: his OK to prepare one (POST /code/fix), its progress and diff (GET /code/fixes/:id), his OK to publish (POST /code/fixes/publish). */
   readonly codeFixes?: Pick<Fixes, "decide" | "view" | "publish">;
+  /** #191: coding tasks: his answers to their cards (POST /code/task), the list (GET /code/tasks), stop (POST /code/tasks/stop). */
+  readonly codeTasks?: Pick<Tasks, "decide" | "list" | "stop">;
   /** #183: his answer to closing a pull request (POST /github/pr-close). */
   readonly prClose?: Pick<PrCloser, "decide">;
   /** #124: his answer to deleting a draft Jarvis wrote (POST /gmail/delete). Only "yes" deletes. */
