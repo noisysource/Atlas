@@ -8,7 +8,7 @@ import { EMPTY, NODES, NODE_TAGS, applyReach, applyStep, connectCommand, isReach
 /** @typedef {import("./chat.js").PathStep} PathStep */
 /**
  * One node as GET /reach describes it (#133): names, on/off and counts only.
- * @typedef {{ id: string, status: string, about: string, tools: { name: string, does: string }[], accounts?: { name: string, connected: boolean }[], hint?: string, waiting?: number, studied?: { name: string, state: string }[] }} ReachNode
+ * @typedef {{ id: string, status: string, about: string, tools: { name: string, does: string }[], accounts?: { name: string, connected: boolean }[], hint?: string, waiting?: number, studied?: { name: string, state: string }[], switches?: { id: string, label: string, what: string, on: boolean }[] }} ReachNode
  */
 
 const SVG_NS = "http://www.w3.org/2000/svg";
@@ -53,7 +53,7 @@ const el = (tag, className) => {
  * Clicking a node opens its panel (#133); `open` adds a button there for
  * nodes with a fuller view of their own (Memory, Skills).
  * @param {HTMLElement} root
- * @param {{ open?: Partial<Record<string, { label: string, run: () => void }>>, onMap?: (key: string) => void }} [options] onMap: open a studied repo's code map (#158)
+ * @param {{ open?: Partial<Record<string, { label: string, run: () => void }>>, onMap?: (key: string) => void, onSwitch?: (id: string, on: boolean) => Promise<boolean> }} [options] onMap: open a studied repo's code map (#158); onSwitch: turn a tool on or off (#151), true when it worked
  */
 export const makeBrainView = (root, options = {}) => {
   root.replaceChildren();
@@ -180,6 +180,31 @@ export const makeBrainView = (root, options = {}) => {
     }
     panel.append(text("p", "brain-panel-about", info.about));
     if (info.waiting) panel.append(text("p", "brain-panel-waiting", `${info.waiting} waiting for your review.`));
+
+    // #151: switches for what .env allows here; the next question goes by them.
+    if (info.switches && info.switches.length > 0 && options.onSwitch) {
+      panel.append(text("h3", "", "Switches"));
+      const ul = el("ul", "brain-panel-list brain-switches");
+      for (const sw of info.switches) {
+        const li = el("li", sw.on ? "connected" : "not-connected");
+        const label = document.createElement("label");
+        const box = document.createElement("input");
+        box.type = "checkbox";
+        box.checked = sw.on;
+        box.setAttribute("role", "switch");
+        box.addEventListener("change", () => {
+          box.disabled = true;
+          void options.onSwitch?.(sw.id, box.checked).then((done) => {
+            if (!done) box.checked = !box.checked;
+            box.disabled = false;
+          });
+        });
+        label.append(box, text("span", "", sw.label));
+        li.append(label, text("span", "", sw.what));
+        ul.append(li);
+      }
+      panel.append(ul, text("p", "brain-panel-hint", "From the next question, no restart. .env decides what can be switched on."));
+    }
 
     if (info.tools.length > 0) {
       panel.append(text("h3", "", "Tools"));

@@ -355,6 +355,8 @@ export type Deps = {
   readonly gmailDelete?: (id: string, decision: "yes" | "no") => Promise<CalendarConfirmResult>;
   /** #116: skills, with MEMORY=on: drafts and approved routines. */
   readonly skills?: SkillStore;
+  /** #151: the page's switches (POST /settings). .env stays the ceiling. */
+  readonly settings?: { readonly set: (id: string, on: boolean) => Promise<Result<ReadonlySet<string>, string>> };
   /** #133: what each brain-view node can do and what's connected (GET /reach). Names and counts only. */
   readonly reach?: () => Promise<readonly ReachNode[]>;
   /** #108: reviews short-term memory (drop, promote, merge; skill and tool drafts). With MEMORY=on. */

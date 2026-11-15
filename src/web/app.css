@@ -2090,3 +2090,16 @@ footer,
     position: static;
   }
 }
+
+/* #151: switches in a node's panel. */
+.brain-switches label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  cursor: pointer;
+}
+
+.brain-switches input[type="checkbox"] {
+  accent-color: var(--accent);
+  margin: 0;
+}

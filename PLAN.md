@@ -1107,6 +1107,30 @@ Confirmed (2026-11-12):
   himself aren't picked up yet: the handoff between them is the branch,
   the PR and STATUS.md.
 
+- **Switches on the page (#151):** `src/switches.ts`. `availableSwitches`
+  lists only what Claude's deps have (.env is the ceiling); `withSwitches`
+  takes parts of the deps away per question (a whole tool group, write
+  access, one Gmail mailbox through a wrapped reader, plans, fixes,
+  tasks, blinds) and never adds; `makeSwitchedAnswerer` reads
+  `data/settings.json` (`{ off: [...] }`) before every question and
+  rebuilds the answerer only when the switches change. `GET /reach` adds
+  each node's switches; `POST /settings { id, on }`. Not yet: the code
+  agent's login vs API key, and switches for the background jobs (the
+  morning brief follows .env).
+- **Decisions log (#186):** what he decided and why, apart from memory
+  (about him) and code notes (what the code is). `decision_record` (area,
+  decision in his words, why, `replaces`), `decision_list`,
+  `decision_forget` (mistakes only), always offered with tools, like
+  memory. The latest 15 go into the per-turn part of the prompt, with
+  "keep to them, and say when a proposal goes against one". Replaced
+  decisions stay, marked, so how a decision changed is visible. The path
+  shows the area, never the text. EC refused. `data/decisions.json`,
+  at most 500 (oldest replaced ones dropped first).
+- **The local model points to Claude:** with 🧠 Local (no tools), the
+  prompt lists what only Claude reaches (email, GitHub and plans, Google
+  Cloud, the house, invoices, decisions) and says to point there, never to
+  guess or send him to someone else. A new browser starts on Local, which
+  is how "where are we on the restructure?" got a made-up answer.
 - **Following plans (#203):** the other half of being the PM, for work
   Renato runs in his own Claude Code sessions. A plan is a markdown file
   with a steps table (`#` and `PR` columns; a Status column if there is
