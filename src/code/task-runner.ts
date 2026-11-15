@@ -32,7 +32,7 @@ const COMMANDS: readonly RegExp[] = [
   /^npx (tsc|vitest|eslint|prettier --check)( [\w./:=@-]+)*$/,
   /^git (status|diff|log|show|branch|rev-parse|ls-files|blame)( [\w./:=@^~-]+)*$/,
   /^git (add|restore|rm|mv|stash|checkout|switch)( [\w./:=@^~-]+)+$/,
-  /^git commit( -[a-zA-Z]+)* -m "[^"`$\\]{1,300}"( -m "[^"`$\\]{1,1000}")?$/,
+  /^git commit( -[a-zA-Z]+)* -m "[^"`$\\]{1,300}"( -m "[^"`$\\]{1,1000}"){0,3}$/,
   /^ls( -[a-zA-Z]+)*( [\w./-]+)*$/,
 ];
 
@@ -42,7 +42,7 @@ const SHELL = /[;&|<>`$\n\r]|\bcd\b|\.\.\/|~\//;
 /** Whether a shell command is on the task's list. */
 export const allowedCommand = (command: string): boolean => {
   const c = command.trim().replace(/\s+/g, " ");
-  if (c === "" || c.length > 400) return false;
+  if (c === "" || c.length > 2000) return false;
   // A commit message is the one place quotes appear; check the rest for shell syntax.
   const outsideMessage = c.replace(/-m "[^"]*"/g, "-m MSG");
   if (SHELL.test(outsideMessage)) return false;
@@ -76,6 +76,7 @@ export const TASK_NOTE = [
   "You're working on a task for Renato, managed by Jarvis, his personal assistant. Jarvis relays Renato's instructions and brings him your reports.",
   "You're in your own copy of the repository, on the task's branch. Follow the repository's CLAUDE.md and STATUS.md conventions as you would for Renato.",
   "Commit your work on this branch as you go (git add, git commit -m). Don't push, open pull requests or deploy: Jarvis does that after Renato's OK. You can't reach remotes.",
+  'Write commit messages with plain -m flags, one per paragraph, never $(...) or a heredoc: git commit -m "type(scope): subject" -m "Body." -m "Co-Authored-By: …" (up to four -m; no double quotes, backticks, $ or backslashes inside).',
   "You can run package installs, tests, typecheck, lint and build, one command at a time, without pipes, redirection or cd. If you need anything else, say what and why in your report.",
   "Keep the app's STATUS.md current, as the repository asks.",
   "End every turn with a short report for Renato, in plain words: what you did, what's next, and any question or decision you need from him. Start the report with one of: DONE (the task is finished), WAITING (you need him), or WORKING (you'll carry on when told to continue).",
