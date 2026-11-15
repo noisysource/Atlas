@@ -11,6 +11,7 @@ import { makeCodeMapView } from "./codemap.js";
 import { makeStudiesView } from "./studies.js";
 import { makeTraceView } from "./trace.js";
 import { atEnd, clock, conversationText } from "./terminal-lib.js";
+import { CARD_DONE } from "./turn-lib.js";
 import {
   CONVERSATION,
   LANGUAGES,
@@ -364,7 +365,8 @@ const confirmCard = (proposal) => {
       }
       const text = typeof result.text === "string" ? result.text : `Something went wrong, so ${c.failed}.`;
       addMessage(result.ok ? "answer" : "error", text);
-      state.history = appendTurn(state.history, "assistant", text, typeof result.tool === "string" ? [result.tool] : []);
+      // What the app did on his OK is marked as such, so the model never takes its own "waiting for your OK" as the last word (#212).
+      state.history = appendTurn(state.history, "assistant", text, typeof result.tool === "string" ? [`${result.tool} ${CARD_DONE}`] : []);
       void refreshReach();
       if (kind.startsWith("task-")) void tasksPanel.refresh();
       // #162: a fix being prepared: the card follows it, then asks again before anything is pushed.

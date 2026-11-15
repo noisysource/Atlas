@@ -510,6 +510,9 @@ export const toolsSoFar = (history: AnswerInput["history"]): string | undefined 
     "Tools the app really ran for your earlier answers in this conversation (counting your answers from the first):",
     ...lines,
     "Those answers were based on what the tools returned at the time. You can't see those results any more, but they were real, and so were the details you gave from them. Never say you didn't check, and don't correct, doubt or revisit an earlier answer unless they say it's wrong. Answers not listed used no tool.",
+    ...(lines.some((l) => l.includes("after his OK on the card"))
+      ? ["Lines marked \"done by the app after his OK on the card\" happened: he tapped the card and the app carried it out (an issue opened, blinds moved, a pull request closed). That's later than any \"waiting for his OK\" you saw, so it's the last word."]
+      : []),
   ].join("\n");
 };
 

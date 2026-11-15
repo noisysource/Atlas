@@ -377,3 +377,6 @@ export const pickFiller = (previous, random, fillers = FILLERS) => {
  * @param {{ spoken: boolean, muted: boolean, previousHadFiller: boolean }} turn
  */
 export const fillerAllowed = ({ spoken, muted, previousHadFiller }) => spoken && !muted && !previousHadFiller;
+
+/** Marks a tool the app ran when he tapped a card's OK (#212): done, not waiting. */
+export const CARD_DONE = "(done by the app after his OK on the card)";
