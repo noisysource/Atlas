@@ -135,7 +135,17 @@ export type Config = {
    * bridge runs today). Needs GCLOUD=on, with that environment's database
    * readable. Read-only.
    */
-  readonly house: { readonly enabled: boolean; readonly env: string };
+  readonly house: {
+    readonly enabled: boolean;
+    readonly env: string;
+    /**
+     * HOUSE_CONTROL=on (#166): Claude can move the blinds, each time after his
+     * OK on a card, through the domotics app's functions, signed in as Jarvis's
+     * own Firebase Auth user (npm run house:connect, data/house/firebase.json).
+     * Local only for now.
+     */
+    readonly control: { readonly enabled: boolean; readonly userPath: string };
+  };
   /**
    * CODE_AGENT=on (#126): Claude can ask a code agent (Claude Code, read-only,
    * on a local copy in data/repos/) about one of the repos GITHUB=on reaches.
@@ -350,6 +360,7 @@ const EnvSchema = z.object({
   GCLOUD: onOff,
   VENDUS: onOff,
   HOUSE: onOff,
+  HOUSE_CONTROL: onOff,
   HOUSE_ENV: z.preprocess((v) => (typeof v === "string" && v.trim() === "" ? undefined : v), z.string().regex(/^[a-z][a-z0-9-]{0,19}$/, { error: "must be an environment name like dev" }).default("dev")),
   CODE_AGENT: onOff,
   CODE_AGENT_AUTH: z.preprocess(
@@ -539,6 +550,10 @@ export const loadConfig = (env: Env): Result<Config, string> => {
     if (production) errors.push("CODE_FIX: local only for now (its write tokens are files on this Mac)");
   }
   if (raw("HOUSE") === "on" && raw("GCLOUD") !== "on") errors.push("HOUSE: needs GCLOUD=on (the house's state is in an environment's database)");
+  if (raw("HOUSE_CONTROL") === "on") {
+    if (raw("HOUSE") !== "on") errors.push("HOUSE_CONTROL: needs HOUSE=on");
+    if (production) errors.push("HOUSE_CONTROL: local only for now (Jarvis's domotics user is a file on this Mac, not in Secret Manager)");
+  }
   if (raw("VENDUS") === "on") {
     if (production) errors.push("VENDUS: local only for now (its key is a file on this Mac, not in Secret Manager)");
     if (raw("BARE_MODE") !== "on") errors.push("VENDUS: needs BARE_MODE=on");
@@ -595,7 +610,11 @@ export const loadConfig = (env: Env): Result<Config, string> => {
     github: { enabled: e.GITHUB === "on", tokensPath: "data/github-tokens.json" },
     gcloud: { enabled: e.GCLOUD === "on", keysPath: "data/gcloud" },
     vendus: { enabled: e.VENDUS === "on", keyPath: "data/vendus.json" },
-    house: { enabled: e.HOUSE === "on" && e.GCLOUD === "on", env: e.HOUSE_ENV },
+    house: {
+      enabled: e.HOUSE === "on" && e.GCLOUD === "on",
+      env: e.HOUSE_ENV,
+      control: { enabled: e.HOUSE === "on" && e.GCLOUD === "on" && e.HOUSE_CONTROL === "on", userPath: "data/house/firebase.json" },
+    },
     codeAgent: { enabled: e.GITHUB === "on" && e.CODE_AGENT === "on", maxUsd: e.CODE_AGENT_MAX_USD, maxTurns: e.CODE_AGENT_MAX_TURNS, reposPath: "data/repos", auth: e.CODE_AGENT_AUTH, model: e.CODE_AGENT_MODEL, study: { maxUsd: e.CODE_STUDY_MAX_USD, maxTurns: e.CODE_STUDY_MAX_TURNS, notesPath: "data/code" }, refresh: { mode: e.CODE_REFRESH, maxStudies: e.CODE_REFRESH_MAX }, tasks: { enabled: e.GITHUB === "on" && e.CODE_AGENT === "on" && e.CODE_TASKS === "on", maxUsd: e.CODE_TASK_MAX_USD, maxTurns: e.CODE_TASK_MAX_TURNS, path: "data/tasks" }, fix: { enabled: e.GITHUB === "on" && e.CODE_AGENT === "on" && e.CODE_FIX === "on", maxUsd: e.CODE_FIX_MAX_USD, maxTurns: e.CODE_FIX_MAX_TURNS, writeTokensPath: "data/github-write-tokens.json", fixesPath: "data/fixes" } },
     ollamaThink: e.OLLAMA_THINK === "on",
     userName: e.JARVIS_USER_NAME,

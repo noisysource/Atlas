@@ -223,7 +223,7 @@ const refreshReach = async () => {
 };
 
 /** Cards still waiting for an OK, counted per node for the badges (#133). */
-const NODE_OF_CARD = { calendar: "calendar", email: "gmail", "draft-delete": "gmail", skill: "skills", fix: "code", "pr-close": "github", "task-start": "code", "task-publish": "code", "task-close": "code" };
+const NODE_OF_CARD = { calendar: "calendar", email: "gmail", "draft-delete": "gmail", skill: "skills", fix: "code", "pr-close": "github", "task-start": "code", "task-publish": "code", "task-close": "code", house: "house" };
 const refreshPending = () => {
   /** @type {Record<string, number>} */
   const counts = {};
@@ -282,6 +282,7 @@ const CARDS = {
   skill: { ask: (/** @type {string} */ l) => `New skill: ${l}. Approve it?`, yes: "Approve skill", no: "Not now", endpoint: "/skills/decide", failed: "nothing changed" },
   email: { ask: (/** @type {string} */ l) => `Draft saved. ${l}. Send it?`, yes: "Send it", no: "Keep as draft", endpoint: "/gmail/send", failed: "nothing was sent" },
   "draft-delete": { ask: (/** @type {string} */ l) => `Delete the draft ${l}?`, yes: "Delete it", no: "Keep it", endpoint: "/gmail/delete", failed: "nothing was deleted" },
+  house: { ask: (/** @type {string} */ l) => `Move the blinds? ${l}.`, yes: "Move them", no: "Leave them", endpoint: "/house/blinds", failed: "nothing moved" },
   "pr-close": { ask: (/** @type {string} */ l) => `Close pull request ${l}? Nothing is merged; if it's one of my branches, it's deleted.`, yes: "Close it", no: "Keep it", endpoint: "/github/pr-close", failed: "nothing was closed" },
   "task-start": { ask: (/** @type {string} */ l) => `Start a coding task: ${l}? Claude Code works on a copy, on a new branch, and can run the tests. Nothing is pushed without asking you.`, yes: "Start it", no: "Not now", endpoint: "/code/task", failed: "nothing was started" },
   "task-publish": { ask: (/** @type {string} */ l) => `Push ${l}? A pull request into staging deploys a preview to dev.`, yes: "Push it", no: "Not yet", endpoint: "/code/task", failed: "nothing was pushed" },
@@ -293,7 +294,7 @@ const CARDS = {
  * A card for something waiting for Renato's OK: a calendar event (Reach 2), a
  * skill (#116) or an email draft (#120). Only the first button acts; the reply
  * is worded by code and goes into the history with what really ran.
- * @param {{ id: string, label: string, kind?: "calendar" | "skill" | "email" | "draft-delete" | "fix" | "pr-close" | "task-start" | "task-publish" | "task-close" }} proposal
+ * @param {{ id: string, label: string, kind?: "calendar" | "skill" | "email" | "draft-delete" | "fix" | "pr-close" | "task-start" | "task-publish" | "task-close" | "house" }} proposal
  */
 const confirmCard = (proposal) => {
   const kind = proposal.kind ?? "calendar";
