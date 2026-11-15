@@ -10,6 +10,7 @@ import { makeTasks, type Task, type Tasks } from "./code/tasks.js";
 import { makeTaskRunner } from "./code/task-runner.js";
 import { makePrCloser } from "./github/pr-close.js";
 import { makePlans } from "./plans/plans.js";
+import { makeDecisions } from "./decisions/decisions.js";
 import { makeBlinds, makeCallable, readFirebaseUser } from "./house/blinds.js";
 import { makeVendusGet, type VendusGet } from "./vendus/vendus.js";
 import { makeCodeRefresh } from "./code/freshness.js";
@@ -294,6 +295,8 @@ export const buildDeps = async (inputs: AppInputs): Promise<Result<Deps, string>
   const github = config.github.enabled ? { reader: inputs.githubReader ?? makeGithubReader({ tokens: githubTokens }), isEc: isEcText } : undefined;
   // #203: plans he follows (multi-PR projects in his repos), read through the same GitHub reader.
   const plans = github ? makePlans({ github: github.reader, path: "data/plans.json", isEc: isEcText }) : undefined;
+  // #186: his decisions, in data/decisions.json, dated where he is.
+  const decisions = config.toolCalling ? makeDecisions({ path: "data/decisions.json", isEc: isEcText, today: () => new Intl.DateTimeFormat("en-CA", { timeZone: config.timeZone }).format(new Date()) }) : undefined;
   // #161: Google Cloud, read-only (logs): each environment is a project and a read-only service account
   // named in data/gcloud/<env>.json. No key: gcloud on this Mac gives a short-lived token of that account.
   const gcloudEnvs = makeGcloudEnvs({ list: () => readdir(config.gcloud.keysPath), read: (env) => readFileFs(path.join(config.gcloud.keysPath, `${env}.json`), "utf8") });
@@ -612,6 +615,7 @@ export const buildDeps = async (inputs: AppInputs): Promise<Result<Deps, string>
               ...(skillStore && config.toolCalling ? { skills: { store: skillStore, ec: memoryEc } } : {}),
               // #125: his GitHub repos, read-only, with tools (Claude).
               ...(github && config.toolCalling ? { github: { ...github, ...(prs ? { prs } : {}), ...(plans ? { plans } : {}) } } : {}),
+              ...(decisions ? { decisions } : {}),
               ...(code && config.toolCalling ? { code } : {}),
               // #161: errors and logs in his Google Cloud environments, read-only, with tools (Claude).
               ...(gcloud && config.toolCalling ? { gcloud } : {}),
@@ -629,6 +633,15 @@ export const buildDeps = async (inputs: AppInputs): Promise<Result<Deps, string>
             }),
             local: makeBareAnswerer({
               llm: localLlm.value,
+              // What only Claude reaches, so the local model says to switch instead of guessing.
+              elsewhere: [
+                ...(gmail ? ["his email"] : []),
+                ...(github ? ["GitHub and the plans he follows"] : []),
+                ...(config.gcloud.enabled ? ["Google Cloud"] : []),
+                ...(config.house.enabled ? ["the house"] : []),
+                ...(vendusGet ? ["the invoices"] : []),
+                ...(decisions ? ["his decisions log"] : []),
+              ],
               ...(config.userName ? { userName: config.userName } : {}),
               spokenSentences: config.turn.spokenSentences,
               pauses: config.turn.punctuationStyle,

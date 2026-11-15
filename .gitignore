@@ -30,6 +30,8 @@ data/github-write-tokens.json
 data/fixes/
 # #177: the morning brief, kept for the day (email senders and subjects)
 data/brief/
+# #186: his decisions log
+data/decisions.json
 # #203: the plans Atlas follows (repo, file, name)
 data/plans.json
 # #166: Atlas's domotics user (Firebase Auth email and password), local only

@@ -519,6 +519,17 @@ Requires Node 22.13 or later (the memory store uses `node:sqlite`, which needs a
        `CODE_TASK_MAX_USD` (3) and `CODE_TASK_MAX_TURNS` (80) cap each turn.
        Note: tests and installs run your repo's own scripts and its
        dependencies' install scripts on your Mac, as when you run them.
+     - **A decisions log.** When you clearly decide something ("let's go
+       with Atlas", "keep everything local until we're happy with it"),
+       Atlas writes it down with the date and the app or topic, and says
+       so in a few words. The latest decisions are in every prompt, so
+       answers, fixes and coding tasks keep to them, and Atlas says when
+       something he'd propose goes against one. "What did we decide about
+       the domotics move?" lists them; a changed decision replaces the old
+       one, which stays, marked. Never EC work. Kept in
+       `data/decisions.json` (gitignored). With 🧠 Local answering (no
+       tools), Atlas says ☁️ Claude can answer questions about your email,
+       GitHub, plans, the house or Google Cloud, instead of guessing.
      - **Following plans (with `GITHUB=on`), read-only.** A plan is a
        markdown file in one of your repos with a table of steps, one pull
        request each (a `#` column and a `PR` column, like the monorepo's
