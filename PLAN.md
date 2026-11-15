@@ -1077,6 +1077,23 @@ Confirmed (2026-11-12):
   (apps, modules, services, data, outside), lines for connections, pick a
   part to see its links, path and one-line description. The page gets the
   maps only (`GET /code/maps`), never the notes' text.
+- **Jarvis as PM (#191):** Claude Code keeps the code's context (the
+  repo's CLAUDE.md, STATUS.md, its sessions and agents); Jarvis keeps the
+  work: a task list in `data/tasks/tasks.json` (status, session id, branch,
+  last report, PR). A task runs Claude Code with `settingSources:
+  ["project"]` and its own preset prompt plus a short note (report as
+  DONE / WAITING / WORKING; commit, never push). Copies at
+  `data/tasks/<id>/repo` (shallow, from `staging` or the default branch),
+  branch `agent/<slug>-<id>`. Every tool call goes through
+  `taskToolAllowed`: files in the copy (never `.git`/`.github`), no MCP or
+  web, and a command allowlist (installs, test, typecheck, lint, build,
+  local git; no chaining, redirection, `cd`, push or remotes). git runs
+  with no global config (no stored credentials) and no hooks. Follow-ups
+  resume the session; one task works at a time. OK cards for start,
+  publish (push + PR into the base) and close. Sessions Renato starts
+  himself aren't picked up yet: the handoff between them is the branch,
+  the PR and STATUS.md.
+
 - **Fixes as pull requests (#162):** `code_fix` only proposes. Two OKs
   from Renato: the first prepares the change locally (fresh shallow clone
   with a separate write token, the agent in "change" mode: Read, Grep,

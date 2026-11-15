@@ -6,6 +6,8 @@ import { execFile } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import { makeToolRouter } from "./answer/tool-groups.js";
 import { makeFixes, type Fixes, type RunOut } from "./code/fix.js";
+import { makeTasks, type Task, type Tasks } from "./code/tasks.js";
+import { makeTaskRunner } from "./code/task-runner.js";
 import { makePrCloser } from "./github/pr-close.js";
 import { makeVendusGet, type VendusGet } from "./vendus/vendus.js";
 import { makeCodeRefresh } from "./code/freshness.js";
@@ -79,6 +81,8 @@ export type AppInputs = {
   readonly gcloudDb?: DbReader;
   /** #9: tests give their own Vendus. */
   readonly vendusGet?: VendusGet;
+  /** #191: tests give their own tasks. */
+  readonly codeTasks?: Tasks;
   /** #162: tests give their own fixes. */
   readonly codeFixes?: Fixes;
   /** Tests: a code agent and repo copies instead of Claude Code and git (#126). */
@@ -351,6 +355,45 @@ export const buildDeps = async (inputs: AppInputs): Promise<Result<Deps, string>
   // #162: fixes as pull requests, with a separate write token per owner; every step after his OK.
   const writeTokens = makeGithubTokens({ readFile: () => readFileFs(config.codeAgent.fix.writeTokensPath, "utf8") });
   const fixesRoot = path.resolve(config.codeAgent.fix.fixesPath);
+  // #191: coding tasks, with Jarvis as the PM and Claude Code doing the work in copies under data/tasks.
+  const tasksFile = path.join(config.codeAgent.tasks.path, "tasks.json");
+  const tasksRoot = path.resolve(config.codeAgent.tasks.path);
+  const tasks: Tasks | undefined =
+    codeAgent && config.codeAgent.tasks.enabled
+      ? (inputs.codeTasks ??
+        makeTasks({
+          runner: makeTaskRunner({ model: config.codeAgent.model }),
+          store: {
+            read: async () => {
+              const text = await readFileFs(tasksFile, "utf8").catch(() => undefined);
+              try {
+                const v: unknown = text ? JSON.parse(text) : [];
+                return Array.isArray(v) ? (v as Task[]).filter((t) => typeof t?.id === "string" && typeof t.repo === "string") : [];
+              } catch {
+                return [];
+              }
+            },
+            write: async (list) => {
+              await mkdir(config.codeAgent.tasks.path, { recursive: true, mode: 0o700 });
+              await writeFile(tasksFile, JSON.stringify(list, null, 2), { mode: 0o600 });
+            },
+          },
+          readToken: githubTokens.token,
+          writeToken: writeTokens.token,
+          isEc: isEcText,
+          root: tasksRoot,
+          run: runWithOutput,
+          // Only ever a task's own folder under data/tasks.
+          remove: async (dir) => {
+            const full = path.resolve(dir);
+            if (full.startsWith(`${tasksRoot}${path.sep}`)) await rm(full, { recursive: true, force: true });
+          },
+          maxUsd: config.codeAgent.tasks.maxUsd,
+          maxTurns: config.codeAgent.tasks.maxTurns,
+          now,
+          log,
+        }))
+      : undefined;
   const fixes: Fixes | undefined =
     codeAgent && config.codeAgent.fix.enabled
       ? (inputs.codeFixes ??
@@ -386,6 +429,7 @@ export const buildDeps = async (inputs: AppInputs): Promise<Result<Deps, string>
           maxTurns: config.codeAgent.maxTurns,
           study: { studies, notes: noteStore, ...(codeRefresh ? { refresh: codeRefresh } : {}) },
           ...(fixes ? { fix: fixes } : {}),
+          ...(tasks ? { tasks } : {}),
         }
       : undefined;
   // #146: which accounts are connected, checked each turn (does the token file exist), for the brain's prompt.
@@ -470,6 +514,7 @@ export const buildDeps = async (inputs: AppInputs): Promise<Result<Deps, string>
               ...(gcloud ? { cloud: gcloud.reader } : {}),
               ...(github ? { github: github.reader } : {}),
               ...(code?.study ? { studiedRepos: async () => (await noteStore.all()).map((n) => n.repo) } : {}),
+              ...(tasks ? { tasks: () => tasks.list() } : {}),
             }),
           llm: answerLlm.value,
           store: briefStore,
@@ -530,6 +575,7 @@ export const buildDeps = async (inputs: AppInputs): Promise<Result<Deps, string>
     ...(gmailDelete ? { gmailDelete } : {}),
     ...(studies ? { codeStudies: studies, codeMaps: async () => mapViews(await noteStore.all()) } : {}),
     ...(fixes ? { codeFixes: fixes } : {}),
+    ...(tasks ? { codeTasks: tasks } : {}),
     ...(morningBrief ? { morningBrief } : {}),
     ...(codeRefresh ? { codeRefresh } : {}),
     ...(prs ? { prClose: prs } : {}),

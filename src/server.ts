@@ -385,6 +385,30 @@ export const makeServer = (
     });
   }
 
+  // #191: coding tasks. His answers to their cards, the list for the page, and stop.
+  const codeTasks = deps.codeTasks;
+  if (codeTasks) {
+    const json = async (c: Context) => (isJson(c.req.header("content-type")) ? await c.req.json().catch(() => undefined) : undefined);
+    app.post("/code/task", bodyLimit({ maxSize: 1024, onError: (c) => c.json(errorBody("The request is too large."), 413) }), async (c) => {
+      const body = z.object({ id: z.string().regex(/^[a-f0-9]{8,64}$/), decision: z.enum(["yes", "no"]) }).strict().safeParse(await json(c));
+      if (!body.success) return c.json(errorBody('Send { id, decision: "yes" | "no" } as JSON.'), 400);
+      return c.json(await codeTasks.decide(body.data.id, body.data.decision));
+    });
+    app.post("/code/tasks/stop", bodyLimit({ maxSize: 1024, onError: (c) => c.json(errorBody("The request is too large."), 413) }), async (c) => {
+      const body = z.object({ id: z.string().regex(/^[a-f0-9]{8}$/) }).strict().safeParse(await json(c));
+      if (!body.success) return c.json(errorBody("Send { id } as JSON."), 400);
+      return c.json({ stopped: codeTasks.stop(body.data.id) });
+    });
+    app.get("/code/tasks", async (c) => {
+      c.header("Cache-Control", "no-store");
+      // What the page shows: no goals or sessions, the first line of each report.
+      const list = await codeTasks.list();
+      return c.json({
+        tasks: list.map((t) => ({ id: t.id, title: t.title, repo: t.repo, status: t.status, step: t.step ?? "", report: (t.report?.split("\n").find((l) => l.trim() !== "") ?? "").slice(0, 240), prUrl: t.prUrl ?? "", updatedAt: t.updatedAt })),
+      });
+    });
+  }
+
   // #158: the code maps from his studies.
   const codeMaps = deps.codeMaps;
   if (codeMaps) {

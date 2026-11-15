@@ -32,6 +32,8 @@ data/fixes/
 data/brief/
 # #8: the Vendus key of Jarvis's Vendus user
 data/vendus.json
+# #191: coding tasks: their list and their copies of repos
+data/tasks/
 # Google Cloud (#161): which project each environment is, local only
 data/gcloud/
 # Local copies of your repos for the code agent (#126)

@@ -5,10 +5,12 @@
 
 import { followFix } from "./fix.js";
 import { showMorningBrief } from "./morning.js";
+import { startTasksPanel } from "./tasks.js";
 import { makeBrainView } from "./brain.js";
 import { makeCodeMapView } from "./codemap.js";
 import { makeStudiesView } from "./studies.js";
 import { makeTraceView } from "./trace.js";
+import { atEnd, clock, conversationText } from "./terminal-lib.js";
 import {
   CONVERSATION,
   LANGUAGES,
@@ -71,8 +73,31 @@ const byId = (id) => {
 };
 
 const transcript = byId("transcript");
+// #195: the conversation follows new text while you're at its end, and stays put while you scroll up to read.
+const chatMain = /** @type {HTMLElement} */ (transcript.closest("main") ?? transcript);
+/** The chat scrolls inside its own pane on wide screens, with the page on narrow ones. */
+const scroller = () => (chatMain.scrollHeight > chatMain.clientHeight + 1 && getComputedStyle(chatMain).overflowY !== "visible" ? chatMain : /** @type {HTMLElement} */ (document.scrollingElement ?? document.documentElement));
+let following = true;
+const noteScroll = () => {
+  const el = scroller();
+  following = atEnd(el.scrollTop, el.clientHeight, el.scrollHeight);
+};
+chatMain.addEventListener("scroll", noteScroll, { passive: true });
+window.addEventListener("scroll", noteScroll, { passive: true });
+/** Back to the end of the conversation; `force` when you've just asked something. */
+const toEnd = (force = false) => {
+  if (force) following = true;
+  if (!following) return;
+  const el = scroller();
+  el.scrollTop = el.scrollHeight;
+};
+// Streaming text, cards and paths all grow the transcript: follow every change.
+new MutationObserver(() => toEnd()).observe(transcript, { childList: true, subtree: true, characterData: true });
+window.addEventListener("resize", () => toEnd());
 // #177: the morning brief, as a card above the conversation, once per day.
 void showMorningBrief(transcript);
+// #191: coding tasks, above the conversation, while any are open.
+const tasksPanel = startTasksPanel(transcript);
 const form = /** @type {HTMLFormElement} */ (byId("ask-form"));
 const input = /** @type {HTMLTextAreaElement} */ (byId("question"));
 const sendButton = /** @type {HTMLButtonElement} */ (byId("send"));
@@ -198,7 +223,7 @@ const refreshReach = async () => {
 };
 
 /** Cards still waiting for an OK, counted per node for the badges (#133). */
-const NODE_OF_CARD = { calendar: "calendar", email: "gmail", "draft-delete": "gmail", skill: "skills", fix: "code", "pr-close": "github" };
+const NODE_OF_CARD = { calendar: "calendar", email: "gmail", "draft-delete": "gmail", skill: "skills", fix: "code", "pr-close": "github", "task-start": "code", "task-publish": "code", "task-close": "code" };
 const refreshPending = () => {
   /** @type {Record<string, number>} */
   const counts = {};
@@ -258,6 +283,9 @@ const CARDS = {
   email: { ask: (/** @type {string} */ l) => `Draft saved. ${l}. Send it?`, yes: "Send it", no: "Keep as draft", endpoint: "/gmail/send", failed: "nothing was sent" },
   "draft-delete": { ask: (/** @type {string} */ l) => `Delete the draft ${l}?`, yes: "Delete it", no: "Keep it", endpoint: "/gmail/delete", failed: "nothing was deleted" },
   "pr-close": { ask: (/** @type {string} */ l) => `Close pull request ${l}? Nothing is merged; if it's one of my branches, it's deleted.`, yes: "Close it", no: "Keep it", endpoint: "/github/pr-close", failed: "nothing was closed" },
+  "task-start": { ask: (/** @type {string} */ l) => `Start a coding task: ${l}? Claude Code works on a copy, on a new branch, and can run the tests. Nothing is pushed without asking you.`, yes: "Start it", no: "Not now", endpoint: "/code/task", failed: "nothing was started" },
+  "task-publish": { ask: (/** @type {string} */ l) => `Push ${l}? A pull request into staging deploys a preview to dev.`, yes: "Push it", no: "Not yet", endpoint: "/code/task", failed: "nothing was pushed" },
+  "task-close": { ask: (/** @type {string} */ l) => `Close the task ${l}? Its copy is deleted, with anything not pushed.`, yes: "Close it", no: "Keep it", endpoint: "/code/task", failed: "nothing was closed" },
   fix: { ask: (/** @type {string} */ l) => `Prepare a fix in ${l}? You'll see the change before anything is pushed.`, yes: "Prepare it", no: "Not now", endpoint: "/code/fix", failed: "nothing was prepared" },
 };
 
@@ -265,7 +293,7 @@ const CARDS = {
  * A card for something waiting for Renato's OK: a calendar event (Reach 2), a
  * skill (#116) or an email draft (#120). Only the first button acts; the reply
  * is worded by code and goes into the history with what really ran.
- * @param {{ id: string, label: string, kind?: "calendar" | "skill" | "email" | "draft-delete" | "fix" | "pr-close" }} proposal
+ * @param {{ id: string, label: string, kind?: "calendar" | "skill" | "email" | "draft-delete" | "fix" | "pr-close" | "task-start" | "task-publish" | "task-close" }} proposal
  */
 const confirmCard = (proposal) => {
   const kind = proposal.kind ?? "calendar";
@@ -305,6 +333,7 @@ const confirmCard = (proposal) => {
       addMessage(result.ok ? "answer" : "error", text);
       state.history = appendTurn(state.history, "assistant", text, typeof result.tool === "string" ? [result.tool] : []);
       void refreshReach();
+      if (kind.startsWith("task-")) void tasksPanel.refresh();
       // #162: a fix being prepared: the card follows it, then asks again before anything is pushed.
       if (kind === "fix" && result.ok && typeof result.job === "string")
         followFix(card, result.job, {
@@ -341,6 +370,7 @@ const confirmCard = (proposal) => {
 const addMessage = (kind, text) => {
   const item = document.createElement("li");
   item.className = `message ${kind}`;
+  item.dataset.time = clock(new Date());
   if (kind === "handoff") {
     const tag = document.createElement("span");
     tag.className = "tag";
@@ -364,7 +394,7 @@ const addMessage = (kind, text) => {
   });
   item.append(copy);
   transcript.append(item);
-  item.scrollIntoView({ block: "end", behavior: "smooth" });
+  toEnd(kind === "user");
   return item;
 };
 
@@ -372,7 +402,6 @@ const addMessage = (kind, text) => {
 const appendToMessage = (item, sentence) => {
   const body = item.querySelector("p");
   if (body) body.textContent = body.textContent ? `${body.textContent} ${sentence}` : sentence;
-  item.scrollIntoView({ block: "end", behavior: "smooth" });
 };
 
 /** @param {HTMLElement} item @param {string} text */
@@ -1758,6 +1787,24 @@ voiceSelect.addEventListener("change", () => {
   } else {
     save(voiceKey(state.language), voiceSelect.value);
   }
+});
+
+// #195: the whole conversation on the clipboard, as plain text with who said what and when.
+const copyAllButton = /** @type {HTMLButtonElement} */ (byId("copy-all"));
+copyAllButton.addEventListener("click", () => {
+  const lines = [...transcript.querySelectorAll(":scope > .message")].map((item) => {
+    const el = /** @type {HTMLElement} */ (item);
+    const kind = ["user", "error", "handoff"].find((k) => el.classList.contains(k)) ?? "answer";
+    return { kind, time: el.dataset.time ?? "", text: el.querySelector(":scope > p")?.textContent ?? "" };
+  });
+  const text = conversationText(lines);
+  if (text === "") {
+    setStatus("Nothing to copy yet.");
+    return;
+  }
+  void copyText(text).then((done) => {
+    setStatus(done ? `Copied the conversation (${lines.length} messages).` : "Couldn't copy the conversation.");
+  });
 });
 
 newButton.addEventListener("click", () => {
