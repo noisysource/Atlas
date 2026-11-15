@@ -11,6 +11,7 @@ import { makeTaskRunner } from "./code/task-runner.js";
 import { makePrCloser } from "./github/pr-close.js";
 import { makePlans } from "./plans/plans.js";
 import { makeDecisions } from "./decisions/decisions.js";
+import { availableSwitches, makeSettings, makeSwitchedAnswerer, type BareDeps } from "./switches.js";
 import { makeBlinds, makeCallable, readFirebaseUser } from "./house/blinds.js";
 import { makeVendusGet, type VendusGet } from "./vendus/vendus.js";
 import { makeCodeRefresh } from "./code/freshness.js";
@@ -47,7 +48,7 @@ import { runIntrospection } from "./introspection.js";
 import { makeSkillStore, type SkillStore } from "./skills.js";
 import { access, chmod, mkdir, readdir, readFile as readFileFs, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { reachView } from "./reach.js";
+import { reachView, type ReachNode } from "./reach.js";
 import { makeMemoryStoreInMemory, type MemoryStore } from "./memory-store.js";
 import { makePrecheck } from "./precheck.js";
 import { makeProfileSource, type ProfileFileSystem } from "./profile.js";
@@ -295,6 +296,20 @@ export const buildDeps = async (inputs: AppInputs): Promise<Result<Deps, string>
   const github = config.github.enabled ? { reader: inputs.githubReader ?? makeGithubReader({ tokens: githubTokens }), isEc: isEcText } : undefined;
   // #203: plans he follows (multi-PR projects in his repos), read through the same GitHub reader.
   const plans = github ? makePlans({ github: github.reader, path: "data/plans.json", isEc: isEcText }) : undefined;
+  // #151: switches on the page; .env is the ceiling. Read before every question.
+  const settings = makeSettings({ path: "data/settings.json" });
+  /** Claude's answerer deps as .env made them, for the page's switches. */
+  let claudeDeps: BareDeps | undefined;
+  /** Each brain-view node with its switches: what .env allows, and whether each is on. */
+  const withSwitchesView = async (nodes: readonly ReachNode[]): Promise<readonly ReachNode[]> => {
+    if (!claudeDeps) return nodes;
+    const off = await settings.off();
+    const all = availableSwitches(claudeDeps);
+    return nodes.map((n) => {
+      const mine = all.filter((x) => x.node === n.id).map((x) => ({ id: x.id, label: x.label, what: x.what, on: !off.has(x.id) }));
+      return mine.length > 0 ? { ...n, switches: mine } : n;
+    });
+  };
   // #186: his decisions, in data/decisions.json, dated where he is.
   const decisions = config.toolCalling ? makeDecisions({ path: "data/decisions.json", isEc: isEcText, today: () => new Intl.DateTimeFormat("en-CA", { timeZone: config.timeZone }).format(new Date()) }) : undefined;
   // #161: Google Cloud, read-only (logs): each environment is a project and a read-only service account
@@ -571,8 +586,8 @@ export const buildDeps = async (inputs: AppInputs): Promise<Result<Deps, string>
     ...(skillStore ? { skills: skillStore } : {}),
     nativeTools: (calendar !== undefined || gmail !== undefined || config.bareMemory) && config.toolCalling,
     ...(calendarConfirm ? { calendarConfirm } : {}),
-    reach: () =>
-      reachView({
+    reach: async () =>
+      withSwitchesView(await reachView({
         config,
         exists: fileExists,
         githubOwners: githubTokens.owners,
@@ -580,7 +595,8 @@ export const buildDeps = async (inputs: AppInputs): Promise<Result<Deps, string>
         vendusConnected: async () => (await vendusKey()) !== undefined,
         studied: async () => ({ notes: await noteStore.all(), active: studies?.active() ?? [] }),
         ...(skillStore ? { draftSkills: async () => (await skillStore.list()).filter((s) => s.status === "draft").length } : {}),
-      }),
+      })),
+    settings: { set: settings.set },
     ...(gmailSend ? { gmailSend } : {}),
     ...(gmailDelete ? { gmailDelete } : {}),
     ...(studies ? { codeStudies: studies, codeMaps: async () => mapViews(await noteStore.all()) } : {}),
@@ -597,7 +613,9 @@ export const buildDeps = async (inputs: AppInputs): Promise<Result<Deps, string>
     ...(config.bareMode
       ? {
           bare: makeBrainRouter({
-            claude: makeBareAnswerer({
+            claude: makeSwitchedAnswerer(
+              makeBareAnswerer,
+              (claudeDeps = {
               llm: answerLlm.value,
               // Claude decides itself when to read the calendar (#104); the local brain keeps the code-driven path.
               tools: config.toolCalling,
@@ -631,6 +649,8 @@ export const buildDeps = async (inputs: AppInputs): Promise<Result<Deps, string>
               ...(inputs.calendarReader || inputs.gmailReader ? {} : { connected }),
               log,
             }),
+              settings,
+            ),
             local: makeBareAnswerer({
               llm: localLlm.value,
               // What only Claude reaches, so the local model says to switch instead of guessing.

@@ -506,6 +506,20 @@ export const makeServer = (
       return c.json({ nodes: await reach() });
     });
   }
+  // #151: the page's switches. Only turns off (or back on) what .env allows; takes effect on the next question.
+  const settings = deps.settings;
+  if (settings) {
+    const SettingsBody = z.object({ id: z.string().regex(/^[a-z]+([.:][a-z]+)?$/).max(40), on: z.boolean() }).strict();
+    app.post("/settings", bodyLimit({ maxSize: 1024, onError: (c) => c.json(errorBody("The request is too large."), 413) }), async (c) => {
+      if (!isJson(c.req.header("content-type"))) return c.json(errorBody("POST /settings needs Content-Type: application/json."), 415);
+      const body = SettingsBody.safeParse(await c.req.json().catch(() => undefined));
+      if (!body.success) return c.json(errorBody("Send { id, on }."), 400);
+      const got = await settings.set(body.data.id, body.data.on);
+      if (!got.ok) return c.json(errorBody(`That switch doesn't exist: ${got.error}.`), 400);
+      deps.log?.info("switch changed", { id: body.data.id, on: body.data.on });
+      return c.json({ ok: true, off: [...got.value] });
+    });
+  }
   const brains = options.brains;
   if (brains) {
     app.get("/brains", (c) => {

@@ -210,6 +210,22 @@ const brainView = makeBrainView(byId("brain-view"), {
     code: { label: "Open code maps", run: () => void codeMapView.open() },
   },
   onMap: (key) => void codeMapView.open(key),
+  // #151: a switch in a node's panel; the next question goes by it.
+  onSwitch: async (id, on) => {
+    try {
+      const res = await fetch("/settings", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ id, on }) });
+      if (!res.ok) {
+        setStatus("Couldn't change that switch.");
+        return false;
+      }
+      setStatus(`${on ? "On" : "Off"} from the next question.`);
+      void refreshReach();
+      return true;
+    } catch {
+      setStatus("Couldn't reach Atlas to change that switch.");
+      return false;
+    }
+  },
 });
 
 // #158: the maps of the code he's studied.
