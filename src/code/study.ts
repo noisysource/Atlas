@@ -1,5 +1,5 @@
 // Studying a repo (#127): the code agent reads a repo (or one app's folder
-// in a monorepo) thoroughly, once, with a high ceiling, and Jarvis keeps what
+// in a monorepo) thoroughly, once, with a high ceiling, and Atlas keeps what
 // it learned in his code-knowledge store: one note per repo or app in
 // data/code/ (local, mode 600, gitignored). Later questions read the note
 // (code_notes: instant, free) and only go back to the agent for what the note
@@ -218,7 +218,7 @@ export type StudyState = {
   readonly recent?: readonly CodeStep[];
 };
 
-/** A study that finished since Jarvis started, for the page. */
+/** A study that finished since Atlas started, for the page. */
 export type StudyDone = { readonly repo: string; readonly folder: string; readonly finishedAt: string; readonly turns: number; readonly seconds: number; readonly partial: boolean; readonly parts: number };
 
 const RECENT = 8;
@@ -229,9 +229,9 @@ export type Studies = {
    * was queued. `again`: also redo the apps that already have a complete note.
    */
   readonly start: (owner: string, name: string, folder: string, again?: boolean) => "queued" | "already";
-  /** Studies waiting, running, or failed since Jarvis started. */
+  /** Studies waiting, running, or failed since Atlas started. */
   readonly active: () => readonly StudyState[];
-  /** Studies finished since Jarvis started, newest first. */
+  /** Studies finished since Atlas started, newest first. */
   readonly finished: () => readonly StudyDone[];
   /** Stops a study: the running one is cancelled (nothing is saved), a queued one is dropped. With no key, all of them. */
   readonly stop: (repo?: string, folder?: string) => number;

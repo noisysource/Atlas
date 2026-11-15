@@ -23,7 +23,7 @@ export const ACTUALLY_CANT_YET = "Actually, I can't do that yet.";
 const AFFIRMATIVE = /^(?:sure|okay|ok|of course|absolutely|certainly|got it|will do|no problem|right|alright|all right|yes|yeah|yep|definitely|on it|happy to|consider it)\b/i;
 
 /**
- * The question asks Jarvis to do something (#98): an affirmative opening is
+ * The question asks Atlas to do something (#98): an affirmative opening is
  * then held until the next sentence passes, so it's never "Sure." followed
  * by "I can't". Other questions keep the opening's speed.
  */

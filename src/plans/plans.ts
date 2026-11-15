@@ -1,4 +1,4 @@
-// Following a plan (#203): Jarvis as PM over work Claude Code does.
+// Following a plan (#203): Atlas as PM over work Claude Code does.
 //
 // A plan is a markdown file in one of his repos with a table of steps, one
 // pull request each, like the monorepo's infra/HANDOFF-repo-restructure.md:
@@ -6,7 +6,7 @@
 //   | # | PR | Deploys on dev | Check after | Status |
 //   | 3 | `deploy-parts.mjs` learns deploy units… | Everything | … |  |
 //
-// Jarvis reads the file and the repo's pull requests (read-only, with the
+// Atlas reads the file and the repo's pull requests (read-only, with the
 // tokens he already has), matches each step to its pull request by "PR 3"
 // in the PR's title, branch or description, and says where the plan is: what's
 // merged, what's open and whether its checks pass, what's next, and what's
@@ -36,7 +36,7 @@ export const PLAN_STATUS_TOOL: LlmTool = {
 export const PLAN_FOLLOW_TOOL: LlmTool = {
   name: "plan_follow",
   description:
-    'Start following a plan: a markdown file in one of his repos with a table of steps ("#" and "PR" columns). Jarvis checks it reads as a plan before keeping it. Only reads; nothing in the repo changes.',
+    'Start following a plan: a markdown file in one of his repos with a table of steps ("#" and "PR" columns). Atlas checks it reads as a plan before keeping it. Only reads; nothing in the repo changes.',
   inputSchema: {
     type: "object",
     properties: {

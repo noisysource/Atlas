@@ -32,9 +32,9 @@ export type UnlessRule = {
 };
 
 /**
- * How Jarvis handles a context:
- * - answer: Jarvis answers it (possibly with tools and memory).
- * - handoff: Jarvis recognises it, says which agent handles it, and stops:
+ * How Atlas handles a context:
+ * - answer: Atlas answers it (possibly with tools and memory).
+ * - handoff: Atlas recognises it, says which agent handles it, and stops:
  *   no answer-model call, no tools, no memory. `cues` are matched locally,
  *   before any model runs.
  */
@@ -159,7 +159,7 @@ import type { SkillStore } from "./skills.js";
 
 export type CalendarConfirmResult = {
   readonly ok: boolean;
-  /** What Jarvis says, worded by code. */
+  /** What Atlas says, worded by code. */
   readonly text: string;
   /** For the page's history record (#104), when something was added: "calendar_create Wed 11 Nov 21:00–22:00 → added". */
   readonly tool?: string;
@@ -351,7 +351,7 @@ export type Deps = {
   readonly houseBlinds?: Pick<Blinds, "decide">;
   /** #183: his answer to closing a pull request (POST /github/pr-close). */
   readonly prClose?: Pick<PrCloser, "decide">;
-  /** #124: his answer to deleting a draft Jarvis wrote (POST /gmail/delete). Only "yes" deletes. */
+  /** #124: his answer to deleting a draft Atlas wrote (POST /gmail/delete). Only "yes" deletes. */
   readonly gmailDelete?: (id: string, decision: "yes" | "no") => Promise<CalendarConfirmResult>;
   /** #116: skills, with MEMORY=on: drafts and approved routines. */
   readonly skills?: SkillStore;

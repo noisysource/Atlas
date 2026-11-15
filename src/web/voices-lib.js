@@ -25,13 +25,13 @@ export const OWN_SENTENCE_EXAMPLE = "Well... I'm not sure — it's REALLY big. A
 
 /**
  * Your own sentence (#94), ready to play: trimmed and cut to what /speak
- * takes. With `asJarvis`, numbers are in words, the way the chat page
+ * takes. With `asAtlas`, numbers are in words, the way the chat page
  * sends them to the voice; without it, exactly what you typed.
- * @param {string} raw @param {{ asJarvis: boolean }} options @returns {string}
+ * @param {string} raw @param {{ asAtlas: boolean }} options @returns {string}
  */
-export const ownSentence = (raw, { asJarvis }) => {
+export const ownSentence = (raw, { asAtlas }) => {
   const text = raw.trim().slice(0, OWN_SENTENCE_MAX);
-  return asJarvis ? speakableNumbers(text, "en") : text;
+  return asAtlas ? speakableNumbers(text, "en") : text;
 };
 
 /** The .env lines that select a voice. @param {string} provider @param {string} voice */

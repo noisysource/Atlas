@@ -24,12 +24,12 @@ import { loadVendorAssets, loadWebAssets } from "./web.js";
 
 const SHUTDOWN_TIMEOUT_MS = 10_000;
 
-const log = makeJsonLogger({ fields: { service: "jarvis" } });
+const log = makeJsonLogger({ fields: { service: "atlas" } });
 
 const refuse = (reason: string): never => {
   log.error("refusing to start", { reason });
   // Also plain text, so it's readable in a terminal.
-  console.error(`\n✗ Jarvis can't start:\n${reason}\n`);
+  console.error(`\n✗ Atlas can't start:\n${reason}\n`);
   process.exit(1);
 };
 
@@ -57,13 +57,13 @@ const background = makeBackgroundTasks({ log });
 
 const deps = await buildDeps({ config: cfg, env: process.env, log, background, memoryStore });
 if (!deps.ok) refuse(deps.error);
-// #108: every night at 03:30 their time, while Jarvis runs (npm run memory:reflect runs it now).
+// #108: every night at 03:30 their time, while Atlas runs (npm run memory:reflect runs it now).
 const introspect = deps.ok ? deps.value.introspect : undefined;
 const stopIntrospection =
   cfg.introspection && introspect
     ? startNightlyIntrospection(introspect, { timeZone: cfg.timeZone, onError: () => log.warn("introspection failed", { reason: "unexpected" }) })
     : undefined;
-// #177: the morning brief, prepared every day at BRIEF_AT their time, while Jarvis runs.
+// #177: the morning brief, prepared every day at BRIEF_AT their time, while Atlas runs.
 const morning = deps.ok ? deps.value.morningBrief : undefined;
 const stopMorning = morning
   ? startDailyAt(() => morning.prepare(), { timeZone: cfg.timeZone, hour: cfg.morningBrief.hour, minute: cfg.morningBrief.minute, msUntil, onError: () => log.warn("morning brief failed", { reason: "unexpected" }) })
@@ -97,11 +97,11 @@ if (!vendor.ok) refuse(vendor.error);
 // Spoken answers waiting for their playback report (#72); settled on shutdown (#78).
 const turns = makeTurnRegistry({ log });
 
-// Jarvis's voice (#73): local services only (checked in config). A service
+// Atlas's voice (#73): local services only (checked in config). A service
 // voice:up is still waiting for shows as "starting" (#80).
 const isStarting = makeIsStarting({ runDir: DEFAULT_RUN_DIR });
 const tts = { providers: makeTtsProviders({ kokoroUrl: cfg.tts.kokoroUrl, piperUrl: cfg.tts.piperUrl, isStarting }), config: cfg.tts };
-// Jarvis's ears (#74): whisper.cpp on this machine (checked in config), with
+// Atlas's ears (#74): whisper.cpp on this machine (checked in config), with
 // the names it should expect from the profile and data/whisper-hints.txt (#83).
 const profileForHints = makeProfileSource(cfg.profileSource);
 const hints = makeWhisperHints({

@@ -99,16 +99,16 @@ describe("makePersonalAnswerer", () => {
     expect(requests[0]?.system).not.toContain("Now:");
   });
 
-  it("adds a 'what Jarvis can do' section to the cached prompt when given", async () => {
+  it("adds a 'what Atlas can do' section to the cached prompt when given", async () => {
     const { llm, requests } = stubLlm();
     await makePersonalAnswerer({
       llm,
       profile: profileSource(),
       timeZone: "Europe/Lisbon",
-      capabilities: "Jarvis can help with:\n- Personal: your life",
+      capabilities: "Atlas can help with:\n- Personal: your life",
     })(input({ question: "What can you do?" }));
     expect(requests[0]?.system).toBe(
-      `${PERSONAL_INSTRUCTIONS}\n\n<what_jarvis_can_do>\nJarvis can help with:\n- Personal: your life\n</what_jarvis_can_do>\n\n<profile>\n${PROFILE}\n</profile>`,
+      `${PERSONAL_INSTRUCTIONS}\n\n<what_atlas_can_do>\nAtlas can help with:\n- Personal: your life\n</what_atlas_can_do>\n\n<profile>\n${PROFILE}\n</profile>`,
     );
     expect(requests[0]?.cacheSystem).toBe(true);
   });
@@ -222,10 +222,10 @@ describe("makePersonalAnswerer", () => {
     expect(system).toContain("No lists, bullet points, headings, markdown or emoji");
   });
 
-  it("makes who is who unmistakable: Jarvis is I, the person in the profile is you, by name (#88)", () => {
+  it("makes who is who unmistakable: Atlas is I, the person in the profile is you, by name (#88)", () => {
     const named = personalSystemPrompt("# Profile\n## About me\n- Name: Alex Example\n- Job: architect");
     expect(named.startsWith("Who is who (this matters most):")).toBe(true);
-    expect(named).toContain("You are Jarvis, an AI personal assistant. You are not the person in the profile");
+    expect(named).toContain("You are Atlas, an AI personal assistant. You are not the person in the profile");
     expect(named).toContain('The profile below describes Alex Example, who is talking to you. Call them "you"');
     expect(named).toContain('never "I run…" or "my daughter…"');
     expect(named).toContain("Wrong: \"You know I'm a software engineer.\"");
@@ -309,7 +309,7 @@ describe("historyMessages", () => {
   it("drops leading assistant turns, since the conversation must start with the user", () => {
     expect(
       historyMessages([
-        { role: "assistant", text: "Hi, I'm Jarvis." },
+        { role: "assistant", text: "Hi, I'm Atlas." },
         { role: "user", text: "Hi" },
         { role: "assistant", text: "Hello!" },
       ]),

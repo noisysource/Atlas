@@ -2,7 +2,7 @@
 // today's brief, until he dismisses it for the day. Set as text, never HTML.
 // The dismissal is kept in this browser only (a convenience).
 
-const KEY = "jarvis.brief.dismissed";
+const KEY = "atlas.brief.dismissed";
 
 /** @param {string} key */
 const read = (key) => {

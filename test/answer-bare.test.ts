@@ -13,7 +13,7 @@ const personal = { id: "personal", name: "Personal" } as unknown as Context;
 describe("bare mode prompt (#88)", () => {
   it("is just the persona and the conversational style, with the name from config", () => {
     const p = barePrompt("Alex");
-    expect(p.startsWith(`You are Jarvis, Alex's personal assistant. You speak as "I"; Alex is "you".`)).toBe(true);
+    expect(p.startsWith(`You are Atlas, Alex's personal assistant. You speak as "I"; Alex is "you".`)).toBe(true);
     expect(p).toContain("1 to 3 short sentences, unless they ask for detail");
     expect(p).toContain("React first, in a few natural words, then answer");
     expect(p).toContain("Ask a short question back when it helps");
@@ -23,7 +23,7 @@ describe("bare mode prompt (#88)", () => {
     expect(p).toContain("What you can do right now: only talk.");
     expect(p).toContain("You can't see a calendar, set reminders or alarms, take or keep notes, read or send email");
     expect(p).toContain("Never say or suggest you've done something you can't do");
-    expect(barePrompt()).toContain("You are Jarvis, the personal assistant.");
+    expect(barePrompt()).toContain("You are Atlas, the personal assistant.");
   });
 
   it("sends only that prompt and the history: no profile, no memories", async () => {
@@ -228,10 +228,10 @@ describe("the profile back in bare mode (#98, PROFILE=on)", () => {
     await ask(answer, "Hi", true);
     expect(requests[0]?.system).toBe(barePrompt("Alex Example", { profile: PROFILE }));
     expect(requests[1]?.system).toBe(barePrompt("Alex Example", { spoken: true, maxSentences: 2, pauses: false, profile: PROFILE }));
-    // JARVIS_USER_NAME wins over the profile's name.
+    // ATLAS_USER_NAME wins over the profile's name.
     const named = recording();
     await ask(makeBareAnswerer({ llm: named.llm, userName: "Al", profile: source([PROFILE]) }));
-    expect(named.requests[0]?.system.startsWith("You are Jarvis, Al's personal assistant.")).toBe(true);
+    expect(named.requests[0]?.system.startsWith("You are Atlas, Al's personal assistant.")).toBe(true);
   });
 
   it("picks up an edited profile on the next turn", async () => {

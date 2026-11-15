@@ -121,7 +121,7 @@ describe("the blinds", () => {
     expect(f.calls.filter((c) => c.name === "legrandSetState")).toHaveLength(2);
   });
 
-  it("calls the functions as Jarvis's Firebase user, signing in once", async () => {
+  it("calls the functions as Atlas's Firebase user, signing in once", async () => {
     const seen: { url: string; auth?: string | null; body: unknown }[] = [];
     const fetcher = (async (url: string, init: RequestInit) => {
       seen.push({ url: url.replace(/key=[^&]+/, "key=K"), auth: new Headers(init.headers).get("authorization"), body: JSON.parse(String(init.body)) });
@@ -130,7 +130,7 @@ describe("the blinds", () => {
       if (url.endsWith("/legrandGetHome")) return new Response(JSON.stringify({ error: { status: "NOT_FOUND" } }), { status: 404 });
       return new Response(JSON.stringify({ result: STATUS }), { status: 200 });
     }) as typeof fetch;
-    const user = checkFirebaseUser({ project: "kidclub-dev", region: "europe-west3", apiKey: "AIzaSyA-0123456789abcdefghij", email: "jarvis@kidclub.pt", password: "a long password" });
+    const user = checkFirebaseUser({ project: "kidclub-dev", region: "europe-west3", apiKey: "AIzaSyA-0123456789abcdefghij", email: "atlas@kidclub.pt", password: "a long password" });
     expect(user).toBeDefined();
     expect(checkFirebaseUser({ ...user, password: "short" })).toBeUndefined();
     const call = makeCallable({ user: async () => user, fetch: fetcher });
@@ -144,7 +144,7 @@ describe("the blinds", () => {
   });
 });
 
-describe("asking Jarvis", () => {
+describe("asking Atlas", () => {
   const usage = { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0 };
   const common = { servedBy: "claude-test", usage, payload: { provider: "anthropic", data: "x" } };
   const db: DbReader = { collections: async () => ok([]), query: async () => ok([]), get: async () => ok(undefined) };

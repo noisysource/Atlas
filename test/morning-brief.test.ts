@@ -90,7 +90,7 @@ describe("the morning brief", () => {
   });
 
   it('"good morning" and "bom dia" ask for the brief', () => {
-    expect(groupsByWords("Good morning Jarvis")).toContain("calendar");
+    expect(groupsByWords("Good morning Atlas")).toContain("calendar");
     expect(groupsByWords("Bom dia!")).toContain("calendar");
   });
 });

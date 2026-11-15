@@ -9,7 +9,7 @@ import { err, ok } from "../result.js";
 import type { Language } from "../types.js";
 import type { SttError, SttProvider } from "./types.js";
 
-/** Whisper's language codes for Jarvis's languages. */
+/** Whisper's language codes for Atlas's languages. */
 const WHISPER_LANGUAGE: Record<Language, string> = { en: "en" };
 
 /**

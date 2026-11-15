@@ -1,10 +1,10 @@
-// `npm run jarvis` (#122): one command that starts everything on the Mac.
+// `npm run atlas` (#122): one command that starts everything on the Mac.
 // The pure parts live here (arguments, what to start, prefixed output); the
-// processes are wired in scripts/jarvis.ts.
+// processes are wired in scripts/atlas.ts.
 
 export type LaunchArgs = { readonly voice: boolean; readonly open: boolean };
 
-export const LAUNCH_USAGE = "npm run jarvis [-- --no-voice] [--no-open]";
+export const LAUNCH_USAGE = "npm run atlas [-- --no-voice] [--no-open]";
 
 export const parseLaunchArgs = (argv: readonly string[]): { ok: true; value: LaunchArgs } | { ok: false; error: string } => {
   let voice = true;
@@ -19,14 +19,14 @@ export const parseLaunchArgs = (argv: readonly string[]): { ok: true; value: Lau
 
 /** What's already answering, and what's installed, when the launcher starts. */
 export type LaunchState = {
-  readonly jarvisUp: boolean;
+  readonly atlasUp: boolean;
   readonly voiceUp: boolean;
   readonly voiceInstalled: boolean;
   readonly ollamaUp: boolean;
 };
 
 export type LaunchPlan = {
-  /** Jarvis already answers: just open the page. */
+  /** Atlas already answers: just open the page. */
   readonly alreadyRunning: boolean;
   readonly startVoice: boolean;
   /** Lines to print before starting, one per service. */
@@ -34,7 +34,7 @@ export type LaunchPlan = {
 };
 
 export const planLaunch = (args: LaunchArgs, s: LaunchState): LaunchPlan => {
-  if (s.jarvisUp) return { alreadyRunning: true, startVoice: false, notes: ["Jarvis is already running."] };
+  if (s.atlasUp) return { alreadyRunning: true, startVoice: false, notes: ["Atlas is already running."] };
   const voice = !args.voice
     ? "Voice: off (--no-voice); the page speaks with the browser's voice."
     : s.voiceUp

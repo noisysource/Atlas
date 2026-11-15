@@ -147,14 +147,14 @@ describe("personal questions", () => {
     expect(answerRequest?.tools).toBeUndefined();
   });
 
-  it("tell the answerer truthfully what Jarvis can do", async () => {
+  it("tell the answerer truthfully what Atlas can do", async () => {
     const { result, requests } = await build();
     await ask(depsOf(result), { question: "What can you do?" });
     const system = requests[1]?.request.system ?? "";
-    expect(system).toContain("<what_jarvis_can_do>");
-    expect(system).toContain("- KidClub: not connected yet, so Jarvis can't answer these questions yet.");
-    expect(system).toContain("- Noisy Source: not connected yet, so Jarvis can't answer these questions yet.");
-    expect(system).toContain("- European Commission / HRT: not handled by Jarvis; those requests go to Kiro (the EC's agent).");
+    expect(system).toContain("<what_atlas_can_do>");
+    expect(system).toContain("- KidClub: not connected yet, so Atlas can't answer these questions yet.");
+    expect(system).toContain("- Noisy Source: not connected yet, so Atlas can't answer these questions yet.");
+    expect(system).toContain("- European Commission / HRT: not handled by Atlas; those requests go to Kiro (the EC's agent).");
     expect(system).toContain("- Personal: My own life");
   });
 
@@ -170,7 +170,7 @@ describe("personal questions", () => {
 
     const classifierText = requests[0]?.request.messages.map((m) => ("text" in m ? m.text : "")).join("\n");
     expect(classifierText).toContain("User: What's my daughter's name?");
-    expect(classifierText).toContain("Jarvis: Inês.");
+    expect(classifierText).toContain("Atlas: Inês.");
     expect(requests[1]?.request.messages).toEqual([
       { role: "user", text: "What's my daughter's name?" },
       { role: "assistant", text: "Inês." },
@@ -324,11 +324,11 @@ describe("memory, end to end", () => {
 });
 
 describe("capabilitiesText", () => {
-  it("describes each context by how Jarvis handles it", async () => {
+  it("describes each context by how Atlas handles it", async () => {
     const parsed = parseContexts(await readFile("contexts.md", "utf8"));
     if (!parsed.ok) throw new Error(parsed.error);
     const text = capabilitiesText(parsed.value, new Set(["personal"]));
-    expect(text.split("\n")[0]).toBe("Jarvis can help with:");
+    expect(text.split("\n")[0]).toBe("Atlas can help with:");
     expect(text).toContain("(answered from: My profile (data/profile.md))");
     expect(text).toContain("- General questions and conversation.");
     expect(text).toContain("answers are read aloud in English or Portuguese");

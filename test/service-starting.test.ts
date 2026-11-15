@@ -10,7 +10,7 @@ afterEach(async () => {
   for (const d of dirs.splice(0)) await rm(d, { recursive: true, force: true });
 });
 const runDir = async () => {
-  const dir = await mkdtemp(path.join(tmpdir(), "jarvis-run-"));
+  const dir = await mkdtemp(path.join(tmpdir(), "atlas-run-"));
   dirs.push(dir);
   return dir;
 };

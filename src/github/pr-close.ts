@@ -3,7 +3,7 @@
 // Claude asks with github_pr_close; nothing happens then: the app shows a
 // card, "Close it" / "Keep it". On "Close it", code reads the pull request
 // (it must be open, in that repo), closes it, and deletes its branch only
-// when it's one of Jarvis's own (jarvis/… in the same repo). Never merges,
+// when it's one of Atlas's own (atlas/… in the same repo). Never merges,
 // never deletes any other branch. Uses the owner's write token (#162).
 
 import { randomBytes } from "node:crypto";
@@ -14,7 +14,7 @@ import type { Logger } from "../types.js";
 export const GITHUB_PR_CLOSE_TOOL: LlmTool = {
   name: "github_pr_close",
   description:
-    "Close a pull request in one of his repos (not merge). Nothing happens by this call: it shows him a card, so call it directly instead of asking in words. If the branch is one of yours (jarvis/…), it's deleted too.",
+    "Close a pull request in one of his repos (not merge). Nothing happens by this call: it shows him a card, so call it directly instead of asking in words. If the branch is one of yours (atlas/…), it's deleted too.",
   inputSchema: {
     type: "object",
     properties: {
@@ -38,8 +38,9 @@ export const checkPrClose = (v: unknown): Result<PrCloseRequest, string> => {
   return ok({ owner: repo[1] ?? "", name: repo[2] ?? "", number: o.number });
 };
 
-/** Only Jarvis's own branches are deleted: jarvis/ and nothing odd after it. */
-export const isJarvisBranch = (ref: string): boolean => /^jarvis\/[A-Za-z0-9._-]{1,120}$/.test(ref);
+/** Only Atlas's own branches are deleted: atlas/ and nothing odd after it. */
+/** Branches Atlas made: atlas/…, and jarvis/… from before the rename (#205). */
+export const isAtlasBranch = (ref: string): boolean => /^(atlas|jarvis)\/[A-Za-z0-9._-]{1,120}$/.test(ref);
 
 export type PrCloser = {
   readonly canWrite: (owner: string) => Promise<boolean>;
@@ -78,7 +79,7 @@ export const makePrCloser = (deps: {
       if (deps.isEc(`${owner}/${name}`)) return { ok: false, text: "That's an EC repo, which Kiro handles, so nothing was closed." };
       const token = await deps.writeToken(owner);
       if (!token) return { ok: false, text: `I can't write to ${owner}'s repos: run npm run github:connect -- ${owner} --write. Nothing was closed.` };
-      const headers = { authorization: `Bearer ${token}`, accept: "application/vnd.github+json", "x-github-api-version": "2022-11-28", "user-agent": "jarvis" };
+      const headers = { authorization: `Bearer ${token}`, accept: "application/vnd.github+json", "x-github-api-version": "2022-11-28", "user-agent": "atlas" };
       const base = `https://api.github.com/repos/${owner}/${name}`;
       const read = await doFetch(`${base}/pulls/${number}`, { headers }).catch(() => undefined);
       const pr = read?.ok ? ((await read.json().catch(() => ({}))) as { state?: unknown; merged?: unknown; head?: { ref?: unknown; repo?: { full_name?: unknown } } }) : undefined;
@@ -92,7 +93,7 @@ export const makePrCloser = (deps: {
       const ref = typeof pr.head?.ref === "string" ? pr.head.ref : "";
       const sameRepo = typeof pr.head?.repo?.full_name === "string" && pr.head.repo.full_name.toLowerCase() === `${owner}/${name}`.toLowerCase();
       let branch = "";
-      if (sameRepo && isJarvisBranch(ref)) {
+      if (sameRepo && isAtlasBranch(ref)) {
         const deleted = await doFetch(`${base}/git/refs/heads/${ref.split("/").map(encodeURIComponent).join("/")}`, { method: "DELETE", headers }).catch(() => undefined);
         branch = deleted?.ok || deleted?.status === 204 ? ` and deleted its branch ${ref}` : `; its branch ${ref} is still there (GitHub didn't delete it)`;
       }

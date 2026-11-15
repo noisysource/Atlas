@@ -24,7 +24,7 @@ const fakeOllama = async (handler: (req: IncomingMessage, body: Record<string, u
 };
 
 const request: LlmRequest = {
-  system: "You are Jarvis.",
+  system: "You are Atlas.",
   systemSuffix: "Now: Sunday",
   messages: [
     { role: "user", text: "When does my passport expire?" },
@@ -76,7 +76,7 @@ describe("Ollama provider (#88)", () => {
       keep_alive: OLLAMA_KEEP_ALIVE,
       options: { num_predict: 500 },
       messages: [
-        { role: "system", content: "You are Jarvis.\n\nNow: Sunday" },
+        { role: "system", content: "You are Atlas.\n\nNow: Sunday" },
         { role: "user", content: "When does my passport expire?" },
         { role: "assistant", content: "In January." },
         { role: "user", content: "And when should I renew it?" },

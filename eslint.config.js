@@ -9,11 +9,11 @@ export const noClassesRule = {
     "error",
     {
       selector: "ClassDeclaration",
-      message: "Jarvis uses pure functions and types, not classes.",
+      message: "Atlas uses pure functions and types, not classes.",
     },
     {
       selector: "ClassExpression",
-      message: "Jarvis uses pure functions and types, not classes.",
+      message: "Atlas uses pure functions and types, not classes.",
     },
   ],
 };

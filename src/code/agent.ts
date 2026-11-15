@@ -81,7 +81,7 @@ export const CODE_ASK_TOOL: LlmTool = {
   inputSchema: {
     type: "object",
     properties: {
-      repo: { type: "string", description: 'owner/name, as github_repos lists it, e.g. "noisysource/Jarvis"' },
+      repo: { type: "string", description: 'owner/name, as github_repos lists it, e.g. "noisysource/Atlas"' },
       question: { type: "string", description: "One specific question about the code" },
     },
     required: ["repo", "question"],
@@ -134,7 +134,7 @@ export const WRAP_UP_PROMPT =
 
 /** What the agent is told, whatever the backend. */
 export const CODE_AGENT_PROMPT = [
-  "You answer questions about the code in the current folder, for Renato's personal assistant, Jarvis, who passes your answer on to him.",
+  "You answer questions about the code in the current folder, for Renato's personal assistant, Atlas, who passes your answer on to him.",
   "You can only read and search files here. You can't change, run or install anything, and you can't read outside this folder.",
   "Read what you need, then answer the question directly and concisely: say where things are (file paths) and how they work. Don't paste long code; quote a few lines at most.",
   "If you can't find something, say so plainly; never guess or invent files, functions or behaviour.",
@@ -144,7 +144,7 @@ export const CODE_AGENT_PROMPT = [
 
 /** #162: what the agent is told when it's making a fix. The problem itself comes as the question. */
 export const FIX_AGENT_PROMPT = [
-  "You make one fix in the code in the current folder, for Renato's personal assistant, Jarvis. Renato has agreed to the fix being prepared; he will see the diff before anything leaves his computer, and review it as a pull request.",
+  "You make one fix in the code in the current folder, for Renato's personal assistant, Atlas. Renato has agreed to the fix being prepared; he will see the diff before anything leaves his computer, and review it as a pull request.",
   "You can read, search and edit files here, and create new ones. You can't run, build, test or install anything, and you can't touch .git or .github.",
   "Make the smallest change that fixes the problem you're given, in the style of the code around it. Don't refactor, rename or reformat anything else, and don't add dependencies.",
   "If the problem names a cause, check it in the code first. If you can't find a safe fix, change nothing and say why.",

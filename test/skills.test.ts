@@ -1,4 +1,4 @@
-// Skills (#116): routines Jarvis follows, drafted from memory or taught in chat.
+// Skills (#116): routines Atlas follows, drafted from memory or taught in chat.
 
 import { readFile } from "node:fs/promises";
 import { beforeAll, describe, expect, it } from "vitest";

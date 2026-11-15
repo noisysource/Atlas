@@ -6,16 +6,16 @@ const NOW = new Date("2026-11-06T17:20:00Z");
 describe("makeJsonLogger", () => {
   it("writes one JSON object per line with a Cloud Logging severity", () => {
     const lines: string[] = [];
-    const log = makeJsonLogger({ write: (l) => lines.push(l), now: () => NOW, fields: { service: "jarvis" } });
+    const log = makeJsonLogger({ write: (l) => lines.push(l), now: () => NOW, fields: { service: "atlas" } });
 
     log.info("listening", { port: 8080 });
     log.warn("slow");
     log.error("failed", { errorName: "TypeError" });
 
     expect(lines.map((l) => JSON.parse(l) as unknown)).toEqual([
-      { severity: "INFO", time: "2026-11-06T17:20:00.000Z", message: "listening", service: "jarvis", port: 8080 },
-      { severity: "WARNING", time: "2026-11-06T17:20:00.000Z", message: "slow", service: "jarvis" },
-      { severity: "ERROR", time: "2026-11-06T17:20:00.000Z", message: "failed", service: "jarvis", errorName: "TypeError" },
+      { severity: "INFO", time: "2026-11-06T17:20:00.000Z", message: "listening", service: "atlas", port: 8080 },
+      { severity: "WARNING", time: "2026-11-06T17:20:00.000Z", message: "slow", service: "atlas" },
+      { severity: "ERROR", time: "2026-11-06T17:20:00.000Z", message: "failed", service: "atlas", errorName: "TypeError" },
     ]);
     expect(lines.every((l) => !l.includes("\n"))).toBe(true);
   });

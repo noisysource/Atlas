@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { makeLinePrefixer, pageUrl, parseLaunchArgs, planLaunch } from "../src/launch.js";
 
-const state = { jarvisUp: false, voiceUp: false, voiceInstalled: true, ollamaUp: true };
+const state = { atlasUp: false, voiceUp: false, voiceInstalled: true, ollamaUp: true };
 const all = { voice: true, open: true };
 
 describe("parseLaunchArgs (#122)", () => {
@@ -14,7 +14,7 @@ describe("parseLaunchArgs (#122)", () => {
   it("refuses anything else", () => {
     const r = parseLaunchArgs(["--voice=off"]);
     expect(r.ok).toBe(false);
-    if (!r.ok) expect(r.error).toContain("npm run jarvis");
+    if (!r.ok) expect(r.error).toContain("npm run atlas");
   });
 });
 
@@ -34,8 +34,8 @@ describe("planLaunch (#122)", () => {
   it("says how to start Ollama when it doesn't answer", () => {
     expect(planLaunch(all, { ...state, ollamaUp: false }).notes.join(" ")).toContain("ollama serve");
   });
-  it("only opens the page when Jarvis is already running", () => {
-    expect(planLaunch(all, { ...state, jarvisUp: true })).toEqual({ alreadyRunning: true, startVoice: false, notes: ["Jarvis is already running."] });
+  it("only opens the page when Atlas is already running", () => {
+    expect(planLaunch(all, { ...state, atlasUp: true })).toEqual({ alreadyRunning: true, startVoice: false, notes: ["Atlas is already running."] });
   });
 });
 

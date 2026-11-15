@@ -108,7 +108,7 @@ describe("with the real file system", () => {
   });
 
   it("picks up edits to the file", async () => {
-    dir = await mkdtemp(join(tmpdir(), "jarvis-profile-"));
+    dir = await mkdtemp(join(tmpdir(), "atlas-profile-"));
     const path = join(dir, "profile.md");
     await writeFile(path, "first");
     await utimes(path, 1_000, 1_000);

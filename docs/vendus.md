@@ -1,4 +1,4 @@
-# Vendus API, as Jarvis uses it (#7)
+# Vendus API, as Atlas uses it (#7)
 
 Checked 2026-11-14. Sources: the monorepo's working client
 (`noisysource/noisysource`, `functions/src/kidclub/vendus.ts`, checked
@@ -13,7 +13,7 @@ against live Vendus in October 2026), and Vendus's own docs:
 - **Base URL:** `https://www.vendus.pt/ws/v1.1`
 - **Auth:** the API key as `Authorization: Bearer <key>` (Vendus also takes
   HTTP Basic with the key as the username, or an `api_key` query parameter;
-  Jarvis uses Bearer only, so the key never ends up in a URL).
+  Atlas uses Bearer only, so the key never ends up in a URL).
 - **The key belongs to a Vendus user.** Every request is that user's, and it
   can do only what that user may. Each activated user has its own key
   (APPS → API in the back office).
@@ -24,12 +24,12 @@ against live Vendus in October 2026), and Vendus's own docs:
   strings).
 - **One document:** `GET /documents/{id}/`, with `client`, `taxes[]`
   (`rate`, `base`, `amount`) and `items[]`.
-- **Rate limits:** none documented. Jarvis reads at most 20 pages (1,000
+- **Rate limits:** none documented. Atlas reads at most 20 pages (1,000
   documents) per question and a period of at most 400 days.
 
-## How Jarvis is kept read-only
+## How Atlas is kept read-only
 
-1. **At Vendus:** a Vendus user of its own for Jarvis, with the fewest
+1. **At Vendus:** a Vendus user of its own for Atlas, with the fewest
    rights Vendus allows (it only needs to see documents). Whether Vendus has
    a pure read-only role wasn't confirmed: check the user's permissions when
    you create it.

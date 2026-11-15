@@ -1,6 +1,6 @@
-# Jarvis contexts
+# Atlas contexts
 
-Each `## id` section is one context. Jarvis reads this file at startup and
+Each `## id` section is one context. Atlas reads this file at startup and
 refuses to start if it's invalid. Ids use lowercase letters, digits and `-`.
 
 Fields (one `Key: value` per line):
@@ -9,7 +9,7 @@ Fields (one `Key: value` per line):
   of known tools (`vendus`) or `none`. The classifier reads the name and
   description, so write the description for it.
 - `Aliases` (optional): other names for the context, comma-separated. After
-  Jarvis asks "which context?", typing or saying a context's name, id or
+  Atlas asks "which context?", typing or saying a context's name, id or
   alias picks it.
 - `Handling`: `answer` (default) or `handoff`.
 - `Handoff to`: who handles a handoff context (required for `handoff`).
@@ -24,7 +24,7 @@ Fields (one `Key: value` per line):
 
 ## personal
 Name: Personal
-Description: My own life, not my businesses: me, my family, home, health, preferences, routines, plans, my day, schedule and to-dos, and anything in my personal profile. Also the default for anything that needs no business data: greetings, small talk, thanks, general-knowledge questions and questions about Jarvis itself.
+Description: My own life, not my businesses: me, my family, home, health, preferences, routines, plans, my day, schedule and to-dos, and anything in my personal profile. Also the default for anything that needs no business data: greetings, small talk, thanks, general-knowledge questions and questions about Atlas itself.
 Data: My profile (data/profile.md)
 Tools: none
 Aliases: pessoal, me, myself

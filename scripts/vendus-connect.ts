@@ -1,16 +1,16 @@
-// Connects KidClub's Vendus to Jarvis (#8), read-only, on this Mac.
+// Connects KidClub's Vendus to Atlas (#8), read-only, on this Mac.
 //
 //   npm run vendus:connect
 //
-// 1. In Vendus (Configurações → Utilizadores) create a user for Jarvis with
+// 1. In Vendus (Configurações → Utilizadores) create a user for Atlas with
 //    the fewest rights Vendus allows: it only needs to see documents.
 // 2. Sign in as that user, go to APPS → API, and copy its API key. The key
 //    can do only what that user may (https://www.vendus.pt/ws/v1.1/authentication.doc).
 // 3. Run this and paste it. It checks the key with one read (today's
 //    documents) and keeps it in data/vendus.json (gitignored, only you can read it).
-// 4. Set VENDUS=on in .env and restart Jarvis.
+// 4. Set VENDUS=on in .env and restart Atlas.
 //
-// Jarvis only ever GETs two paths with it (the list and one document).
+// Atlas only ever GETs two paths with it (the list and one document).
 
 import { createInterface } from "node:readline";
 import { chmod, mkdir, writeFile } from "node:fs/promises";
@@ -37,7 +37,7 @@ const output = new Writable({
 });
 const rl = createInterface({ input: process.stdin, output, terminal: true });
 const key = await new Promise<string>((resolve) => {
-  rl.question("Paste the Vendus API key of Jarvis's Vendus user (it won't show): ", (answer) => {
+  rl.question("Paste the Vendus API key of Atlas's Vendus user (it won't show): ", (answer) => {
     rl.close();
     process.stdout.write("\n");
     resolve(answer.trim());
@@ -53,5 +53,5 @@ if (!got.ok) fail(`${got.error.message}. Nothing was saved.`);
 await mkdir(dirname(config.vendus.keyPath), { recursive: true, mode: 0o700 });
 await writeFile(config.vendus.keyPath, JSON.stringify({ apiKey: key }), { mode: 0o600 });
 await chmod(config.vendus.keyPath, 0o600);
-console.log(`✓ Vendus is connected (read-only in Jarvis). Key saved to ${config.vendus.keyPath} (only you can read it; gitignored).`);
-console.log("\nPut VENDUS=on in .env (with BARE_MODE=on) and restart Jarvis.");
+console.log(`✓ Vendus is connected (read-only in Atlas). Key saved to ${config.vendus.keyPath} (only you can read it; gitignored).`);
+console.log("\nPut VENDUS=on in .env (with BARE_MODE=on) and restart Atlas.");

@@ -39,12 +39,12 @@ export type BriefSources = {
   readonly github?: { readonly reader: GithubReader; readonly repos: () => Promise<readonly RepoRef[]> };
   /** #203: the plans he follows, one line each (or why one couldn't be read). */
   readonly plans?: () => Promise<readonly string[]>;
-  /** #191: his open coding tasks, as Jarvis keeps them. */
+  /** #191: his open coding tasks, as Atlas keeps them. */
   readonly tasks?: () => Promise<readonly { readonly title: string; readonly repo: string; readonly status: string; readonly report?: string; readonly prUrl?: string }[]>;
 };
 
 /**
- * The brief's sources from what Jarvis has connected: every calendar account,
+ * The brief's sources from what Atlas has connected: every calendar account,
  * every Gmail account, the Google Cloud environments, and CI on the repos he
  * has studied (#177: the same for the day_brief tool and the morning job).
  */

@@ -1,4 +1,4 @@
-// Local services (TTS, STT) must be on this machine (#73, #74): Jarvis
+// Local services (TTS, STT) must be on this machine (#73, #74): Atlas
 // refuses to start if a service URL points anywhere else, so no audio or
 // text can be sent off the machine by a config mistake.
 

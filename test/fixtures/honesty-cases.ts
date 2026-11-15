@@ -87,7 +87,7 @@ export const KEPT: readonly string[] = [
   "What are you working on?",
   "I don't know yet, you haven't told me.",
   "What do you do?",
-  "I'm Jarvis, your personal assistant.",
+  "I'm Atlas, your personal assistant.",
   "I can help with questions about you and everyday things.",
   "I can't see your calendar yet.",
   "Want to talk through your day?",

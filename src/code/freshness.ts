@@ -1,6 +1,6 @@
 // Keeping the code notes current (#128).
 //
-// Each night Jarvis asks GitHub (read-only) how many commits touched each
+// Each night Atlas asks GitHub (read-only) how many commits touched each
 // studied repo or app since he studied it. A note with changes is stale: he
 // says so when he uses it ("KidClub changed since I studied it: 5 commits").
 // With CODE_REFRESH=study, he also re-studies the stalest few (capped per

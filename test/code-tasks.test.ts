@@ -1,4 +1,4 @@
-// #191: coding tasks, Jarvis as the PM and Claude Code doing the work.
+// #191: coding tasks, Atlas as the PM and Claude Code doing the work.
 
 import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import os from "node:os";
@@ -95,7 +95,7 @@ describe("what a task may run", () => {
 });
 
 describe("the runner", () => {
-  it("runs Claude Code with the repo's setup, its own prompt plus Jarvis's note, and resumes the session", async () => {
+  it("runs Claude Code with the repo's setup, its own prompt plus Atlas's note, and resumes the session", async () => {
     const seen: Record<string, unknown>[] = [];
     const runner = makeTaskRunner({
       model: "claude-sonnet-5-5",
@@ -205,7 +205,7 @@ describe("the task list", () => {
     await s.settle();
     expect(await s.tasks.tell("a1b2c3d4", "Keep cents.")).toMatchObject({ ok: true });
     await s.settle();
-    expect(s.prompts[1]).toEqual({ prompt: "From Renato, through Jarvis: Keep cents.", sessionId: "sess-1" });
+    expect(s.prompts[1]).toEqual({ prompt: "From Renato, through Atlas: Keep cents.", sessionId: "sess-1" });
     expect(s.git.some((g) => g.startsWith("push"))).toBe(false);
   });
 
@@ -300,7 +300,7 @@ describe("the task list", () => {
   });
 });
 
-describe("Jarvis as the PM", () => {
+describe("Atlas as the PM", () => {
   const usage = { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0 };
   const common = { servedBy: "claude-test", usage, payload: { provider: "anthropic", data: "x" } };
   const reader: GithubReader = { owners: async () => ["noisysource"], repos: async () => ok([]), read: async () => err({ code: "not_found", message: "x" }), issues: async () => ok([]), checks: async () => ok({ ref: "main", checks: [] }) };

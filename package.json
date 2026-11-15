@@ -1,15 +1,15 @@
 {
-  "name": "jarvis",
+  "name": "atlas",
   "version": "0.1.0",
   "private": true,
-  "description": "Jarvis, a personal AI orchestrator (KidClub + personal), for Google Cloud Run",
+  "description": "Atlas, a personal AI orchestrator (KidClub + personal), for Google Cloud Run",
   "type": "module",
   "engines": {
     "node": ">=22.13"
   },
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
-    "jarvis": "tsx --env-file-if-exists=.env scripts/jarvis.ts",
+    "atlas": "tsx --env-file-if-exists=.env scripts/atlas.ts",
     "dev": "tsx watch --env-file-if-exists=.env src/main.ts",
     "smoke:llm": "tsx --env-file-if-exists=.env scripts/smoke-llm.ts",
     "eval:classifier": "tsx --env-file-if-exists=.env scripts/eval-classifier.ts",

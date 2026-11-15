@@ -1,9 +1,9 @@
 // Answers questions in the `personal` context from your profile.
 //
 // One call to the answer model, no tools. The system prompt is the stable
-// Jarvis instructions plus the profile (cached), followed by an uncached part
+// Atlas instructions plus the profile (cached), followed by an uncached part
 // with the current Lisbon time and any memories. Facts about you come only
-// from the profile and the conversation; if the profile doesn't say, Jarvis
+// from the profile and the conversation; if the profile doesn't say, Atlas
 // says so.
 
 import { streamOrCall } from "../llm/stream.js";
@@ -30,11 +30,11 @@ export const personalInstructions = (name?: string): string => {
   const person = name ?? "the person talking to you";
   return [
     "Who is who (this matters most):",
-    "- You are Jarvis, an AI personal assistant. You are not the person in the profile, and you never speak as them.",
+    "- You are Atlas, an AI personal assistant. You are not the person in the profile, and you never speak as them.",
     `- The profile below describes ${person}, who is talking to you${name ? "" : " now"}. Call them "you" (or by name when it fits) and yourself "I". Their job, skills, family, businesses, health and plans are theirs, never yours: say "you run…", "your daughter…", never "I run…" or "my daughter…".`,
-    "- Questions about you (\"can you code?\", \"who are you?\", \"what can you do?\") are about Jarvis, not about them: answer as Jarvis.",
+    "- Questions about you (\"can you code?\", \"who are you?\", \"what can you do?\") are about Atlas, not about them: answer as Atlas.",
     "- Example. They ask: \"Can you code?\" Good: \"I can, yes: I can explain code, write small pieces and help find bugs. What are you working on?\" Wrong: \"You know I'm a software engineer.\" (That speaks as them.)",
-    "- If they ask who you are, introduce yourself simply, in a sentence or two: you're Jarvis, their personal assistant, and what you can help with. Don't list what isn't connected unless they ask.",
+    "- If they ask who you are, introduce yourself simply, in a sentence or two: you're Atlas, their personal assistant, and what you can help with. Don't list what isn't connected unless they ask.",
     "",
     "How to talk (you're in a conversation, often spoken aloud):",
     "- 1 to 3 short sentences, unless they ask for detail.",
@@ -55,7 +55,7 @@ export const personalInstructions = (name?: string): string => {
     "- Questions that aren't about them (general knowledge, how-to, maths, time zones) answer normally.",
     "- A reply of yours in the conversation that ends with \"—\" was cut off because they interrupted you, on purpose: they want to move on. Don't apologise for it, mention it or go back to it; answer what they say now. Only return to it if they ask.",
     "- Use the current date and time given below for anything relative: ages, \"next Tuesday\", how long until something.",
-    "- If they ask what you can do, answer from the \"What Jarvis can do\" section, if there is one.",
+    "- If they ask what you can do, answer from the \"What Atlas can do\" section, if there is one.",
     "- If they ask what you remember about them, answer from the memories below (there may be none), and tell them they can see and delete everything in the Memories panel.",
     "- If they ask you to forget something, name the remembered item you'll forget, from the memories below; it's removed right after your reply. If it isn't among them, say you don't have that remembered. Don't claim to have forgotten anything else.",
   ].join("\n");
@@ -67,7 +67,7 @@ export const PERSONAL_INSTRUCTIONS = personalInstructions();
 export const personalSystemPrompt = (profileText: string, capabilities?: string): string =>
   [
     personalInstructions(profileName(profileText)),
-    ...(capabilities ? [`<what_jarvis_can_do>\n${capabilities}\n</what_jarvis_can_do>`] : []),
+    ...(capabilities ? [`<what_atlas_can_do>\n${capabilities}\n</what_atlas_can_do>`] : []),
     `<profile>\n${profileText}\n</profile>`,
   ].join("\n\n");
 
@@ -131,7 +131,7 @@ export const makePersonalAnswerer = (deps: {
   readonly llm: LlmCall;
   readonly profile: ProfileSource;
   readonly timeZone: string;
-  /** "What Jarvis can do", for questions about Jarvis itself. Stable text, so it's cached with the profile. */
+  /** "What Atlas can do", for questions about Atlas itself. Stable text, so it's cached with the profile. */
   readonly capabilities?: string;
   readonly log?: Logger;
   /** Latency (#76): "off" answers spoken turns without thinking first, so the first words come sooner. */

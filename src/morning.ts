@@ -1,10 +1,10 @@
 // The morning brief, ready without asking (#177).
 //
-// Each morning at BRIEF_AT (default 07:30, his time) Jarvis gathers the day's
+// Each morning at BRIEF_AT (default 07:30, his time) Atlas gathers the day's
 // brief (#49: calendars, unread email, overnight errors, CI) and has Claude
 // word it once. It's kept for the day in data/brief/<day>.json (local, mode
 // 600: it holds email senders and subjects) and shown as a card when he opens
-// the page. If Jarvis wasn't running at BRIEF_AT, the first page load after it
+// the page. If Atlas wasn't running at BRIEF_AT, the first page load after it
 // prepares one. Logs carry counts and timings only.
 
 import { briefForBrain, briefSummary, gatherBrief, type BriefSources } from "./brief.js";
@@ -103,7 +103,7 @@ export const makeMorningBriefs = (deps: {
   };
 };
 
-/** Runs `run` every day at hour:minute their time, while Jarvis runs. Returns a stop function. */
+/** Runs `run` every day at hour:minute their time, while Atlas runs. Returns a stop function. */
 export const startDailyAt = (
   run: () => Promise<unknown>,
   options: { readonly timeZone: string; readonly hour: number; readonly minute: number; readonly msUntil: (now: Date, timeZone: string, hour: number, minute: number) => number; readonly now?: () => Date; readonly onError?: (e: unknown) => void },

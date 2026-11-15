@@ -20,7 +20,7 @@ const MAX_LIST = 30;
 const REPO = /^[A-Za-z0-9_.-]{1,100}\/[A-Za-z0-9_.-]{1,100}$/;
 const REF = /^[A-Za-z0-9._/-]{1,100}$/;
 
-const repoProp = { type: "string", description: 'owner/name, as github_repos lists it, e.g. "noisysource/Jarvis"' };
+const repoProp = { type: "string", description: 'owner/name, as github_repos lists it, e.g. "noisysource/Atlas"' };
 
 export const GITHUB_REPOS_TOOL: LlmTool = {
   name: "github_repos",
@@ -284,7 +284,7 @@ export const makeGithubTokens = (deps: { readonly readFile: () => Promise<string
 
 const API = "https://api.github.com";
 
-/** GET calls only, to api.github.com: GitHub is read-only for Jarvis. */
+/** GET calls only, to api.github.com: GitHub is read-only for Atlas. */
 export const makeGithubReader = (deps: { readonly tokens: GithubTokens; readonly fetch?: typeof fetch }): GithubReader => {
   const doFetch = deps.fetch ?? fetch;
   const get = async (owner: string, path: string, signal?: AbortSignal): Promise<Result<unknown, GithubError>> => {
@@ -294,7 +294,7 @@ export const makeGithubReader = (deps: { readonly tokens: GithubTokens; readonly
     try {
       res = await doFetch(`${API}${path}`, {
         method: "GET",
-        headers: { authorization: `Bearer ${token}`, accept: "application/vnd.github+json", "x-github-api-version": "2022-11-28", "user-agent": "jarvis" },
+        headers: { authorization: `Bearer ${token}`, accept: "application/vnd.github+json", "x-github-api-version": "2022-11-28", "user-agent": "atlas" },
         ...(signal ? { signal } : {}),
       });
     } catch {

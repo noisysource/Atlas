@@ -1,7 +1,7 @@
 // @ts-check
 // The mic for a spoken conversation (#74, #75): opened once when you press
 // the mic, with echo cancellation, noise suppression and auto gain, and kept
-// open (so you can interrupt Jarvis) until the conversation ends. Its audio
+// open (so you can interrupt Atlas) until the conversation ends. Its audio
 // is resampled to 16 kHz and handed out in Silero's 512-sample frames. It
 // stays in this page: only an utterance, as a WAV, is sent to this server's
 // /transcribe.
@@ -34,7 +34,7 @@ export const openMic = async ({ ctx, onFrame }) => {
     throw e;
   }
   const source = ctx.createMediaStreamSource(stream);
-  const node = new AudioWorkletNode(ctx, "jarvis-capture");
+  const node = new AudioWorkletNode(ctx, "atlas-capture");
   const mute = ctx.createGain();
   mute.gain.value = 0;
   const resample = makeResampler(ctx.sampleRate);

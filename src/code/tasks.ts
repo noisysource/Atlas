@@ -1,7 +1,7 @@
-// Coding tasks, with Jarvis as the PM (#191).
+// Coding tasks, with Atlas as the PM (#191).
 //
-// Jarvis doesn't hold the code's details: Claude Code does, in its own
-// session, with the repo's CLAUDE.md and STATUS.md. Jarvis keeps the list:
+// Atlas doesn't hold the code's details: Claude Code does, in its own
+// session, with the repo's CLAUDE.md and STATUS.md. Atlas keeps the list:
 // what each task is for, its branch, its Claude Code session, its status, its
 // last report and its pull request. He passes on Renato's instructions by
 // resuming that session, and brings back reports and decisions.
@@ -94,10 +94,10 @@ export const TASK_TELL_TOOL: LlmTool = {
 export const TASK_PUBLISH_TOOL: LlmTool = {
   name: "task_publish",
   description:
-    "Push a task's branch and open its pull request into the base branch (or update it). The pull request closes an issue: the one he named, or a new one Jarvis opens from the task. Nothing is pushed by this call: it shows him the commits and asks.",
+    "Push a task's branch and open its pull request into the base branch (or update it). The pull request closes an issue: the one he named, or a new one Atlas opens from the task. Nothing is pushed by this call: it shows him the commits and asks.",
   inputSchema: {
     type: "object",
-    properties: { id: idProp, issue: { type: "number", description: "An existing open issue in that repo this closes, if he named one; leave out and Jarvis opens a new issue for the task" } },
+    properties: { id: idProp, issue: { type: "number", description: "An existing open issue in that repo this closes, if he named one; leave out and Atlas opens a new issue for the task" } },
     required: ["id"],
     additionalProperties: false,
   },
@@ -212,7 +212,7 @@ export const makeTasks = (deps: {
     cards.set(id, c);
     return id;
   };
-  const gh = (token: string) => ({ authorization: `Bearer ${token}`, accept: "application/vnd.github+json", "x-github-api-version": "2022-11-28", "user-agent": "jarvis" });
+  const gh = (token: string) => ({ authorization: `Bearer ${token}`, accept: "application/vnd.github+json", "x-github-api-version": "2022-11-28", "user-agent": "atlas" });
 
   /** One turn of Claude Code on the task, queued behind any other. */
   const turn = (id: string, prompt: string): void => {
@@ -253,7 +253,7 @@ export const makeTasks = (deps: {
     const [owner, name] = t.repo.split("/");
     const token = await deps.readToken(owner ?? "");
     if (!owner || !name || !token) {
-      await update(t.id, { status: "failed", message: `Jarvis can't read ${t.repo} (npm run github:connect -- ${owner})` });
+      await update(t.id, { status: "failed", message: `Atlas can't read ${t.repo} (npm run github:connect -- ${owner})` });
       return;
     }
     const env = fixGitEnv(token);
@@ -292,7 +292,7 @@ export const makeTasks = (deps: {
     const res = await doFetch(`https://api.github.com/repos/${owner}/${name}/issues`, {
       method: "POST",
       headers: { ...gh(token), "content-type": "application/json" },
-      body: JSON.stringify({ title: t.title, body: [maskEmails(t.goal), "", "---", "Opened by Jarvis for a coding task, after Renato's OK."].join("\n") }),
+      body: JSON.stringify({ title: t.title, body: [maskEmails(t.goal), "", "---", "Opened by Atlas for a coding task, after Renato's OK."].join("\n") }),
     }).catch(() => undefined);
     const made = res?.ok ? ((await res.json().catch(() => ({}))) as { number?: unknown }) : undefined;
     if (typeof made?.number !== "number") return err(`GitHub didn't let me open an issue${res ? ` (${res.status})` : ""}: the write token for ${owner} needs Issues: Read and write (run npm run github:connect -- ${owner} --write after adding it). Nothing was pushed.`);
@@ -326,7 +326,7 @@ export const makeTasks = (deps: {
       maskEmails(t.report ?? "(no report)").slice(0, 6000),
       "",
       "---",
-      "Built by Claude Code, managed by Jarvis, pushed after Renato's OK.",
+      "Built by Claude Code, managed by Atlas, pushed after Renato's OK.",
     ].join("\n");
     const res = await doFetch(`https://api.github.com/repos/${owner}/${name}/pulls`, {
       method: "POST",
@@ -372,7 +372,7 @@ export const makeTasks = (deps: {
       if (c.kind === "start") {
         const r = c.r;
         if (deps.isEc(`${r.owner}/${r.name} ${r.title} ${r.goal}`)) return { ok: false, text: "That's EC work, which Kiro handles, so nothing was started." };
-        if (!(await deps.readToken(r.owner))) return { ok: false, text: `Jarvis can't read ${r.owner}'s repos (npm run github:connect -- ${r.owner}). Nothing was started.` };
+        if (!(await deps.readToken(r.owner))) return { ok: false, text: `Atlas can't read ${r.owner}'s repos (npm run github:connect -- ${r.owner}). Nothing was started.` };
         const id = newId();
         const t: Task = {
           id,
@@ -409,7 +409,7 @@ export const makeTasks = (deps: {
       if (!t || t.status === "closed") return err("no such open task");
       if (t.status === "preparing" || t.status === "working" || t.status === "queued") return err("it's busy; tell it when it reports, or stop it");
       if (t.status === "failed" && !t.sessionId) return err(`it failed before starting: ${t.message ?? "unknown"}`);
-      turn(id, `From Renato, through Jarvis: ${message}`);
+      turn(id, `From Renato, through Atlas: ${message}`);
       return ok(`Passed on to "${t.title}"; it's working on it.`);
     },
     stop: (id) => {

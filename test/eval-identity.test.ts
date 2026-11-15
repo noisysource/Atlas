@@ -9,7 +9,7 @@ const find = (q: string) => {
 const problems = (q: string, answer: string) => checkAnswer(find(q), answer).problems;
 
 describe("identity eval checks (#88)", () => {
-  it("catches Jarvis speaking as the person", () => {
+  it("catches Atlas speaking as the person", () => {
     expect(problems("Can you code?", "You know I'm a software engineer.")).not.toEqual([]);
     expect(problems("Can you code?", "I can, yes: I can explain code and help find bugs. What are you working on?")).toEqual([]);
     expect(problems("What do I do for work?", "I run KidClub, don't you know?")).not.toEqual([]);
@@ -20,7 +20,7 @@ describe("identity eval checks (#88)", () => {
   });
 
   it('wants a simple intro to "who are you?"', () => {
-    expect(problems("Who are you?", "I'm Jarvis, your personal assistant. I can help with questions about you and everyday things.")).toEqual([]);
+    expect(problems("Who are you?", "I'm Atlas, your personal assistant. I can help with questions about you and everyday things.")).toEqual([]);
     expect(problems("Who are you?", "I can't help with your businesses, they're not connected yet.")).not.toEqual([]);
   });
 

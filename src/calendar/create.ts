@@ -58,7 +58,7 @@ const hhmm = (m: number): string => `${String(Math.floor(m / 60)).padStart(2, "0
 
 /**
  * Checks the brain's calendar_create request. `isEc`: the local EC precheck,
- * so EC work is never put on the calendar by Jarvis (it's Kiro's).
+ * so EC work is never put on the calendar by Atlas (it's Kiro's).
  */
 export const checkCreateRequest = (value: unknown, today: string, isEc: (text: string) => boolean): Result<Proposal, string> => {
   if (typeof value !== "object" || value === null) return err("not an object");
@@ -133,7 +133,7 @@ export const makeGoogleEventCreator = (deps: {
       return err({ code: "network", message: "Couldn't reach Google Calendar" });
     }
     if (res.status === 401 || res.status === 403)
-      return err({ code: "auth", message: `Google Calendar refused to add it (${res.status}): connect again with write access (CALENDAR_WRITE=on npm run calendar:connect -- ${account}), then restart Jarvis` });
+      return err({ code: "auth", message: `Google Calendar refused to add it (${res.status}): connect again with write access (CALENDAR_WRITE=on npm run calendar:connect -- ${account}), then restart Atlas` });
     if (!res.ok) return err({ code: "api", message: `Google Calendar answered ${res.status}` });
     const body = (await res.json().catch(() => ({}))) as { summary?: unknown; start?: { date?: unknown; dateTime?: unknown }; end?: { date?: unknown; dateTime?: unknown } };
     const start = typeof body.start?.dateTime === "string" ? body.start.dateTime : typeof body.start?.date === "string" ? body.start.date : "";

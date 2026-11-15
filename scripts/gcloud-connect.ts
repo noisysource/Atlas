@@ -1,4 +1,4 @@
-// Connects one Google Cloud environment to Jarvis (#161), read-only, on this Mac.
+// Connects one Google Cloud environment to Atlas (#161), read-only, on this Mac.
 //
 //   npm run gcloud:connect -- dev kidclub-dev
 //   npm run gcloud:connect -- dev kidclub-dev other-name@kidclub-dev.iam.gserviceaccount.com
@@ -12,7 +12,7 @@
 // 3. Run this with the environment's name (dev, staging, prod…) and the
 //    project id. It checks with one read of the logs, then writes
 //    data/gcloud/<env>.json: the project and the account's name, nothing secret.
-// 4. Set GCLOUD=on in .env and restart Jarvis.
+// 4. Set GCLOUD=on in .env and restart Atlas.
 
 import { execFile } from "node:child_process";
 import { chmod, mkdir, writeFile } from "node:fs/promises";
@@ -66,4 +66,4 @@ else {
   console.log(`    gcloud projects add-iam-policy-binding ${target.projectId} --member=serviceAccount:${target.serviceAccount} --role=roles/datastore.viewer`);
 }
 console.log(`✓ Saved to ${file} (names only; no key is stored).`);
-console.log("\nPut GCLOUD=on in .env (with BARE_MODE=on) and restart Jarvis.");
+console.log("\nPut GCLOUD=on in .env (with BARE_MODE=on) and restart Atlas.");

@@ -17,9 +17,9 @@ describe("the terminal chat", () => {
         { kind: "user", time: "18:02", text: "Is the heating on? " },
         { kind: "answer", time: "18:02", text: "Yes, warming up for 19:00." },
         { kind: "answer", text: "  " },
-        { kind: "error", time: "18:03", text: "I can't reach Jarvis." },
+        { kind: "error", time: "18:03", text: "I can't reach Atlas." },
       ]),
-    ).toBe("[18:02] Renato: Is the heating on?\n\n[18:02] Jarvis: Yes, warming up for 19:00.\n\n[18:03] Jarvis (error): I can't reach Jarvis.");
+    ).toBe("[18:02] Renato: Is the heating on?\n\n[18:02] Atlas: Yes, warming up for 19:00.\n\n[18:03] Atlas (error): I can't reach Atlas.");
     expect(clock(new Date(2026, 10, 15, 8, 5))).toBe("08:05");
   });
 

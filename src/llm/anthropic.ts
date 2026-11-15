@@ -90,7 +90,7 @@ const toMessageParam = (message: LlmMessage): MessageParam => {
 /**
  * Thinking off (#76), per model: Claude Sonnet 5.5 turns it off with
  * `between_tools`; Claude Haiku 5.5, Opus 5, Sonnet 5 and older take
- * `disabled` (both need effort high or below, which is all Jarvis uses).
+ * `disabled` (both need effort high or below, which is all Atlas uses).
  * Claude Opus 5.5 and Fable can't turn it off, so the effort is lowered.
  */
 export const thinkingOff = (model: string): Pick<CreateParams, "thinking"> & { effort?: LlmRequest["effort"] } => {
@@ -121,7 +121,7 @@ export const buildParams = (model: string, request: LlmRequest): CreateParams =>
   ...(request.tools && request.tools.length > 0
     ? {
         // Not strict (#174): Anthropic compiles strict tools into one grammar, which
-        // failed ("too large") once Jarvis had twenty-odd tools. Nothing relies on
+        // failed ("too large") once Atlas had twenty-odd tools. Nothing relies on
         // it: code checks every tool call against its own rules.
         tools: request.tools.map((t) => ({
           name: t.name,

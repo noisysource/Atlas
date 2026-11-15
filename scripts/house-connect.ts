@@ -1,10 +1,10 @@
-// Connects Jarvis to the blinds (#166), on this Mac.
+// Connects Atlas to the blinds (#166), on this Mac.
 //
 //   npm run house:connect -- <project> <web-api-key> <email>
-//   e.g. npm run house:connect -- kidclub-dev AIza… jarvis@kidclub.pt
+//   e.g. npm run house:connect -- kidclub-dev AIza… atlas@kidclub.pt
 //
 // 1. In the Firebase console of the domotics project (kidclub-dev today):
-//    Authentication → Users → Add user, with Jarvis's own email and a long
+//    Authentication → Users → Add user, with Atlas's own email and a long
 //    random password. Like the Pi bridge's user, it's only a sign-in for the
 //    domotics functions; it isn't a mailbox and has no role anywhere else.
 // 2. The domotics functions must let that user in (the monorepo's
@@ -14,7 +14,7 @@
 //    and the email, then type the password (it won't show). It signs in and
 //    reads the blinds once, then keeps it all in data/house/firebase.json
 //    (gitignored, only you can read it).
-// 4. Set HOUSE_CONTROL=on in .env (with HOUSE=on) and restart Jarvis.
+// 4. Set HOUSE_CONTROL=on in .env (with HOUSE=on) and restart Atlas.
 //
 // Nothing moves here: it only reads.
 
@@ -67,6 +67,6 @@ const path = config.house.control.userPath;
 await mkdir(dirname(path), { recursive: true, mode: 0o700 });
 await writeFile(path, JSON.stringify(user), { mode: 0o600 });
 await chmod(path, 0o600);
-console.log(`✓ Jarvis sees ${blinds.length} blinds: ${blinds.map((b) => b.name).join(", ")}.`);
+console.log(`✓ Atlas sees ${blinds.length} blinds: ${blinds.map((b) => b.name).join(", ")}.`);
 console.log(`  Saved to ${path} (only you can read it; gitignored).`);
-console.log("\nPut HOUSE_CONTROL=on in .env (with HOUSE=on) and restart Jarvis. Every move asks for your OK.");
+console.log("\nPut HOUSE_CONTROL=on in .env (with HOUSE=on) and restart Atlas. Every move asks for your OK.");

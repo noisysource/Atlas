@@ -1,4 +1,4 @@
-// Connects one Gmail account to Jarvis (Reach 3), read-only, once, on this Mac.
+// Connects one Gmail account to Atlas (Reach 3), read-only, once, on this Mac.
 //
 //   npm run gmail:connect -- personal
 //   npm run gmail:connect -- noisysource
@@ -8,9 +8,9 @@
 //    If the consent screen is "External", add each Gmail address as a test user.
 // 2. Run this once per account. It opens Google's sign-in: pick the account
 //    you're connecting, and allow reading email. It asks for read-only access
-//    (gmail.readonly): Jarvis can't send, delete or label anything.
+//    (gmail.readonly): Atlas can't send, delete or label anything.
 // 3. The refresh token is saved to data/google-gmail-<account>.json
-//    (gitignored, readable only by you). Then set GMAIL=on and restart Jarvis.
+//    (gitignored, readable only by you). Then set GMAIL=on and restart Atlas.
 //
 // Nothing here prints a token, the client secret, or an email's content.
 
@@ -56,7 +56,7 @@ const redirectUri = `http://127.0.0.1:${(server.address() as AddressInfo).port}`
 const url = authorizationUrl({ clientId: oauthClient.clientId, redirectUri, challenge, state, scope: write ? `${GMAIL_SCOPE} ${GMAIL_COMPOSE_SCOPE}` : GMAIL_SCOPE });
 console.log(
   write
-    ? `Connecting the "${which}" Gmail to read email and write drafts (Jarvis sends only after your "Send it"). On Google's screen, pick that account and tick both boxes.\n`
+    ? `Connecting the "${which}" Gmail to read email and write drafts (Atlas sends only after your "Send it"). On Google's screen, pick that account and tick both boxes.\n`
     : `Connecting the "${which}" Gmail, read-only. On Google's screen, pick that account and allow reading email.\n`,
 );
 console.log("Opening Google's sign-in in your browser. If it doesn't open, visit:\n");
@@ -70,9 +70,9 @@ const code = await new Promise<string>((resolve) => {
     const params = new URL(req.url ?? "/", redirectUri).searchParams;
     const page = (text: string) => {
       res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
-      res.end(`<!doctype html><meta charset="utf-8"><title>Jarvis</title><p style="font:16px system-ui;margin:2rem">${text}</p>`);
+      res.end(`<!doctype html><meta charset="utf-8"><title>Atlas</title><p style="font:16px system-ui;margin:2rem">${text}</p>`);
     };
-    if (params.get("state") !== state) return page("This isn't the sign-in Jarvis started. Close this tab.");
+    if (params.get("state") !== state) return page("This isn't the sign-in Atlas started. Close this tab.");
     const error = params.get("error");
     if (error) {
       page("Access wasn't allowed. You can close this tab.");
@@ -104,4 +104,4 @@ const profile = await fetch("https://gmail.googleapis.com/gmail/v1/users/me/prof
   .catch(() => undefined);
 console.log(typeof profile?.emailAddress === "string" ? `✓ Connected "${which}" to ${profile.emailAddress}.` : "✗ Couldn't read the account's address; check the Gmail API is enabled.");
 console.log(write ? "✓ Drafts and sending allowed (always after your OK)." : "");
-console.log("\nNow put GMAIL=on in .env (with BARE_MODE=on) and restart Jarvis: a running Jarvis keeps its old connections until it restarts.");
+console.log("\nNow put GMAIL=on in .env (with BARE_MODE=on) and restart Atlas: a running Atlas keeps its old connections until it restarts.");

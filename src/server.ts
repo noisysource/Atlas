@@ -118,9 +118,9 @@ export const makeServer = (
     /** Streamed answers waiting for their playback report (#72). */
     readonly turns?: TurnRegistry;
     readonly newTurnId?: () => string;
-    /** Jarvis's voice (#73): GET /tts and POST /speak. Unset = no voice routes. */
+    /** Atlas's voice (#73): GET /tts and POST /speak. Unset = no voice routes. */
     readonly tts?: { readonly providers: TtsProviders; readonly config: TtsConfig };
-    /** Jarvis's ears (#74): GET /stt and POST /transcribe. Unset = no listening routes. */
+    /** Atlas's ears (#74): GET /stt and POST /transcribe. Unset = no listening routes. */
     readonly stt?: SttProvider;
     /** How the page runs a spoken turn (#75): GET /voice-settings. */
     readonly turn?: TurnConfig;
@@ -430,7 +430,7 @@ export const makeServer = (
     });
   }
 
-  // #124: his answer to deleting a draft Jarvis wrote. Only "yes" deletes it.
+  // #124: his answer to deleting a draft Atlas wrote. Only "yes" deletes it.
   const del = deps.gmailDelete;
   if (del) {
     const DeleteBody = z.object({ id: z.string().regex(/^[a-f0-9]{8,64}$/), decision: z.enum(["yes", "no"]) }).strict();

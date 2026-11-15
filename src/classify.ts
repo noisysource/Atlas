@@ -5,7 +5,7 @@
 // 2. Otherwise the classifier model picks one context id or "unclear".
 //
 // Never throws and never guesses: any failure becomes "unclear", which makes
-// Jarvis ask the user.
+// Atlas ask the user.
 
 import { classifierContextIds, describeContexts } from "./contexts.js";
 import type { JsonObjectSchema, LlmCall } from "./llm/types.js";
@@ -14,7 +14,7 @@ import type { Classification, Context, Deps, Logger, Turn } from "./types.js";
 
 /** How many earlier turns the classifier sees, so follow-ups stay in context. */
 export const CLASSIFIER_HISTORY_TURNS = 6;
-/** Where everything that needs no context's data goes (greetings, small talk, general knowledge, Jarvis itself). */
+/** Where everything that needs no context's data goes (greetings, small talk, general knowledge, Atlas itself). */
 export const DEFAULT_CONTEXT_ID = "personal";
 const CLASSIFIER_MAX_TOKENS = 2048;
 const UNCLEAR = "unclear";
@@ -31,7 +31,7 @@ export const classifierSchema = (contexts: readonly Context[]): JsonObjectSchema
 export const classifierSystemPrompt = (contexts: readonly Context[]): string => {
   const hasDefault = contexts.some((c) => c.id === DEFAULT_CONTEXT_ID);
   return [
-    "You route questions for Jarvis, a personal assistant, to exactly one context.",
+    "You route questions for Atlas, a personal assistant, to exactly one context.",
     "",
     "Contexts:",
     describeContexts(contexts),
@@ -40,7 +40,7 @@ export const classifierSystemPrompt = (contexts: readonly Context[]): string => 
     "- If the question needs a particular context's data, pick that context.",
     ...(hasDefault
       ? [
-          `- If it needs no context's data, reply "${DEFAULT_CONTEXT_ID}". That covers greetings, small talk, thanks, general-knowledge questions and questions about Jarvis itself (e.g. "hello", "thanks", "what can you do?", "what's the capital of Australia?").`,
+          `- If it needs no context's data, reply "${DEFAULT_CONTEXT_ID}". That covers greetings, small talk, thanks, general-knowledge questions and questions about Atlas itself (e.g. "hello", "thanks", "what can you do?", "what's the capital of Australia?").`,
           `- Questions about their own day, schedule, calendar, agenda or to-dos are "${DEFAULT_CONTEXT_ID}" too (e.g. "what's on my plate today?", "what do I have tomorrow?").`,
         ]
       : []),
@@ -50,7 +50,7 @@ export const classifierSystemPrompt = (contexts: readonly Context[]): string => 
   ].join("\n");
 };
 
-const renderTurn = (turn: Turn): string => `${turn.role === "user" ? "User" : "Jarvis"}: ${turn.text}`;
+const renderTurn = (turn: Turn): string => `${turn.role === "user" ? "User" : "Atlas"}: ${turn.text}`;
 
 export const classifierUserMessage = (question: string, history: readonly Turn[]): string => {
   const recent = history.slice(-CLASSIFIER_HISTORY_TURNS);

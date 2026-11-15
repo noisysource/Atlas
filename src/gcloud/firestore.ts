@@ -3,7 +3,7 @@
 // Renato's apps keep their most useful error records there (client errors,
 // failed emails, sync errors), and later questions need the data itself. The
 // read-only service account of the environment (see gcloud.ts) has the
-// Datastore Viewer role; Jarvis makes only reading calls: list collection
+// Datastore Viewer role; Atlas makes only reading calls: list collection
 // names, get a document, run a query. Nothing here can write.
 //
 // Claude asks with the gcloud_db_* tools; code checks every call (a connected

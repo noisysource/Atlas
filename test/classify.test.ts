@@ -160,7 +160,7 @@ describe("classifier request", () => {
   it("sends anything needing no context's data to personal, and clarifies only on ambiguous data requests", () => {
     const system = classifierSystemPrompt(contexts);
     expect(system).toContain(
-      `If it needs no context's data, reply "personal". That covers greetings, small talk, thanks, general-knowledge questions and questions about Jarvis itself`,
+      `If it needs no context's data, reply "personal". That covers greetings, small talk, thanks, general-knowledge questions and questions about Atlas itself`,
     );
     expect(system).toContain(
       `Reply "unclear" only when the question needs some context's data and it's ambiguous which`,
@@ -190,7 +190,7 @@ describe("classifier request", () => {
     expect(message).not.toContain("turn 3");
     expect(message).toContain(`turn ${10 - CLASSIFIER_HISTORY_TURNS}`);
     expect(message).toContain("User: turn 8");
-    expect(message).toContain("Jarvis: turn 9");
+    expect(message).toContain("Atlas: turn 9");
     expect(message.endsWith("<question>\nand her birthday?\n</question>")).toBe(true);
   });
 

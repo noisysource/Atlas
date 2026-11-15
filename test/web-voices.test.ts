@@ -50,15 +50,15 @@ describe("voices-lib", () => {
 });
 
 describe("your own sentence on /voices (#94)", () => {
-  it("plays what you typed, or with numbers in words the way Jarvis sends them", () => {
-    expect(ownSentence("  It's REALLY big... about 3.5 km — maybe.  ", { asJarvis: false })).toBe("It's REALLY big... about 3.5 km — maybe.");
-    expect(ownSentence("It's REALLY big... about 3.5 km — maybe.", { asJarvis: true })).toBe("It's REALLY big... about three point five km — maybe.");
-    expect(ownSentence("   ", { asJarvis: true })).toBe("");
+  it("plays what you typed, or with numbers in words the way Atlas sends them", () => {
+    expect(ownSentence("  It's REALLY big... about 3.5 km — maybe.  ", { asAtlas: false })).toBe("It's REALLY big... about 3.5 km — maybe.");
+    expect(ownSentence("It's REALLY big... about 3.5 km — maybe.", { asAtlas: true })).toBe("It's REALLY big... about three point five km — maybe.");
+    expect(ownSentence("   ", { asAtlas: true })).toBe("");
   });
 
   it("never sends more than /speak takes, and starts with pauses, a dash, capitals and a decimal", () => {
     expect(OWN_SENTENCE_MAX).toBe(MAX_SPEAK_CHARS);
-    expect(ownSentence("a".repeat(5000), { asJarvis: false })).toHaveLength(MAX_SPEAK_CHARS);
+    expect(ownSentence("a".repeat(5000), { asAtlas: false })).toHaveLength(MAX_SPEAK_CHARS);
     expect(OWN_SENTENCE_EXAMPLE).toMatch(/\.\.\./);
     expect(OWN_SENTENCE_EXAMPLE).toContain("—");
     expect(OWN_SENTENCE_EXAMPLE).toMatch(/\b[A-Z]{3,}\b/);

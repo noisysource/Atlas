@@ -1,7 +1,7 @@
 # My profile (example)
 
 This is a made-up example. Copy it to `data/profile.md` (which is gitignored
-and never committed) and replace everything with your own details. Jarvis
+and never committed) and replace everything with your own details. Atlas
 answers questions about you only from this file and from the conversation;
 if something isn't here, it will say it doesn't know.
 

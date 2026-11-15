@@ -3,7 +3,7 @@
 // No profile, no memories, no contexts or classifier. Each of those comes
 // back later, one at a time, behind its own switch (see PLAN.md).
 //
-// The name comes from JARVIS_USER_NAME in the gitignored .env, never from
+// The name comes from ATLAS_USER_NAME in the gitignored .env, never from
 // the code (it's personal data).
 
 import { err, ok, type Result } from "../result.js";
@@ -226,7 +226,7 @@ export const barePrompt = (
     readonly spoken?: boolean;
     readonly maxSentences?: number;
     readonly pauses?: boolean;
-    /** Their profile (PROFILE=on, #98): what Jarvis knows about them. Personal data: never logged. */
+    /** Their profile (PROFILE=on, #98): what Atlas knows about them. Personal data: never logged. */
     readonly profile?: string;
     /** It can read their calendar (CALENDAR=on, #100). */
     readonly calendar?: boolean;
@@ -292,7 +292,7 @@ export const barePrompt = (
   const fixLines =
     options.fix === true && options.tools === true
       ? [
-          "When he asks for a change in his code (a fix, or a small edit like a title or a text), or wants a problem you found fixed, call code_fix straight away: the repo, a short title, and what to change or what fails (with the cause if you know it), no personal data. Don't look for the file yourself and don't ask code_ask first: the code agent finds the place. If there's an issue for it (he named one, or you saw it with github_issues), pass its number so the pull request closes it; some repos, like Jarvis, require one. And don't ask him in words first: code_fix changes nothing, it shows him a card, and he decides there. Then he sees the diff, and only his second OK opens a draft pull request. You never push, merge or deploy.",
+          "When he asks for a change in his code (a fix, or a small edit like a title or a text), or wants a problem you found fixed, call code_fix straight away: the repo, a short title, and what to change or what fails (with the cause if you know it), no personal data. Don't look for the file yourself and don't ask code_ask first: the code agent finds the place. If there's an issue for it (he named one, or you saw it with github_issues), pass its number so the pull request closes it; some repos, like Atlas, require one. And don't ask him in words first: code_fix changes nothing, it shows him a card, and he decides there. Then he sees the diff, and only his second OK opens a draft pull request. You never push, merge or deploy.",
         ]
       : [];
   const taskLines =
@@ -310,7 +310,7 @@ export const barePrompt = (
   const routedLines =
     options.routed === true && options.tools === true
       ? [
-          "Not every tool is offered on every question: Jarvis offers the groups the question seems to need. If you need a group that isn't offered, call tools_more with it first, then use its tools. Never say you can't do something because its tool isn't offered right now.",
+          "Not every tool is offered on every question: Atlas offers the groups the question seems to need. If you need a group that isn't offered, call tools_more with it first, then use its tools. Never say you can't do something because its tool isn't offered right now.",
         ]
       : [];
   const vendusLines =
@@ -363,7 +363,7 @@ export const barePrompt = (
     ? "You can't set reminders or alarms, take or keep notes, send email or messages, look anything up online, or use other tools or apps."
     : "You can't set reminders or alarms, take or keep notes, read or send email or messages, look anything up online, or use other tools or apps.";
   return [
-    `You are Jarvis, ${userName ? `${userName}'s` : "the"} personal assistant. You speak as "I"; ${userName ?? "they"} ${userName ? "is" : "are"} "you". Never speak as them.`,
+    `You are Atlas, ${userName ? `${userName}'s` : "the"} personal assistant. You speak as "I"; ${userName ?? "they"} ${userName ? "is" : "are"} "you". Never speak as them.`,
     ...knowledge,
     "",
     ...(options.calendar
@@ -646,7 +646,7 @@ export const makeBareAnswerer = (deps: {
     };
     /** #162: fixes as pull requests, each step after Renato's OK. */
     readonly fix?: Fixes;
-    /** #191: coding tasks; Jarvis manages, Claude Code works. */
+    /** #191: coding tasks; Atlas manages, Claude Code works. */
     readonly tasks?: Tasks;
   };
 }): ((input: AnswerInput) => Promise<Result<AnswerOutcome, AppError>>) => {
@@ -654,7 +654,7 @@ export const makeBareAnswerer = (deps: {
   const random = deps.random ?? Math.random;
   const pauses = deps.pauses === true;
   const prompts = (profile?: string) => {
-    // JARVIS_USER_NAME wins; otherwise the profile's "Name:" line.
+    // ATLAS_USER_NAME wins; otherwise the profile's "Name:" line.
     const name = deps.userName ?? (profile ? profileName(profile) : undefined);
     const extra = { ...(profile ? { profile } : {}), ...(deps.calendar ? { calendar: true } : {}), ...(deps.calendar && deps.tools === true ? { tools: true } : {}), ...(deps.calendar?.create && deps.tools === true ? { create: true } : {}), ...(deps.gmail && deps.tools === true ? { email: true, tools: true } : {}), ...(deps.gmail?.writer && deps.tools === true ? { emailDrafts: true } : {}), ...(deps.memory && deps.tools === true ? { memory: true, tools: true } : {}), ...(deps.memory && deps.skills && deps.tools === true ? { skills: true } : {}), ...(deps.github && deps.tools === true ? { github: true, tools: true } : {}), ...(deps.github?.plans && deps.tools === true ? { plans: true } : {}), ...(deps.github && deps.code && deps.tools === true ? { code: true } : {}), ...(deps.github && deps.code?.study && deps.tools === true ? { study: true } : {}), ...(deps.gcloud && deps.tools === true ? { gcloud: true, tools: true } : {}), ...(deps.vendus && deps.tools === true ? { vendus: true, tools: true } : {}), ...(deps.house && deps.tools === true ? { house: true, tools: true } : {}), ...(deps.house?.blinds && deps.tools === true ? { houseControl: true } : {}), ...(deps.gcloud?.db && deps.tools === true ? { gcloudDb: true } : {}), ...(deps.route && deps.route.mode !== "all" && deps.tools === true ? { routed: true } : {}), ...(deps.brief === true && deps.calendar && deps.tools === true ? { brief: true } : {}), ...(deps.github && deps.code?.fix && deps.tools === true ? { fix: true } : {}), ...(deps.github && deps.code?.tasks && deps.tools === true ? { tasks: true } : {}) };
     return { typed: barePrompt(name, extra), spoken: barePrompt(name, { spoken: true, maxSentences: max, pauses, ...extra }) };
@@ -901,7 +901,7 @@ export const makeBareAnswerer = (deps: {
     const ran: string[] = [];
     const runTool = async (call: LlmToolCall): Promise<LlmToolResult> => {
       ran.push(call.name);
-      // The page's brain view (#130): only names Jarvis offered, never the model's free text.
+      // The page's brain view (#130): only names Atlas offered, never the model's free text.
       if (offered.has(call.name)) onReach?.(call.name);
       const group = groupOfTool(call.name);
       if (group) used.add(group);
@@ -971,7 +971,7 @@ export const makeBareAnswerer = (deps: {
         if (!checked.ok) return refuse(checked.error, `Refused: ${checked.error}.`);
         const r = checked.value;
         if (deps.github.isEc(`${r.owner}/${r.name}`)) return refuse("EC repo", "Refused: that's EC work, which Kiro handles. Say so.");
-        if (!(await prs.canWrite(r.owner))) return refuse("no write token", `Refused: Jarvis can't write to ${r.owner}'s repos. Tell him to run npm run github:connect -- ${r.owner} --write.`);
+        if (!(await prs.canWrite(r.owner))) return refuse("no write token", `Refused: Atlas can't write to ${r.owner}'s repos. Tell him to run npm run github:connect -- ${r.owner} --write.`);
         const id = prs.propose(r);
         onStep?.({ kind: "tool", name: call.name, args: `${r.owner}/${r.name}#${r.number}`, by: "model", ok: true, result: "waiting for your OK", confirm: { id, label: `${r.owner}/${r.name}#${r.number}`, kind: "pr-close" } });
         return { callId: call.id, content: 'Not closed yet: the app is asking him "Close it" / "Keep it". Say in one sentence that it needs his OK. Never say it\'s closed.' };
@@ -1019,7 +1019,7 @@ export const makeBareAnswerer = (deps: {
           return { callId: call.id, content: `The house: ${got.error.message}. Say so plainly; don't guess.`, isError: true };
         }
         const fields = got.value?.fields;
-        // The blinds too, when Jarvis can see them; a failure there doesn't hide the rest.
+        // The blinds too, when Atlas can see them; a failure there doesn't hide the rest.
         const blinds = deps.house.blinds ? await deps.house.blinds.list(signal) : undefined;
         const extra = blinds === undefined ? [] : blinds.ok ? [blindsForBrain(blinds.value)] : [`The blinds: ${blinds.error.message}.`];
         onStep?.({ kind: "tool", name: call.name, args: deps.house.env, by: "model", ok: true, result: houseSummary(fields, now) });
@@ -1051,7 +1051,7 @@ export const makeBareAnswerer = (deps: {
           onStep?.({ kind: "tool", name: "calendar_create", args: "", by: "model", ok: false, error: `refused: ${checked.error}` });
           return {
             callId: call.id,
-            content: checked.error === "EC work is for Kiro" ? "Refused: that's EC work, which Kiro handles, not Jarvis. Say so." : `Refused: ${checked.error}. Ask them what's missing, or fix it.`,
+            content: checked.error === "EC work is for Kiro" ? "Refused: that's EC work, which Kiro handles, not Atlas. Say so." : `Refused: ${checked.error}. Ask them what's missing, or fix it.`,
             isError: true,
           };
         }
@@ -1088,7 +1088,7 @@ export const makeBareAnswerer = (deps: {
         onStep?.({ kind: "tool", name: "calendar_read", args: label, by: "model", ok: false, error: read.error.code });
         const content =
           which && read.error.code === "not_connected"
-            ? `The ${which} calendar isn't connected to Jarvis yet (npm run calendar:connect -- ${which}). Say so plainly; don't guess what's on it.`
+            ? `The ${which} calendar isn't connected to Atlas yet (npm run calendar:connect -- ${which}). Say so plainly; don't guess what's on it.`
             : calendarUnavailable(read.error.code === "not_connected" ? "not_connected" : "failed");
         return { callId: call.id, content, isError: true };
       }
@@ -1228,7 +1228,7 @@ export const makeBareAnswerer = (deps: {
         if (!checked.ok) return refuse(checked.error);
         const r = checked.value;
         if (isEc(`${r.owner}/${r.name} ${r.title} ${r.goal}`)) return refuse("EC work", "Refused: that's EC work, which Kiro handles. Say so.");
-        if (!(await tasks.canStart(r.owner))) return refuse("not connected", `Refused: Jarvis can't read ${r.owner}'s repos (npm run github:connect -- ${r.owner}).`);
+        if (!(await tasks.canStart(r.owner))) return refuse("not connected", `Refused: Atlas can't read ${r.owner}'s repos (npm run github:connect -- ${r.owner}).`);
         const card = tasks.proposeStart(r);
         step({ args: `${r.owner}/${r.name}`, ok: true, result: "waiting for your OK", confirm: { id: card, label: `${r.title} on ${r.owner}/${r.name}${r.base ? ` from ${r.base}` : ""}`, kind: "task-start" } });
         return { callId: call.id, content: 'Not started: the app is asking him "Start it" / "Not now". Say in one sentence what the task is and that it needs his OK. Never say it has started.' };
@@ -1267,7 +1267,7 @@ export const makeBareAnswerer = (deps: {
       const r = checked.value;
       if (isEc(`${r.owner}/${r.name} ${r.folder} ${r.title}`)) return refuse("EC repo", "Refused: that's EC work, which Kiro handles. Say so.");
       if (!(await fixes.canWrite(r.owner)))
-        return refuse("no write token", `Refused: Jarvis can't write to ${r.owner}'s repos yet. Tell him to run npm run github:connect -- ${r.owner} --write (a token with Contents, Pull requests and Issues: Read and write), then ask again.`);
+        return refuse("no write token", `Refused: Atlas can't write to ${r.owner}'s repos yet. Tell him to run npm run github:connect -- ${r.owner} --write (a token with Contents, Pull requests and Issues: Read and write), then ask again.`);
       const id = fixes.propose(r);
       deps.log?.info("code fix proposed", { repo: `${r.owner}/${r.name}` });
       onStep?.({
@@ -1488,7 +1488,7 @@ export const makeBareAnswerer = (deps: {
         if (!draft)
           return refuse(
             "unknown draft",
-            "You can only delete drafts you wrote since Jarvis started, and that ref isn't one of them. Tell them it's in their Gmail Drafts, where they can delete it.",
+            "You can only delete drafts you wrote since Atlas started, and that ref isn't one of them. Tell them it's in their Gmail Drafts, where they can delete it.",
           );
         const id = gmail.writer.deletions.add({ ...draft, ref });
         deps.log?.info("gmail draft delete proposed", { account: draft.account });

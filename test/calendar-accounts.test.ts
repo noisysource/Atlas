@@ -71,7 +71,7 @@ describe("what the brain is told (#137)", () => {
   it("says plainly which calendar it couldn't see", () => {
     const text = calendarForBrain(DAY, [ev("Dentist", 15)], TZ, { read: ["personal"], unread: [{ account: "noisysource", code: "not_connected" }] });
     expect(text).toContain("Their personal Google Calendar for");
-    expect(text).toContain("The noisysource calendar isn't connected to Jarvis yet");
+    expect(text).toContain("The noisysource calendar isn't connected to Atlas yet");
     expect(text).not.toContain("[personal]");
   });
 

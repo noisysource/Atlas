@@ -13,10 +13,10 @@ const config = (env: Env): Config => {
 describe("makeSecretGetter", () => {
   it("reads the latest version of the named secret", async () => {
     const access = vi.fn(async () => `${SECRET}\n`);
-    const getSecret = makeSecretGetter({ project: "jarvis-prod", access });
+    const getSecret = makeSecretGetter({ project: "atlas-prod", access });
 
     expect(await getSecret("anthropic-api-key")).toEqual({ ok: true, value: SECRET });
-    expect(access).toHaveBeenCalledWith("projects/jarvis-prod/secrets/anthropic-api-key/versions/latest");
+    expect(access).toHaveBeenCalledWith("projects/atlas-prod/secrets/anthropic-api-key/versions/latest");
   });
 
   it("fetches each secret once per process", async () => {

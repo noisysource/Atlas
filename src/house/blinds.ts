@@ -2,7 +2,7 @@
 //
 // The blinds are Legrand, reached through the Netatmo API, which only the
 // domotics app's Cloud Functions talk to (the monorepo's
-// functions/src/domotics/legrand.ts). Jarvis calls the same functions the app
+// functions/src/domotics/legrand.ts). Atlas calls the same functions the app
 // does, signed in as his own Firebase Auth user in the domotics project, the
 // way the Pi bridge signs in as domotics-bridge@…: no service-account key, and
 // the functions decide who may call them.
@@ -59,7 +59,7 @@ export type CallableError = { readonly code: "auth" | "denied" | "missing" | "un
 export type Callable = (name: string, data: unknown, signal?: AbortSignal) => Promise<Result<unknown, CallableError>>;
 
 /**
- * Calls the domotics project's callable functions as Jarvis's Firebase Auth user.
+ * Calls the domotics project's callable functions as Atlas's Firebase Auth user.
  * Signs in with email and password (Firebase's REST sign-in) and keeps the ID
  * token until five minutes before it expires.
  */
@@ -78,7 +78,7 @@ export const makeCallable = (deps: { readonly user: () => Promise<FirebaseUser |
     }).catch(() => undefined);
     if (!res) return err({ code: "unreachable", message: "Firebase sign-in couldn't be reached" });
     const body = (await res.json().catch(() => ({}))) as { idToken?: unknown; expiresIn?: unknown };
-    if (!res.ok || typeof body.idToken !== "string") return err({ code: "auth", message: `Jarvis's domotics user couldn't sign in (${res.status}): check it exists and run npm run house:connect again` });
+    if (!res.ok || typeof body.idToken !== "string") return err({ code: "auth", message: `Atlas's domotics user couldn't sign in (${res.status}): check it exists and run npm run house:connect again` });
     const seconds = Number(body.expiresIn);
     token = { value: body.idToken, until: now() + (Number.isFinite(seconds) ? seconds : 3600) * 1000 - 5 * 60_000 };
     return ok(body.idToken);
@@ -86,7 +86,7 @@ export const makeCallable = (deps: { readonly user: () => Promise<FirebaseUser |
 
   return async (name, data, signal) => {
     const user = await deps.user();
-    if (!user) return err({ code: "auth", message: "Jarvis has no domotics user yet: run npm run house:connect" });
+    if (!user) return err({ code: "auth", message: "Atlas has no domotics user yet: run npm run house:connect" });
     const signed = await signIn(user, signal);
     if (!signed.ok) return signed;
     const res = await doFetch(`https://${user.region}-${user.project}.cloudfunctions.net/${name}`, {
@@ -99,7 +99,7 @@ export const makeCallable = (deps: { readonly user: () => Promise<FirebaseUser |
     const body = (await res.json().catch(() => ({}))) as { result?: unknown; error?: { status?: unknown; message?: unknown } };
     if (res.status === 401 || res.status === 403 || body.error?.status === "PERMISSION_DENIED" || body.error?.status === "UNAUTHENTICATED") {
       if (res.status === 401) token = undefined;
-      return err({ code: "denied", message: `the domotics functions don't let Jarvis's user call ${name}` });
+      return err({ code: "denied", message: `the domotics functions don't let Atlas's user call ${name}` });
     }
     if (res.status === 404 || body.error?.status === "NOT_FOUND") return err({ code: "missing", message: `${name} isn't deployed in ${user.project}` });
     if (!res.ok || body.error) return err({ code: "failed", message: `${name} failed (${res.status})` });

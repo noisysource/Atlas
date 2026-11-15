@@ -1,4 +1,4 @@
-// #203: Jarvis follows a plan as its PM: steps in a file, pull requests on GitHub.
+// #203: Atlas follows a plan as its PM: steps in a file, pull requests on GitHub.
 
 import { describe, expect, it } from "vitest";
 import { makeBareAnswerer } from "../src/answer/bare.js";

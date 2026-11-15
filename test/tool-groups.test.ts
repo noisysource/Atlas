@@ -36,7 +36,7 @@ describe("tool groups: the words of a question", () => {
     expect(groupsByWords("Tell Sam I'm running late")).toEqual(["gmail"]);
     expect(groupsByWords("Avisa a Marisa que chego tarde")).toContain("gmail");
     expect(groupsByWords("Tell me a joke")).toEqual([]);
-    expect(groupsByWords("Is the CI green on the Jarvis repo?")).toEqual(["github"]);
+    expect(groupsByWords("Is the CI green on the Atlas repo?")).toEqual(["github"]);
     // "billing" also points at the invoices: a few extra tools, never a missing one.
     expect(groupsByWords("How does the billing module work?")).toEqual(["code", "invoices"]);
     expect(groupsByWords("What's in the dev database?")).toEqual(["cloud"]);
@@ -121,7 +121,7 @@ describe("the small model's pick", () => {
     expect(requests[0]?.system).toContain("calendar: his calendars");
     // History is cut short; the question is last.
     const asked = requests[0]?.messages[0];
-    expect(asked && "text" in asked ? asked.text : "").toMatch(/Renato: x{300}\nJarvis: fine\n\nNewest question: anything failing before my meeting\?$/);
+    expect(asked && "text" in asked ? asked.text : "").toMatch(/Renato: x{300}\nAtlas: fine\n\nNewest question: anything failing before my meeting\?$/);
   });
 
   it("no answer, a failure or a slow answer: undefined, so the words decide", async () => {

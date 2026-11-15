@@ -1,5 +1,5 @@
 // @ts-check
-// Playing Jarvis's voice from POST /speak (#73): streamed 16-bit mono PCM,
+// Playing Atlas's voice from POST /speak (#73): streamed 16-bit mono PCM,
 // scheduled on Web Audio as it arrives. The pure helpers are unit-tested;
 // `playSpeech` drives an AudioContext. Shared by /voices and, in #75, the
 // turn manager.
@@ -22,7 +22,7 @@ const MIN_SAMPLES = 2048;
  */
 export const playSpeech = async ({ ctx, response, signal, onFirstAudio, tracker }) => {
   const format = readAudioFormat(response.headers);
-  if (!format || !response.body) throw new Error("Jarvis's voice sent audio this page can't play.");
+  if (!format || !response.body) throw new Error("Atlas's voice sent audio this page can't play.");
   const reader = response.body.getReader();
   /** @type {AudioBufferSourceNode[]} */
   const sources = [];
@@ -87,7 +87,7 @@ export const playSpeech = async ({ ctx, response, signal, onFirstAudio, tracker 
     }
     if (!stopped && pending.length >= 2) schedule(pending.subarray(0, pending.length - (pending.length % 2)));
   } catch {
-    if (!stopped) throw new Error("Jarvis's voice stopped part-way.");
+    if (!stopped) throw new Error("Atlas's voice stopped part-way.");
   }
 
   if (!stopped && sources.length > 0) {
