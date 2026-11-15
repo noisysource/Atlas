@@ -1107,6 +1107,21 @@ Confirmed (2026-11-12):
   himself aren't picked up yet: the handoff between them is the branch,
   the PR and STATUS.md.
 
+- **Following plans (#203):** the other half of being the PM, for work
+  Renato runs in his own Claude Code sessions. A plan is a markdown file
+  with a steps table (`#` and `PR` columns; a Status column if there is
+  one); `parsePlan` reads the first such table. Each step's pull request
+  is found by "PR n" in its title, branch or the start of its description
+  (merged first, then open, then closed), from the 100 most recently
+  updated pull requests (`GithubReader.pulls`); open ones get their checks
+  (at most five per plan). "Waiting on him" is an open, non-draft PR whose
+  checks pass or fail, or the current step when the plan names him
+  ("Renato", "by hand"). Where the file's Status column disagrees with
+  GitHub, he trusts GitHub and says so once. Tools `plan_status`,
+  `plan_follow` (reads the file first; refuses EC repos), `plan_unfollow`,
+  in the github group; one line per plan in the morning brief. The list
+  is `data/plans.json`. Read-only throughout.
+
 - **Fixes as pull requests (#162):** `code_fix` only proposes. Two OKs
   from Renato: the first prepares the change locally (fresh shallow clone
   with a separate write token, the agent in "change" mode: Read, Grep,

@@ -9,6 +9,7 @@ import { makeFixes, type Fixes, type RunOut } from "./code/fix.js";
 import { makeTasks, type Task, type Tasks } from "./code/tasks.js";
 import { makeTaskRunner } from "./code/task-runner.js";
 import { makePrCloser } from "./github/pr-close.js";
+import { makePlans } from "./plans/plans.js";
 import { makeBlinds, makeCallable, readFirebaseUser } from "./house/blinds.js";
 import { makeVendusGet, type VendusGet } from "./vendus/vendus.js";
 import { makeCodeRefresh } from "./code/freshness.js";
@@ -291,6 +292,8 @@ export const buildDeps = async (inputs: AppInputs): Promise<Result<Deps, string>
   // #125: GitHub, read-only, one fine-grained token per owner in data/github-tokens.json (mode 600).
   const githubTokens = makeGithubTokens({ readFile: () => readFileFs(config.github.tokensPath, "utf8") });
   const github = config.github.enabled ? { reader: inputs.githubReader ?? makeGithubReader({ tokens: githubTokens }), isEc: isEcText } : undefined;
+  // #203: plans he follows (multi-PR projects in his repos), read through the same GitHub reader.
+  const plans = github ? makePlans({ github: github.reader, path: "data/plans.json", isEc: isEcText }) : undefined;
   // #161: Google Cloud, read-only (logs): each environment is a project and a read-only service account
   // named in data/gcloud/<env>.json. No key: gcloud on this Mac gives a short-lived token of that account.
   const gcloudEnvs = makeGcloudEnvs({ list: () => readdir(config.gcloud.keysPath), read: (env) => readFileFs(path.join(config.gcloud.keysPath, `${env}.json`), "utf8") });
@@ -518,6 +521,7 @@ export const buildDeps = async (inputs: AppInputs): Promise<Result<Deps, string>
               ...(github ? { github: github.reader } : {}),
               ...(code?.study ? { studiedRepos: async () => (await noteStore.all()).map((n) => n.repo) } : {}),
               ...(tasks ? { tasks: () => tasks.list() } : {}),
+              ...(plans ? { plans: () => plans.lines() } : {}),
             }),
           llm: answerLlm.value,
           store: briefStore,
@@ -607,7 +611,7 @@ export const buildDeps = async (inputs: AppInputs): Promise<Result<Deps, string>
                 : {}),
               ...(skillStore && config.toolCalling ? { skills: { store: skillStore, ec: memoryEc } } : {}),
               // #125: his GitHub repos, read-only, with tools (Claude).
-              ...(github && config.toolCalling ? { github: { ...github, ...(prs ? { prs } : {}) } } : {}),
+              ...(github && config.toolCalling ? { github: { ...github, ...(prs ? { prs } : {}), ...(plans ? { plans } : {}) } } : {}),
               ...(code && config.toolCalling ? { code } : {}),
               // #161: errors and logs in his Google Cloud environments, read-only, with tools (Claude).
               ...(gcloud && config.toolCalling ? { gcloud } : {}),

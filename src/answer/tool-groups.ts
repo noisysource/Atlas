@@ -38,7 +38,7 @@ export type RouterMode = "model" | "rules" | "all";
 export const groupOfTool = (name: string): ToolGroup | undefined => {
   if (name.startsWith("calendar_") || name === "day_brief") return "calendar";
   if (name.startsWith("gmail_")) return "gmail";
-  if (name.startsWith("github_")) return "github";
+  if (name.startsWith("github_") || name.startsWith("plan_")) return "github";
   if (name.startsWith("code_")) return "code";
   if (name.startsWith("gcloud_")) return "cloud";
   if (name.startsWith("vendus_")) return "invoices";
@@ -88,7 +88,9 @@ const RULES: readonly { readonly pattern: RegExp; readonly groups: readonly Tool
   {
     pattern: words(`
       github, git, repo, repos, repositor*, pull request*, pr, prs, issue*, commit*, branch*, merge*, ci, check, checks,
-      workflow*, pipeline*, build*, actions, release*`),
+      workflow*, pipeline*, build*, actions, release*,
+      plan, plans, roadmap, refactor*, restructur*, migration, progress, handoff, milestone*, what's next, whats next, where are we, where do we stand,
+      waiting on me, plano, planos, refator*, reestrutura*, progresso, proximo passo, o que falta, onde estamos`),
     groups: ["github"],
   },
   {

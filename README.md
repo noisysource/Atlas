@@ -519,6 +519,19 @@ Requires Node 22.13 or later (the memory store uses `node:sqlite`, which needs a
        `CODE_TASK_MAX_USD` (3) and `CODE_TASK_MAX_TURNS` (80) cap each turn.
        Note: tests and installs run your repo's own scripts and its
        dependencies' install scripts on your Mac, as when you run them.
+     - **Following plans (with `GITHUB=on`), read-only.** A plan is a
+       markdown file in one of your repos with a table of steps, one pull
+       request each (a `#` column and a `PR` column, like the monorepo's
+       `infra/HANDOFF-repo-restructure.md`). Say "follow the restructure
+       plan: noisysource/noisysource, infra/HANDOFF-repo-restructure.md, on
+       staging" once; then "where are we with the refactor?" or "what's
+       waiting on me?" gets each step merged, open (with its checks) or not
+       started, what's next, and what needs you: a pull request ready to
+       merge, or a step the plan says you do by hand. Steps are matched to
+       pull requests by "PR 3" in their title, branch or description, and
+       when the file's own Status column is behind GitHub, Jarvis says so.
+       The morning brief gets a line per plan. The list is `data/plans.json`
+       (gitignored); the read token needs Pull requests: Read-only.
      - **Fixes as pull requests (`CODE_FIX=on`, with `CODE_AGENT=on`).**
        When Jarvis has found a problem and you want it fixed, he proposes
        it (`code_fix`) and you get a card: **Prepare it** / **Not now**.

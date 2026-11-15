@@ -34,7 +34,7 @@ export const nodeOfTool = (tool) => {
   if (tool.startsWith("gmail_")) return "gmail";
   if (tool.startsWith("memory_")) return "memory";
   if (tool.startsWith("skill_")) return "skills";
-  if (tool.startsWith("github_")) return "github";
+  if (tool.startsWith("github_") || tool.startsWith("plan_")) return "github";
   if (tool.startsWith("gcloud_")) return "cloud";
   if (tool.startsWith("vendus_")) return "vendus";
   if (tool.startsWith("house_")) return "house";
