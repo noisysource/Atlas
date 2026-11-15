@@ -47,6 +47,8 @@ export type Task = {
   readonly turns: number;
   readonly prUrl?: string;
   readonly prNumber?: number;
+  /** The issue its pull request closes (the repos ask every pull request to close one). */
+  readonly issue?: number;
   /** Why it failed, safe to show. */
   readonly message?: string;
 };
@@ -91,8 +93,14 @@ export const TASK_TELL_TOOL: LlmTool = {
 
 export const TASK_PUBLISH_TOOL: LlmTool = {
   name: "task_publish",
-  description: "Push a task's branch and open its pull request into the base branch (or update it). Nothing is pushed by this call: it shows him the commits and asks.",
-  inputSchema: { type: "object", properties: { id: idProp }, required: ["id"], additionalProperties: false },
+  description:
+    "Push a task's branch and open its pull request into the base branch (or update it). The pull request closes an issue: the one he named, or a new one Jarvis opens from the task. Nothing is pushed by this call: it shows him the commits and asks.",
+  inputSchema: {
+    type: "object",
+    properties: { id: idProp, issue: { type: "number", description: "An existing open issue in that repo this closes, if he named one; leave out and Jarvis opens a new issue for the task" } },
+    required: ["id"],
+    additionalProperties: false,
+  },
 };
 
 export const TASK_CLOSE_TOOL: LlmTool = {
@@ -138,7 +146,7 @@ export type Tasks = {
   readonly canStart: (owner: string) => Promise<boolean>;
   /** Cards: a proposal waits 30 minutes for his answer. */
   readonly proposeStart: (r: StartRequest) => string;
-  readonly proposePublish: (id: string) => Promise<Result<{ readonly card: string; readonly label: string }, string>>;
+  readonly proposePublish: (id: string, issue?: number) => Promise<Result<{ readonly card: string; readonly label: string }, string>>;
   readonly proposeClose: (id: string) => Promise<Result<{ readonly card: string; readonly label: string }, string>>;
   readonly decide: (card: string, decision: "yes" | "no") => Promise<TaskCard>;
   /** Pass his words on; the turn runs in the background. */
@@ -146,7 +154,10 @@ export type Tasks = {
   readonly stop: (id: string) => boolean;
 };
 
-type Card = { readonly kind: "start"; readonly r: StartRequest; readonly until: number } | { readonly kind: "publish" | "close"; readonly id: string; readonly until: number };
+type Card =
+  | { readonly kind: "start"; readonly r: StartRequest; readonly until: number }
+  | { readonly kind: "publish"; readonly id: string; readonly issue?: number; readonly until: number }
+  | { readonly kind: "close"; readonly id: string; readonly until: number };
 
 export const makeTasks = (deps: {
   readonly runner: TaskRunner;
@@ -270,10 +281,32 @@ export const makeTasks = (deps: {
     turn(t.id, [`Task from Renato: ${t.title}`, "", t.goal, "", `You're on branch ${t.branch}, from ${base}. Read the repository's CLAUDE.md and the relevant STATUS.md first.`].join("\n"));
   };
 
-  const publish = async (t: Task): Promise<TaskCard> => {
+  /** The issue the pull request closes: his, checked to be open, or a new one from the task. Before anything is pushed. */
+  const issueFor = async (t: Task, owner: string, name: string, token: string, wanted?: number): Promise<Result<number, string>> => {
+    if (t.issue) return ok(t.issue);
+    if (wanted) {
+      const res = await doFetch(`https://api.github.com/repos/${owner}/${name}/issues/${wanted}`, { headers: gh(token) }).catch(() => undefined);
+      const issue = res?.ok ? ((await res.json().catch(() => ({}))) as { state?: unknown; pull_request?: unknown }) : undefined;
+      return issue && issue.state === "open" && issue.pull_request === undefined ? ok(wanted) : err(`#${wanted} isn't an open issue in ${t.repo}, so nothing was pushed. Ask again with the right issue, or without one and I'll open a new one.`);
+    }
+    const res = await doFetch(`https://api.github.com/repos/${owner}/${name}/issues`, {
+      method: "POST",
+      headers: { ...gh(token), "content-type": "application/json" },
+      body: JSON.stringify({ title: t.title, body: [maskEmails(t.goal), "", "---", "Opened by Jarvis for a coding task, after Renato's OK."].join("\n") }),
+    }).catch(() => undefined);
+    const made = res?.ok ? ((await res.json().catch(() => ({}))) as { number?: unknown }) : undefined;
+    if (typeof made?.number !== "number") return err(`GitHub didn't let me open an issue${res ? ` (${res.status})` : ""}: the write token for ${owner} needs Issues: Read and write (run npm run github:connect -- ${owner} --write after adding it). Nothing was pushed.`);
+    await update(t.id, { issue: made.number });
+    deps.log?.info("task issue opened", { id: t.id, issue: made.number });
+    return ok(made.number);
+  };
+
+  const publish = async (t: Task, wanted?: number): Promise<TaskCard> => {
     const [owner, name] = t.repo.split("/");
     const token = await deps.writeToken(owner ?? "");
     if (!owner || !name || !token) return { ok: false, text: `I can't write to ${t.repo}: run npm run github:connect -- ${owner} --write. Nothing was pushed.` };
+    const issue = t.prUrl ? ok(t.issue ?? 0) : await issueFor(t, owner, name, token, wanted);
+    if (!issue.ok) return { ok: false, text: issue.error };
     const dir = dirOf(t.id);
     const env = fixGitEnv(token);
     // His work is committed by Claude Code; anything left uncommitted stays out.
@@ -285,6 +318,8 @@ export const makeTasks = (deps: {
       return { ok: true, text: `Pushed: pull request ${t.prUrl} is updated.`, url: t.prUrl, tool: `task_publish ${t.repo} → pushed` };
     }
     const body = [
+      `Closes #${issue.value}`,
+      "",
       `${maskEmails(t.goal)}`,
       "",
       "## Claude Code's report",
@@ -316,11 +351,13 @@ export const makeTasks = (deps: {
     list: async (everything) => (await all()).filter((t) => everything === true || t.status !== "closed"),
     canStart: async (owner) => (await deps.readToken(owner)) !== undefined,
     proposeStart: (r) => card({ kind: "start", r, until: now().getTime() + 30 * 60_000 }),
-    proposePublish: async (id) => {
+    proposePublish: async (id, issue) => {
       const t = await find(id);
       if (!t || t.status === "closed") return err("no such open task");
       if (t.status === "working" || t.status === "queued" || t.status === "preparing") return err("it's still working; publish when it reports");
-      return ok({ card: card({ kind: "publish", id, until: now().getTime() + 30 * 60_000 }), label: `${t.title} (${t.repo}, ${await commitsAhead(t)})${t.prUrl ? `, updating ${t.prUrl}` : `, a new pull request into ${t.base}`}` });
+      const closes = t.issue ?? issue;
+      const what = t.prUrl ? `, updating ${t.prUrl}` : `, a new pull request into ${t.base} that closes ${closes ? `#${closes}` : "a new issue"}`;
+      return ok({ card: card({ kind: "publish", id, ...(issue ? { issue } : {}), until: now().getTime() + 30 * 60_000 }), label: `${t.title} (${t.repo}, ${await commitsAhead(t)})${what}` });
     },
     proposeClose: async (id) => {
       const t = await find(id);
@@ -359,7 +396,7 @@ export const makeTasks = (deps: {
       if (!t || t.status === "closed") return { ok: false, text: "That task isn't open any more." };
       if (c.kind === "publish") {
         if (t.status === "working" || t.status === "queued") return { ok: false, text: "It's working again; publish when it reports. Nothing was pushed." };
-        return publish(t);
+        return publish(t, c.issue);
       }
       running.get(t.id)?.abort();
       await update(t.id, { status: "closed", step: undefined });

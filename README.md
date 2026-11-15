@@ -500,7 +500,9 @@ Requires Node 22.13 or later (the memory store uses `node:sqlite`, which needs a
        (status, last report, pull request) and passes your words on by
        resuming the same Claude Code session, so it remembers its own work.
        Pushing and opening the pull request into `staging` (which deploys a
-       preview to dev), and closing a task, each ask your OK. Open tasks
+       preview to dev), and closing a task, each ask your OK. The pull
+       request closes an issue: the one you name, or a new one Jarvis opens
+       from the task (the write token needs Issues: Read and write). Open tasks
        show above the conversation and in the morning brief.
        `CODE_TASK_MAX_USD` (3) and `CODE_TASK_MAX_TURNS` (80) cap each turn.
        Note: tests and installs run your repo's own scripts and its
@@ -515,7 +517,7 @@ Requires Node 22.13 or later (the memory store uses `node:sqlite`, which needs a
        `jarvis/fix-…` branch and opens a draft pull request. He never
        pushes to the default branch, forces, merges or deploys. It needs a
        separate write token: `npm run github:connect -- noisysource --write`
-       with Contents and Pull requests set to Read and write (not
+       with Contents, Pull requests and Issues set to Read and write (not
        Workflows). `CODE_FIX_MAX_USD` (default 2) and `CODE_FIX_MAX_TURNS`
        (default 60) cap each fix.
        If there's an issue for the fix, he passes its number and the pull
@@ -556,7 +558,13 @@ Requires Node 22.13 or later (the memory store uses `node:sqlite`, which needs a
      are read aloud when you asked with the mic or in conversation mode.
      "🔈 Read typed replies" (off by default) reads typed ones too.
    - **Copy.** Chat text can be selected, and each message has a Copy
-     button for its plain text.
+     button for its plain text. "⧉ Copy all" copies the whole
+     conversation as plain text, with who said what and when.
+   - **A terminal.** The chat is a dark, monospace terminal: one line per
+     message (`renato ❯`, `jarvis ›`), no bubbles. On wide screens only
+     the conversation scrolls, with the input always in view; it follows
+     new text while you're at the end and stays put while you scroll up.
+     The morning brief folds to one line, task reports to two.
    - **The path of each answer.** Under each reply is one line, such as
      `🧠 Local · 🗓 calendar_read Wed 11 Nov → 2 events · 🛡 guard: 1
      dropped`. Open it to see each step in order: the EC precheck, the

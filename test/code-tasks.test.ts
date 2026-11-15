@@ -36,6 +36,8 @@ describe("what a task may run", () => {
       "git add apps/noisysource/finances/src/a.ts",
       'git commit -m "refactor(finances): move the ledger"',
       'git commit -m "feat(x): y" -m "Longer body, with detail."',
+      // #199: subject, body and trailers, as the repos ask.
+      'git commit -m "docs(readme): add Tasks" -m "Explains coding tasks." -m "Closes #12" -m "Co-Authored-By: Claude <noreply@anthropic.com>"',
       "ls -la apps",
     ])
       expect(allowedCommand(c), c).toBe(true);
@@ -57,6 +59,8 @@ describe("what a task may run", () => {
       "ls ~/.ssh",
       'git commit -m "$(cat ~/.ssh/id_rsa)"',
       "git commit -m `whoami`",
+      'git commit -m "a" -m "b" -m "c" -m "d" -m "e"',
+      'git commit -m "a" -m "b $(id)"',
       "curl https://example.com",
       "rm -rf node_modules",
       "node -e 'require(\"fs\")'",
@@ -139,6 +143,7 @@ describe("the task list", () => {
     const prompts: { prompt: string; sessionId?: string }[] = [];
     const git: string[] = [];
     const posted: { url: string; body: Record<string, unknown> }[] = [];
+    let issueReply = () => new Response(JSON.stringify({ number: 151 }), { status: 201 });
     const removed: string[] = [];
     const run: RunOut = async (_c, args) => {
       git.push(args.join(" "));
@@ -162,15 +167,21 @@ describe("the task list", () => {
       maxTurns: 80,
       newId: () => "a1b2c3d4",
       now: () => new Date("2026-11-14T23:00:00Z"),
-      fetch: (async (url: string, init: RequestInit) => {
+      fetch: (async (url: string, init: RequestInit = {}) => {
+        if (init.method !== "POST") {
+          // An existing issue: #7 is open, #8 is closed.
+          const n = Number(url.split("/").pop());
+          return n === 7 || n === 8 ? new Response(JSON.stringify({ number: n, state: n === 7 ? "open" : "closed" }), { status: 200 }) : new Response("{}", { status: 404 });
+        }
         posted.push({ url, body: JSON.parse(String(init.body)) as Record<string, unknown> });
+        if (url.endsWith("/issues")) return issueReply();
         return new Response(JSON.stringify({ html_url: "https://github.com/noisysource/noisysource/pull/150", number: 150 }), { status: 201 });
       }) as typeof fetch,
     });
     const settle = async () => {
       for (let i = 0; i < 50; i += 1) await new Promise((r) => setTimeout(r, 2));
     };
-    return { tasks, kept: () => kept, prompts, git, posted, removed, settle };
+    return { tasks, kept: () => kept, prompts, git, posted, removed, settle, failIssues: () => void (issueReply = () => new Response("{}", { status: 403 })) };
   };
   const start = { owner: "noisysource", name: "noisysource", title: "Restructure FinHub", goal: "Continue the repo restructure from PR #143, FinHub first." };
 
@@ -203,19 +214,52 @@ describe("the task list", () => {
     await s.tasks.decide(s.tasks.proposeStart(start), "yes");
     await s.settle();
     const proposed = await s.tasks.proposePublish("a1b2c3d4");
-    expect(proposed.ok && proposed.value.label).toBe("Restructure FinHub (noisysource/noisysource, 1 commit: refactor(finances): move the ledger), a new pull request into staging");
+    expect(proposed.ok && proposed.value.label).toBe("Restructure FinHub (noisysource/noisysource, 1 commit: refactor(finances): move the ledger), a new pull request into staging that closes a new issue");
     expect(s.git.some((g) => g.startsWith("push"))).toBe(false);
     if (!proposed.ok) throw new Error("no card");
     const done = await s.tasks.decide(proposed.value.card, "yes");
     expect(done).toMatchObject({ ok: true, url: "https://github.com/noisysource/noisysource/pull/150" });
     expect(s.git).toContain("push --quiet origin HEAD:refs/heads/agent/restructure-finhub-a1b2c3d4");
-    expect(s.posted[0]?.body).toMatchObject({ title: "Restructure FinHub", head: "agent/restructure-finhub-a1b2c3d4", base: "staging" });
+    // An issue first, then the pull request that closes it.
+    expect(s.posted[0]).toMatchObject({ url: "https://api.github.com/repos/noisysource/noisysource/issues", body: { title: "Restructure FinHub" } });
+    expect(s.posted[1]?.body).toMatchObject({ title: "Restructure FinHub", head: "agent/restructure-finhub-a1b2c3d4", base: "staging" });
+    expect(String(s.posted[1]?.body.body)).toMatch(/^Closes #151\n/);
+    expect(s.kept()[0]?.issue).toBe(151);
     expect(s.kept()[0]?.prUrl).toBe("https://github.com/noisysource/noisysource/pull/150");
     // The next push updates the same pull request.
     const again = await s.tasks.proposePublish("a1b2c3d4");
     if (!again.ok) throw new Error("no card");
     expect((await s.tasks.decide(again.value.card, "yes")).text).toContain("is updated");
+    expect(s.posted).toHaveLength(2);
+  });
+
+  it("publishing closes the issue he named, if it's open", async () => {
+    const s = setup();
+    await s.tasks.decide(s.tasks.proposeStart(start), "yes");
+    await s.settle();
+    const closed = await s.tasks.proposePublish("a1b2c3d4", 8);
+    if (!closed.ok) throw new Error("no card");
+    expect((await s.tasks.decide(closed.value.card, "yes")).text).toContain("#8 isn't an open issue");
+    expect(s.git.some((g) => g.startsWith("push"))).toBe(false);
+    const open = await s.tasks.proposePublish("a1b2c3d4", 7);
+    if (!open.ok) throw new Error("no card");
+    expect(open.value.label).toContain("that closes #7");
+    expect((await s.tasks.decide(open.value.card, "yes")).ok).toBe(true);
     expect(s.posted).toHaveLength(1);
+    expect(String(s.posted[0]?.body.body)).toMatch(/^Closes #7\n/);
+  });
+
+  it("a token that can't open issues pushes nothing and says what to add", async () => {
+    const s = setup();
+    s.failIssues();
+    await s.tasks.decide(s.tasks.proposeStart(start), "yes");
+    await s.settle();
+    const p = await s.tasks.proposePublish("a1b2c3d4");
+    if (!p.ok) throw new Error("no card");
+    const done = await s.tasks.decide(p.value.card, "yes");
+    expect(done).toMatchObject({ ok: false });
+    expect(done.text).toContain("Issues: Read and write");
+    expect(s.git.some((g) => g.startsWith("push"))).toBe(false);
   });
 
   it("closing asks first and deletes only the task's own folder", async () => {
