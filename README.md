@@ -413,8 +413,20 @@ Requires Node 22.13 or later (the memory store uses `node:sqlite`, which needs a
        Jarvis reads that one document: the heating automation's own
        explanation and plan, room and outdoor temperatures, each
        thermostat, the heat pump, solar, battery, grid and consumption.
-       If the bridge hasn't reported for 15 minutes he says so. He can't
-       change anything in the house yet.
+       If the bridge hasn't reported for 15 minutes he says so.
+     - **The blinds (`HOUSE_CONTROL=on`, with `HOUSE=on`), after your OK.**
+       "Close the living room blinds", "abre as persianas do Duarte". A
+       card shows which blinds and where they are now; they move only on
+       "Move them" (an OK lasts ten minutes, at most 20 moves an hour).
+       Jarvis calls the domotics app's own functions (`legrandGetHome`,
+       `legrandGetStatus`, `legrandSetState`), signed in as his own
+       Firebase Auth user, like the Pi bridge: in the domotics project's
+       Firebase console add a user for him, then run
+       `npm run house:connect -- <project> <web-api-key> <email>` and type
+       its password (it signs in and reads the blinds once, and keeps it in
+       `data/house/firebase.json`, gitignored, readable only by you). The
+       domotics functions must let that user in. Nothing else in the house
+       can be changed yet (lights, heating).
      - **Google Cloud (`GCLOUD=on`, ☁️ Claude), read-only.** Errors and
        logs in your environments, one at a time (start with dev). No key
        file (the organisation blocks service account keys): in that

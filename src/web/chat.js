@@ -48,7 +48,7 @@ export const appendTurn = (history, role, text, tools) => {
 /**
  * Actions waiting for Renato's OK (Reach 2): each one gets a card with
  * "Add it" / "Don't add".
- * @param {readonly PathStep[]} path @returns {{ id: string, label: string, kind?: "calendar" | "skill" | "email" | "draft-delete" | "fix" | "pr-close" | "task-start" | "task-publish" | "task-close" }[]}
+ * @param {readonly PathStep[]} path @returns {{ id: string, label: string, kind?: "calendar" | "skill" | "email" | "draft-delete" | "fix" | "pr-close" | "task-start" | "task-publish" | "task-close" | "house" }[]}
  */
 export const confirmsOf = (path) =>
   path.flatMap((step) =>
@@ -358,7 +358,7 @@ export const voiceNoteVisible = ({ note, voiceInUse }) => note !== "" && voiceIn
  * @typedef {{ kind: "precheck", result: "none" | "handoff" | "route" }
  *   | { kind: "brain", brain: "claude" | "local" }
  *   | { kind: "tools", offered: readonly string[] }
- *   | { kind: "tool" | "skill", name: string, args: string, by: "code" | "model", ok: boolean, result?: string, error?: string, confirm?: { id: string, label: string, kind?: "calendar" | "skill" | "email" | "draft-delete" | "fix" | "pr-close" | "task-start" | "task-publish" | "task-close" } }
+ *   | { kind: "tool" | "skill", name: string, args: string, by: "code" | "model", ok: boolean, result?: string, error?: string, confirm?: { id: string, label: string, kind?: "calendar" | "skill" | "email" | "draft-delete" | "fix" | "pr-close" | "task-start" | "task-publish" | "task-close" | "house" } }
  *   | { kind: "guard", claimedAction: number, promise: number, perception: number, toolResult?: number, replaced: boolean }} PathStep
  */
 

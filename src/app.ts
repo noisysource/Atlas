@@ -10,6 +10,7 @@ import { makeTasks, type Task, type Tasks } from "./code/tasks.js";
 import { makeTaskRunner } from "./code/task-runner.js";
 import { makePrCloser } from "./github/pr-close.js";
 import { makePlans } from "./plans/plans.js";
+import { makeBlinds, makeCallable, readFirebaseUser } from "./house/blinds.js";
 import { makeVendusGet, type VendusGet } from "./vendus/vendus.js";
 import { makeCodeRefresh } from "./code/freshness.js";
 import { briefSources } from "./brief.js";
@@ -417,6 +418,8 @@ export const buildDeps = async (inputs: AppInputs): Promise<Result<Deps, string>
           log,
         }))
       : undefined;
+  // #166: the blinds, after his OK, through the domotics app's functions as Jarvis's own Firebase user.
+  const blinds = config.house.control.enabled && config.toolCalling ? makeBlinds({ call: makeCallable({ user: () => readFirebaseUser(config.house.control.userPath) }), log }) : undefined;
   // #183: closing pull requests after his OK, with the same write token (on with CODE_FIX).
   const prs = fixes ? makePrCloser({ writeToken: writeTokens.token, isEc: isEcText, log }) : undefined;
   // #126: a code agent (Claude Code, read-only) on local copies of the repos GitHub reaches.
@@ -583,6 +586,7 @@ export const buildDeps = async (inputs: AppInputs): Promise<Result<Deps, string>
     ...(morningBrief ? { morningBrief } : {}),
     ...(codeRefresh ? { codeRefresh } : {}),
     ...(prs ? { prClose: prs } : {}),
+    ...(blinds && config.house.enabled ? { houseBlinds: blinds } : {}),
     classify: makeClassifier({ contexts: contexts.value, llm: classifierLlm.value, log, thinking: config.turn.classifierThinking }),
     stickyContext: config.turn.stickyContext,
     speculativeAnswer: config.turn.speculativeAnswer,
@@ -614,7 +618,7 @@ export const buildDeps = async (inputs: AppInputs): Promise<Result<Deps, string>
               // #9: KidClub's invoices in Vendus, GET only, with tools (Claude).
               ...(vendusGet && config.toolCalling ? { vendus: { get: vendusGet, timeZone: config.timeZone } } : {}),
               // #166: the house now, read-only, from the domotics bridge's state document.
-              ...(gcloud && config.house.enabled && config.toolCalling ? { house: { db: gcloud.db, env: config.house.env, timeZone: config.timeZone } } : {}),
+              ...(gcloud && config.house.enabled && config.toolCalling ? { house: { db: gcloud.db, env: config.house.env, timeZone: config.timeZone, ...(blinds ? { blinds } : {}) } } : {}),
               // #175: only the tool groups a question needs; the classifier model (Haiku) helps pick.
               // #49: "what's on my plate?" in one read of everything connected.
               ...(calendar && config.toolCalling ? { brief: true } : {}),

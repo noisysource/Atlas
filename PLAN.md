@@ -1031,8 +1031,21 @@ Confirmed (2026-11-12):
   automation's own sentences, temperatures, thermostats (tenths of a
   degree; `valve_state` open = heating), the pump's switch (its
   `temp_current` is compressor Hz, never shown), and the inverter. Shapes
-  mirror the monorepo's domotics app. Part 2, controls (commands to
-  `domotics_commands` for the bridge), comes behind an OK card.
+  mirror the monorepo's domotics app.
+
+- **The blinds, after an OK (#166, part 2):** the blinds are Legrand,
+  behind the Netatmo API, which only the domotics app's Cloud Functions
+  reach, so Jarvis calls those functions (`legrandGetHome` for names and
+  rooms, `legrandGetStatus` for positions, `legrandSetState` to move), not
+  the bridge's `domotics_commands` queue (Tuya only). He signs in as his own
+  Firebase Auth user (email and password in `data/house/firebase.json`,
+  local only), the way the Pi bridge does: no service-account key, and the
+  functions decide who may call them (the monorepo's change, made as a
+  Jarvis coding task, lets in the owner and Jarvis only). `house_blinds`
+  proposes; a card ("Move them" / "Leave them") moves them, one
+  `legrandSetState` call for all, 0 closed and 100 open; an OK lasts ten
+  minutes; at most 20 moves an hour in code. Lights and heating next, the
+  same way.
 
 - **Google Cloud (#161):** Jarvis (not the code agent) reads errors and
   logs, read-only, from Cloud Logging. Each environment is a project and a
