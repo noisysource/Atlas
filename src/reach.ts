@@ -24,6 +24,8 @@ export type ReachNode = {
   readonly waiting?: number;
   /** #127: the code he has notes on, and what's being studied: names and states only. */
   readonly studied?: readonly { readonly name: string; readonly state: string }[];
+  /** #151: switches for what .env allows here, and whether each is on now. */
+  readonly switches?: readonly { readonly id: string; readonly label: string; readonly what: string; readonly on: boolean }[];
 };
 
 export type ReachInput = {

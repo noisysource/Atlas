@@ -519,6 +519,16 @@ Requires Node 22.13 or later (the memory store uses `node:sqlite`, which needs a
        `CODE_TASK_MAX_USD` (3) and `CODE_TASK_MAX_TURNS` (80) cap each turn.
        Note: tests and installs run your repo's own scripts and its
        dependencies' install scripts on your Mac, as when you run them.
+     - **Switches on the page.** Each node's panel in the brain view
+       (click Gmail, GitHub, House…) has switches for what `.env` turned
+       on: the calendar and adding events; email, each mailbox, and
+       drafts; GitHub and plans; the code agent, fixes and coding tasks;
+       memory, skills and decisions; Google Cloud; the house and moving
+       blinds; invoices. A change counts from the next question, with no
+       restart. `.env` stays the ceiling: a switch can turn off what it
+       allows, never turn on what it leaves off. Kept in
+       `data/settings.json` (gitignored). The morning brief and other
+       background jobs still follow `.env`.
      - **A decisions log.** When you clearly decide something ("let's go
        with Atlas", "keep everything local until we're happy with it"),
        Atlas writes it down with the date and the app or topic, and says
