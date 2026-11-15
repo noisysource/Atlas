@@ -1736,7 +1736,7 @@ li[data-status="waiting"] > .t-leaf .t-result {
   --error: transparent;
   --error-text: #ff7b72;
   --prompt-user: #58a6ff;
-  --prompt-jarvis: #3fb950;
+  --prompt-atlas: #3fb950;
   --handoff-text: #d2a8ff;
   --reach: #5cc8ff;
   --wait: #f5b13d;
@@ -1769,7 +1769,7 @@ header {
 h1 {
   font-size: 13px;
   font-weight: 700;
-  color: var(--prompt-jarvis);
+  color: var(--prompt-atlas);
   letter-spacing: 0.02em;
 }
 
@@ -1804,7 +1804,7 @@ button[type="submit"] {
   border-color: var(--accent);
 }
 
-/* Lines, not bubbles: "renato ❯ …" and "jarvis › …", with a hanging indent. */
+/* Lines, not bubbles: "renato ❯ …" and "atlas › …", with a hanging indent. */
 #transcript {
   margin: 0.5rem 0;
   gap: 0.35rem;
@@ -1829,8 +1829,8 @@ button[type="submit"] {
   top: 0.1rem;
   width: 9ch;
   white-space: nowrap;
-  color: var(--prompt-jarvis);
-  content: "jarvis ›";
+  color: var(--prompt-atlas);
+  content: "atlas ›";
 }
 
 .message.user::before {

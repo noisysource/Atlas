@@ -105,7 +105,7 @@ export const migrate = (db: DatabaseSync, migrations: readonly string[] = MIGRAT
   let version = row?.version ?? 0;
   if (row === undefined) db.prepare("INSERT INTO schema_version (version) VALUES (0)").run();
   if (version > migrations.length) {
-    throw new Error(`memory database is at schema version ${version}, newer than this Jarvis (${migrations.length})`);
+    throw new Error(`memory database is at schema version ${version}, newer than this Atlas (${migrations.length})`);
   }
   for (const step of migrations.slice(version)) {
     db.exec("BEGIN");

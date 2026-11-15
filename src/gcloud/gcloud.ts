@@ -4,7 +4,7 @@
 // Each environment is a small file, data/gcloud/<env>.json, naming its project
 // and a read-only service account (npm run gcloud:connect -- <env> <project>).
 // No key is stored: service account keys are blocked by the organisation's
-// policy, rightly. Jarvis asks the gcloud tool on this Mac for a short-lived
+// policy, rightly. Atlas asks the gcloud tool on this Mac for a short-lived
 // token of that service account (impersonation), so he can do exactly what
 // that account may do, which is view logs, and never holds Renato's own
 // Google login. The one call made is entries:list (a read).

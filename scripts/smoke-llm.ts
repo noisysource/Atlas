@@ -56,7 +56,7 @@ await check("classifier JSON", cfg.models.classifier, async (llm) => {
 
 await check("answer text", cfg.models.answer, async (llm) => {
   const result = await llm({
-    system: "You are Jarvis. Answer in one short sentence.",
+    system: "You are Atlas. Answer in one short sentence.",
     messages: [{ role: "user", text: "Say hello and tell me today's day of the week is unknown to you." }],
     effort: "medium",
     maxTokens: 2000,

@@ -52,7 +52,7 @@ export const followFix = (card, id, deps) => {
           const res = await fetch("/code/fixes/publish", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ id, decision }) });
           result = await res.json().catch(() => ({}));
         } catch {
-          result = { ok: false, text: "I can't reach Jarvis, so nothing was pushed." };
+          result = { ok: false, text: "I can't reach Atlas, so nothing was pushed." };
         }
         deps.say(result.ok === true, typeof result.text === "string" ? result.text : "Something went wrong, so nothing was pushed.", typeof result.url === "string" ? result.url : undefined, typeof result.tool === "string" ? result.tool : undefined);
       });
@@ -74,7 +74,7 @@ export const followFix = (card, id, deps) => {
       view = undefined;
     }
     if (!view || typeof view.status !== "string") {
-      status.textContent = "I lost track of that fix (Jarvis may have restarted). Nothing was pushed.";
+      status.textContent = "I lost track of that fix (Atlas may have restarted). Nothing was pushed.";
       return;
     }
     const s = fixStatusText(view);

@@ -141,6 +141,21 @@ const save = (key, value) => {
   }
 };
 
+// #205: preferences saved before the rename (jarvis.*) carry over to atlas.* once.
+try {
+  const ls = window.localStorage;
+  for (let i = ls.length - 1; i >= 0; i--) {
+    const k = ls.key(i);
+    if (k && k.startsWith("jarvis.")) {
+      const next = `atlas.${k.slice("jarvis.".length)}`;
+      if (ls.getItem(next) === null) ls.setItem(next, ls.getItem(k) ?? "");
+      ls.removeItem(k);
+    }
+  }
+} catch {
+  /* no storage: nothing to carry over */
+}
+
 /** @param {number} count */
 const randomBytes = (count) => crypto.getRandomValues(new Uint8Array(count));
 
@@ -164,29 +179,29 @@ const randomBytes = (count) => crypto.getRandomValues(new Uint8Array(count));
  */
 const state = {
   history: [],
-  language: parseLanguage(load("jarvis.language")),
-  muted: load("jarvis.muted") === "true",
+  language: parseLanguage(load("atlas.language")),
+  muted: load("atlas.muted") === "true",
   /** Typed questions get text only (#102), unless this is on. */
-  readTyped: load("jarvis.readTyped") === "true",
+  readTyped: load("atlas.readTyped") === "true",
   busy: false,
   listening: false,
   transcribing: false,
   phase: "idle",
   lastContext: undefined,
   pending: null,
-  conversation: load("jarvis.conversation") !== "false",
+  conversation: load("atlas.conversation") !== "false",
   voiceSession: false,
   autoBlocked: false,
   conversationId: newConversationId(randomBytes),
   // "Don't remember this", for the current conversation only.
   remember: true,
   // Which model answers (#88), remembered; Local by default.
-  brain: parseBrain(load("jarvis.brain")),
+  brain: parseBrain(load("atlas.brain")),
 };
 /** The brains' labels from GET /brains, e.g. "Local · llama3.1:8b". @type {Record<string, string>} */
 let brainLabels = { local: "Local", claude: "Claude" };
 
-// The brain view (#131): lines to what Jarvis reaches for in the current answer.
+// The brain view (#131): lines to what Atlas reaches for in the current answer.
 // Each node opens a panel (#133); Memory and Skills link to their full views.
 const brainView = makeBrainView(byId("brain-view"), {
   open: {
@@ -328,7 +343,7 @@ const confirmCard = (proposal) => {
           result = await res.json().catch(() => ({}));
         }
       } catch {
-        result = { ok: false, text: `I can't reach Jarvis, so ${c.failed}.` };
+        result = { ok: false, text: `I can't reach Atlas, so ${c.failed}.` };
       }
       const text = typeof result.text === "string" ? result.text : `Something went wrong, so ${c.failed}.`;
       addMessage(result.ok ? "answer" : "error", text);
@@ -420,7 +435,7 @@ const renderControls = () => {
   const pushToInterrupt = session?.bargeIn === "push" && (state.phase === "speaking" || state.phase === "thinking");
   micButton.setAttribute("aria-pressed", String(session !== null));
   micButton.textContent = session ? (pushToInterrupt ? "✋ Interrupt" : "■ Stop") : "🎤 Speak";
-  micButton.title = session ? (pushToInterrupt ? "Interrupt Jarvis and speak (Space)" : "End the spoken conversation (Escape)") : "";
+  micButton.title = session ? (pushToInterrupt ? "Interrupt Atlas and speak (Space)" : "End the spoken conversation (Escape)") : "";
   micButton.classList.toggle("listening", session !== null);
   phaseBanner.dataset.phase = state.phase;
   phaseBanner.hidden = state.phase === "idle";
@@ -458,7 +473,7 @@ const renderControls = () => {
 
 const synth = "speechSynthesis" in window ? window.speechSynthesis : null;
 
-/** One AudioContext for Jarvis's voice, made on the first tap or send so the browser lets it play. */
+/** One AudioContext for Atlas's voice, made on the first tap or send so the browser lets it play. */
 /** @type {AudioContext | undefined} */
 let audioCtx;
 const audio = () => {
@@ -491,7 +506,7 @@ const refreshVoice = async () => {
 /** The reply being spoken now. @type {ReturnType<typeof makeSpeaker> | undefined} */
 let speaker;
 /**
- * Stops Jarvis's voice, and any filler. `reason` goes into the playback
+ * Stops Atlas's voice, and any filler. `reason` goes into the playback
  * report and the server log (#89), so it's clear what stopped him.
  * @param {"new-question" | "barge-in" | "push-interrupt" | "stop" | "typed" | "muted" | "new-conversation" | "answer-cancelled"} reason
  */
@@ -508,7 +523,7 @@ let lastBargeIn;
 
 // ---- fillers (#86) ----
 //
-// "One moment." when Jarvis's first sentence is slow to start. Pre-rendered
+// "One moment." when Atlas's first sentence is slow to start. Pre-rendered
 // in the configured voice when the page loads, so they play at once. They're
 // never part of the answer: not in the history, the playback report or memory.
 
@@ -620,7 +635,7 @@ const renderVoices = () => {
   voiceSelect.replaceChildren(automatic, ...options);
   voiceSelect.value = chosen && ranked.some((v) => v.name === chosen) ? chosen : "";
   voiceSelect.disabled = !synth || ranked.length === 0;
-  voiceSelect.title = "The browser voice, used when Jarvis's own voice isn't available";
+  voiceSelect.title = "The browser voice, used when Atlas's own voice isn't available";
 };
 
 /**
@@ -738,7 +753,7 @@ const startSpeaker = (onDone, timing, onFirstSound) => {
     // Voice only in voice mode (#102): a typed question's reply isn't read aloud unless you turned that on.
     muted: !shouldSpeak({ spoken: timing.spoken, readTyped: state.readTyped, muted: state.muted }) || (!server && !synth),
     onFallback: (why) => {
-      voiceChoice = { server: null, note: `${why}, so Jarvis is using the browser voice.` };
+      voiceChoice = { server: null, note: `${why}, so Atlas is using the browser voice.` };
       renderVoiceNote();
     },
     onSpeaking: () => setPhase("speaking"),
@@ -780,7 +795,7 @@ const recentTotals = [];
 const withoutUndefined = (o) => Object.fromEntries(Object.entries(o).filter(([, v]) => v !== undefined));
 
 /**
- * Echo (#76): while Jarvis talks, how speech-like the mic is (Silero's
+ * Echo (#76): while Atlas talks, how speech-like the mic is (Silero's
  * probability), so you can tell whether he could interrupt himself through
  * the speakers. Reset for each answer.
  */
@@ -832,7 +847,7 @@ const showTiming = (item, timing, streamDone) => {
 
 /**
  * Tells the server how a streamed answer's playback ended (#72), so it can
- * decide the memory wrap-up: what Jarvis actually said, if he was cut off.
+ * decide the memory wrap-up: what Atlas actually said, if he was cut off.
  * @param {string} turnId @param {boolean} interrupted @param {string} spoken
  */
 const reportPlayback = (turnId, interrupted, spoken, details = {}) =>
@@ -1038,7 +1053,7 @@ const ask = async (question, context) => {
     return;
   }
 
-  view = reachable ? viewFromHttp(status, final) : { ...viewFromHttp(0, null), text: "I can't reach Jarvis. Is the server running?" };
+  view = reachable ? viewFromHttp(status, final) : { ...viewFromHttp(0, null), text: "I can't reach Atlas. Is the server running?" };
   if (view.kind === "answer" && item) {
     setMessageText(item, view.text);
   } else {
@@ -1164,7 +1179,7 @@ const submit = (raw, how = {}) => {
 
 form.addEventListener("submit", (event) => {
   event.preventDefault();
-  audio(); // made on a tap or Enter, so the browser lets Jarvis's voice play
+  audio(); // made on a tap or Enter, so the browser lets Atlas's voice play
   submit(input.value);
 });
 
@@ -1186,7 +1201,7 @@ input.addEventListener("keydown", (event) => {
 // machine (/transcribe), its text to /ask like typed text (so the local EC
 // precheck runs first), and the answer is spoken sentence by sentence.
 //
-// Barge-in: while Jarvis speaks the mic stays open; talking over him stops
+// Barge-in: while Atlas speaks the mic stays open; talking over him stops
 // the audio at once, cancels the answer and what's still being fetched, and
 // what you're saying becomes the next question. History keeps only what he
 // actually said. How it works is set per browser (GET /voice-settings):
@@ -1271,7 +1286,7 @@ const sttStatus = async () => {
     const problem = typeof body?.problem === "string" ? body.problem : "Listening isn't available.";
     return { ok: false, problem: body?.starting ? `${problem}… try again in a moment.` : problem };
   } catch {
-    return { ok: false, problem: "I can't reach Jarvis. Is the server running?" };
+    return { ok: false, problem: "I can't reach Atlas. Is the server running?" };
   }
 };
 
@@ -1325,7 +1340,7 @@ const transcribeAndSend = async (samples, how = {}) => {
     if (res.ok && typeof body?.text === "string") text = body.text;
     else problem = typeof body?.message === "string" ? body.message : `Listening failed (status ${res.status}).`;
   } catch {
-    problem = controller.signal.aborted ? "" : "I can't reach Jarvis. Is the server running?";
+    problem = controller.signal.aborted ? "" : "I can't reach Atlas. Is the server running?";
   }
   if (transcribing === controller) transcribing = undefined;
   state.transcribing = false;
@@ -1350,7 +1365,7 @@ const transcribeAndSend = async (samples, how = {}) => {
 };
 
 /**
- * You spoke over Jarvis (or tapped Interrupt): stop him at once and listen.
+ * You spoke over Atlas (or tapped Interrupt): stop him at once and listen.
  * If he hadn't started answering yet, you're carrying on with the same
  * question: it's cancelled and sent again, whole, when you finish.
  */
@@ -1439,7 +1454,7 @@ const startVoice = async () => {
   } catch (e) {
     const name = e instanceof Error ? e.name : "";
     const blocked = name === "NotAllowedError" || name === "SecurityError";
-    setStatus(blocked ? "Microphone access was blocked. Allow it in the browser to speak to Jarvis." : "Couldn't start the microphone.");
+    setStatus(blocked ? "Microphone access was blocked. Allow it in the browser to speak to Atlas." : "Couldn't start the microphone.");
     if (blocked) blockAuto();
     return;
   }
@@ -1463,7 +1478,7 @@ const startVoice = async () => {
   renderControls();
 };
 
-/** After Jarvis has answered: listen for the next turn, or close the mic after a one-off question. */
+/** After Atlas has answered: listen for the next turn, or close the mic after a one-off question. */
 const reopenMicSoon = () => {
   const open = session;
   if (!open) return;
@@ -1507,7 +1522,7 @@ document.addEventListener("keydown", (event) => {
 
 conversationButton.addEventListener("click", () => {
   state.conversation = !state.conversation;
-  save("jarvis.conversation", String(state.conversation));
+  save("atlas.conversation", String(state.conversation));
   state.autoBlocked = false; // flipping the toggle retries the automatic mic
   if (session) session.oneShot = !state.conversation;
   renderControls();
@@ -1689,7 +1704,7 @@ const renderSkills = async () => {
   const skills = (await memoryRequest("/skills")).skills;
   if (skills.length === 0) {
     const empty = document.createElement("p");
-    empty.textContent = "No skills yet. Ask Jarvis to make something a skill, or let him draft them overnight.";
+    empty.textContent = "No skills yet. Ask Atlas to make something a skill, or let him draft them overnight.";
     skillsList.replaceChildren(empty);
     return;
   }
@@ -1756,7 +1771,7 @@ rememberButton.addEventListener("click", () => {
 
 muteButton.addEventListener("click", () => {
   state.muted = !state.muted;
-  save("jarvis.muted", String(state.muted));
+  save("atlas.muted", String(state.muted));
   if (state.muted) stopSpeaking("muted");
   voiceInUse = voiceInUse && !state.muted;
   renderVoiceNote();
@@ -1765,13 +1780,13 @@ muteButton.addEventListener("click", () => {
 
 readTypedButton.addEventListener("click", () => {
   state.readTyped = !state.readTyped;
-  save("jarvis.readTyped", String(state.readTyped));
+  save("atlas.readTyped", String(state.readTyped));
   renderControls();
 });
 
 languageSelect.addEventListener("change", () => {
   state.language = parseLanguage(languageSelect.value);
-  save("jarvis.language", state.language);
+  save("atlas.language", state.language);
   if (state.listening && !listenAvailable()) endVoice("reset");
   renderControls();
   renderVoices();
@@ -1845,7 +1860,7 @@ input.focus();
 // The calendar (#100): with Claude answering, event titles go to Anthropic. Said once, before the first question.
 const calendarNote = /** @type {HTMLElement} */ (byId("calendar-note"));
 let calendarOn = false;
-const CALENDAR_NOTE_SEEN = "jarvis.calendarClaudeNoteSeen";
+const CALENDAR_NOTE_SEEN = "atlas.calendarClaudeNoteSeen";
 const showCalendarNote = () => {
   if (state.brain !== "claude") {
     calendarNote.hidden = true;
@@ -1859,7 +1874,7 @@ const showCalendarNote = () => {
 
 brainButton.addEventListener("click", () => {
   state.brain = state.brain === "claude" ? "local" : "claude";
-  save("jarvis.brain", state.brain);
+  save("atlas.brain", state.brain);
   renderControls();
   showCalendarNote();
 });

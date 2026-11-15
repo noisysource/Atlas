@@ -4,7 +4,7 @@
 // - A calendar question: read for the days it names.
 // - A follow-up that names a day ("what about tomorrow?", "and Friday?")
 //   while the conversation is about the calendar: read for that day.
-// - A bare "yes" after Jarvis offered to check or try again, or a bare
+// - A bare "yes" after Atlas offered to check or try again, or a bare
 //   "try again": read again for the last calendar question.
 // - "Did you check?", "have you tried?": read now, and answer from what
 //   really happened before, not from what the model says it did.
@@ -25,7 +25,7 @@ export const cameFromRead = (turn: ChatTurn | undefined): boolean =>
 export type CalendarIntent = {
   /** The question whose days are read: this one, or the earlier one it refers to. */
   readonly ask: string;
-  /** They asked whether Jarvis checked: `before` is whether the last reply came from a real read. */
+  /** They asked whether Atlas checked: `before` is whether the last reply came from a real read. */
   readonly didCheck?: { readonly before: boolean };
 };
 
@@ -39,7 +39,7 @@ const isBareRetry = (question: string): boolean =>
   );
 
 /** "Did you check?", "have you honestly tried to reach the calendar?", "are you sure you looked?" */
-export const asksWhatJarvisDid = (question: string): boolean =>
+export const asksWhatAtlasDid = (question: string): boolean =>
   /\b(?:did|have|had) you (?:(?:really|actually|honestly|even|just|already) )*(?:check(?:ed)?|look(?:ed)?|tr(?:y|ied)|read|access(?:ed)?|reach(?:ed)?|open(?:ed)?)\b/i.test(question) ||
   /\bare you sure (?:that )?you(?:'ve| have)? (?:check|look|read|tr)/i.test(question);
 
@@ -66,7 +66,7 @@ export const calendarIntent = (question: string, history: readonly ChatTurn[]): 
   const lastUser = [...history].reverse().find((t) => t.role === "user")?.text;
 
   // "Did you check?": read now for the last calendar question, and say truthfully whether it was read before.
-  if (asksWhatJarvisDid(question)) {
+  if (asksWhatAtlasDid(question)) {
     const named = resolveDatePhrase(question, ANY_DAY) !== undefined;
     const ask = named ? question : lastCalendarAsk(history);
     const relevant = /\b(?:calendar|agenda|diary|schedule)\b/i.test(question) || aboutCalendar(lastAssistant) || (lastUser !== undefined && mightBeAboutCalendar(lastUser));

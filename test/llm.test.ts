@@ -26,7 +26,7 @@ const message = (overrides: Partial<Message>): Message =>
   }) as unknown as Message;
 
 const base: LlmRequest = {
-  system: "You are Jarvis.",
+  system: "You are Atlas.",
   messages: [{ role: "user", text: "Hi" }],
   maxTokens: 1000,
 };
@@ -86,7 +86,7 @@ describe("buildParams", () => {
     expect(params).toEqual({
       model: "claude-haiku-5-5",
       max_tokens: 1000,
-      system: "You are Jarvis.",
+      system: "You are Atlas.",
       messages: [{ role: "user", content: "Hi" }],
       output_config: { effort: "low", format: { type: "json_schema", schema: classifySchema } },
     });
@@ -109,7 +109,7 @@ describe("buildParams", () => {
 
   it("marks a cacheable system prompt", () => {
     expect(buildParams("claude-sonnet-5-5", { ...base, cacheSystem: true }).system).toEqual([
-      { type: "text", text: "You are Jarvis.", cache_control: { type: "ephemeral" } },
+      { type: "text", text: "You are Atlas.", cache_control: { type: "ephemeral" } },
     ]);
   });
 
@@ -117,11 +117,11 @@ describe("buildParams", () => {
     expect(
       buildParams("claude-sonnet-5-5", { ...base, cacheSystem: true, systemSuffix: "Now: Friday" }).system,
     ).toEqual([
-      { type: "text", text: "You are Jarvis.", cache_control: { type: "ephemeral" } },
+      { type: "text", text: "You are Atlas.", cache_control: { type: "ephemeral" } },
       { type: "text", text: "Now: Friday" },
     ]);
     expect(buildParams("claude-sonnet-5-5", { ...base, systemSuffix: "Now: Friday" }).system).toEqual([
-      { type: "text", text: "You are Jarvis." },
+      { type: "text", text: "You are Atlas." },
       { type: "text", text: "Now: Friday" },
     ]);
   });

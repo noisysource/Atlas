@@ -97,20 +97,20 @@ export type AppInputs = {
 };
 
 /**
- * The contexts Jarvis can answer today. Every other answerable context gets
+ * The contexts Atlas can answer today. Every other answerable context gets
  * "not connected yet" (an unavailable reply, with no wrap-up). Shared with
  * eval:memory so it follows the same flow.
  */
 export const ANSWERED_CONTEXT_IDS: readonly string[] = ["personal"];
 
-/** "What Jarvis can do", from contexts.md and which contexts have an answerer. */
+/** "What Atlas can do", from contexts.md and which contexts have an answerer. */
 export const capabilitiesText = (contexts: readonly Context[], answered: ReadonlySet<string>): string =>
   [
-    "Jarvis can help with:",
+    "Atlas can help with:",
     ...contexts.map((c) => {
-      if (c.handling.kind === "handoff") return `- ${c.name}: not handled by Jarvis; those requests go to ${c.handling.to}.`;
+      if (c.handling.kind === "handoff") return `- ${c.name}: not handled by Atlas; those requests go to ${c.handling.to}.`;
       if (answered.has(c.id)) return `- ${c.name}: ${c.description} (answered from: ${c.data})`;
-      return `- ${c.name}: not connected yet, so Jarvis can't answer these questions yet.`;
+      return `- ${c.name}: not connected yet, so Atlas can't answer these questions yet.`;
     }),
     "- General questions and conversation.",
     "You can type or speak, and answers are read aloud in English or Portuguese.",
@@ -254,7 +254,7 @@ export const buildDeps = async (inputs: AppInputs): Promise<Result<Deps, string>
             ok: false,
             text:
               sent.error.code === "auth"
-                ? `I couldn't send it: Gmail didn't allow it. Connect ${draft.account} again with write access (GMAIL_WRITE=on npm run gmail:connect -- ${draft.account}), then restart Jarvis. It's still in Drafts.`
+                ? `I couldn't send it: Gmail didn't allow it. Connect ${draft.account} again with write access (GMAIL_WRITE=on npm run gmail:connect -- ${draft.account}), then restart Atlas. It's still in Drafts.`
                 : "I couldn't send it: Gmail didn't answer properly. It's still in your Drafts.",
           };
         }
@@ -262,7 +262,7 @@ export const buildDeps = async (inputs: AppInputs): Promise<Result<Deps, string>
         return { ok: true, text: `Sent “${draft.subject}” to ${draft.to.join(", ")}.`, tool: `gmail_send ${draft.account} → sent` };
       }
     : undefined;
-  // #124: his answer to "delete this draft?". Only "yes" deletes, and only a draft Jarvis wrote.
+  // #124: his answer to "delete this draft?". Only "yes" deletes, and only a draft Atlas wrote.
   const discard = drafts?.write.discard;
   const gmailDelete =
     drafts && discard
@@ -280,7 +280,7 @@ export const buildDeps = async (inputs: AppInputs): Promise<Result<Deps, string>
               ok: false,
               text:
                 done.error.code === "auth"
-                  ? `I couldn't delete it: Gmail didn't allow it. Connect ${draft.account} again with write access (GMAIL_WRITE=on npm run gmail:connect -- ${draft.account}), then restart Jarvis.`
+                  ? `I couldn't delete it: Gmail didn't allow it. Connect ${draft.account} again with write access (GMAIL_WRITE=on npm run gmail:connect -- ${draft.account}), then restart Atlas.`
                   : `I couldn't delete it: ${done.error.message}.`,
             };
           }
@@ -325,7 +325,7 @@ export const buildDeps = async (inputs: AppInputs): Promise<Result<Deps, string>
   const studies = codeAgent
     ? makeStudies({ agent: codeAgent, copies: repoCopies, store: noteStore, isEc: isEcText, maxUsd: config.codeAgent.study.maxUsd, maxTurns: config.codeAgent.study.maxTurns, now, log })
     : undefined;
-  // #8: Vendus, GET only, with the key of Jarvis's own Vendus user (data/vendus.json, mode 600).
+  // #8: Vendus, GET only, with the key of Atlas's own Vendus user (data/vendus.json, mode 600).
   const vendusKey = async (): Promise<string | undefined> => {
     const text = await readFileFs(config.vendus.keyPath, "utf8").catch(() => undefined);
     try {
@@ -359,7 +359,7 @@ export const buildDeps = async (inputs: AppInputs): Promise<Result<Deps, string>
   // #162: fixes as pull requests, with a separate write token per owner; every step after his OK.
   const writeTokens = makeGithubTokens({ readFile: () => readFileFs(config.codeAgent.fix.writeTokensPath, "utf8") });
   const fixesRoot = path.resolve(config.codeAgent.fix.fixesPath);
-  // #191: coding tasks, with Jarvis as the PM and Claude Code doing the work in copies under data/tasks.
+  // #191: coding tasks, with Atlas as the PM and Claude Code doing the work in copies under data/tasks.
   const tasksFile = path.join(config.codeAgent.tasks.path, "tasks.json");
   const tasksRoot = path.resolve(config.codeAgent.tasks.path);
   const tasks: Tasks | undefined =
@@ -418,7 +418,7 @@ export const buildDeps = async (inputs: AppInputs): Promise<Result<Deps, string>
           log,
         }))
       : undefined;
-  // #166: the blinds, after his OK, through the domotics app's functions as Jarvis's own Firebase user.
+  // #166: the blinds, after his OK, through the domotics app's functions as Atlas's own Firebase user.
   const blinds = config.house.control.enabled && config.toolCalling ? makeBlinds({ call: makeCallable({ user: () => readFirebaseUser(config.house.control.userPath) }), log }) : undefined;
   // #183: closing pull requests after his OK, with the same write token (on with CODE_FIX).
   const prs = fixes ? makePrCloser({ writeToken: writeTokens.token, isEc: isEcText, log }) : undefined;
@@ -481,7 +481,7 @@ export const buildDeps = async (inputs: AppInputs): Promise<Result<Deps, string>
             log.warn("calendar create failed", { code: created.error.code, reason: created.error.message });
             return {
               ok: false,
-              text: created.error.code === "auth" ? "I couldn't add it: Google didn't allow writing to your calendar. Connect it again with write access (CALENDAR_WRITE=on npm run calendar:connect), tick the box for editing events, then restart Jarvis." : "I couldn't add it: Google Calendar didn't answer properly. Nothing was added.",
+              text: created.error.code === "auth" ? "I couldn't add it: Google didn't allow writing to your calendar. Connect it again with write access (CALENDAR_WRITE=on npm run calendar:connect), tick the box for editing events, then restart Atlas." : "I couldn't add it: Google Calendar didn't answer properly. Nothing was added.",
             };
           }
           log.info("calendar create", { outcome: "added", allDay: created.value.allDay });

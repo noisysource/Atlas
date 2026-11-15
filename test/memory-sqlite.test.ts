@@ -13,7 +13,7 @@ const opened: SqliteMemoryStore[] = [];
 const dirs: string[] = [];
 
 const tempDir = async () => {
-  const dir = await mkdtemp(join(tmpdir(), "jarvis-memory-"));
+  const dir = await mkdtemp(join(tmpdir(), "atlas-memory-"));
   dirs.push(dir);
   return dir;
 };
@@ -99,7 +99,7 @@ describe("openSqliteMemoryStore", () => {
     expect(!result.ok && result.error).toContain(`can't open the memory database at ${path}`);
   });
 
-  it("refuses a database from a newer Jarvis", async () => {
+  it("refuses a database from a newer Atlas", async () => {
     const path = join(await tempDir(), "memory.sqlite");
     (await openAt(path)).close();
     const { DatabaseSync } = await import("node:sqlite");
@@ -107,7 +107,7 @@ describe("openSqliteMemoryStore", () => {
     db.prepare("UPDATE schema_version SET version = 99").run();
     db.close();
     const result = await openSqliteMemoryStore({ path });
-    expect(!result.ok && result.error).toContain("schema version 99, newer than this Jarvis");
+    expect(!result.ok && result.error).toContain("schema version 99, newer than this Atlas");
   });
 
   it("doesn't print Node's 'SQLite is experimental' warning, and leaves other warnings alone", async () => {

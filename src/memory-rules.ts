@@ -59,7 +59,7 @@ export const REMEMBER_PHRASES: readonly string[] = [
 const PROTECTED_PHRASES = ["não te esqueças", "don't forget", "do not forget"].map(phrase);
 
 /**
- * Did the user, in their own words, ask Jarvis to remember something? The
+ * Did the user, in their own words, ask Atlas to remember something? The
  * model's "explicit" flag only counts when this is true. "Don't remember
  * this" and "do you remember…?" are not requests to remember.
  */
@@ -98,7 +98,7 @@ export const asksNotToRemember = (question: string): boolean => {
 
 const FORGET_PHRASES = ["forget", "esquece", "esqueca", "esquecer", "apaga", "apague", "delete", "remove", "erase"].map(phrase);
 
-/** Did the user ask Jarvis to forget something? Deletes are only allowed when they did. "Don't forget" isn't one. */
+/** Did the user ask Atlas to forget something? Deletes are only allowed when they did. "Don't forget" isn't one. */
 export const asksToForget = (question: string): boolean => {
   const words = foldWords(question);
   return FORGET_PHRASES.some((p) => hasPlainPhrase(words, p));
@@ -180,7 +180,7 @@ const NOT_NAMES = new Set(
     "segunda", "terca", "quarta", "quinta", "sexta", "sabado", "domingo",
     "january", "february", "march", "april", "may", "june", "july", "august", "september", "october", "november", "december",
     "janeiro", "fevereiro", "marco", "abril", "maio", "junho", "julho", "agosto", "setembro", "outubro", "novembro", "dezembro",
-    "english", "portuguese", "ingles", "portugues", "jarvis", "vendus", "i",
+    "english", "portuguese", "ingles", "portugues", "atlas", "vendus", "i",
   ].map((w) => foldWords(w).join(" ")),
 );
 

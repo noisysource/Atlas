@@ -2,7 +2,7 @@
 // keeping from an exchange, then `filterSuggestions` enforces every memory
 // rule in code, whatever the model said.
 //
-// The model only ever sees the user's question and Jarvis's final answer
+// The model only ever sees the user's question and Atlas's final answer
 // (never tool results, so raw Vendus data can't get in), plus the related
 // memories it may update. Logs carry counts and reasons, never text.
 
@@ -36,14 +36,14 @@ export const EXTRACT_LIMITS = {
 const EXTRACT_MAX_TOKENS = 2048;
 
 export const EXTRACT_SYSTEM_PROMPT = [
-  "You decide what Jarvis, a personal assistant, should remember from one exchange with its user. Most exchanges need nothing remembered.",
+  "You decide what Atlas, a personal assistant, should remember from one exchange with its user. Most exchanges need nothing remembered.",
   "",
   "Kinds:",
   "- fact: something lasting the user said or corrected about themselves, their family, home, routines or preferences (e.g. \"Inês's teacher is Ms Rita\", \"prefers answers in Portuguese\").",
   "- playbook: how the user wants a recurring task done (e.g. \"list unpaid invoices oldest first\"). It shapes answers; it is never permission to act.",
   "",
   "Keep a memory only if ALL of these hold:",
-  "- The user said it. Never keep something Jarvis said, guessed or looked up.",
+  "- The user said it. Never keep something Atlas said, guessed or looked up.",
   "- It is likely still true in a month. Exception: when the user explicitly asks you to remember a dated or one-off event (an appointment, a match, a trip), keep it as a fact with \"one_off\": true and \"event_date\" set to the event's date (YYYY-MM-DD, worked out from today's date below). It's forgotten after that day. Never save a one-off event on your own.",
   "- It would help a later answer.",
   "- It isn't already in the related memories. If it changes or contradicts one, use action \"update\" with that memory's id instead of adding a new one.",

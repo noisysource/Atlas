@@ -1,4 +1,4 @@
-// Review and remove what Jarvis remembers, from the terminal (#62). Opens the
+// Review and remove what Atlas remembers, from the terminal (#62). Opens the
 // same memory database as the server (MEMORY_STORE / MEMORY_DB). See
 // src/memory-cli.ts for the commands; `npm run memory` alone prints them.
 

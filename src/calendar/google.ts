@@ -1,5 +1,5 @@
 // The Google Calendar API, read-only (#100): the events of one account's
-// primary calendar between two days (#137: one reader per account). GET only. Only the fields Jarvis
+// primary calendar between two days (#137: one reader per account). GET only. Only the fields Atlas
 // uses are asked for; the organiser's and invitees' addresses are used to
 // spot EC work and never go further.
 

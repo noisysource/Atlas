@@ -23,7 +23,7 @@ export type ProfileSourceRef = { readonly kind: "file"; readonly path: string };
  */
 export type MemoryStoreRef = { readonly kind: "sqlite"; readonly path: string } | { readonly kind: "memory" };
 
-/** Jarvis's spoken voice (#73). Service URLs are always on this machine. */
+/** Atlas's spoken voice (#73). Service URLs are always on this machine. */
 export type TtsConfig = {
   readonly provider: TtsProviderId;
   /** The voice id for that provider; "" = the provider's default (the browser picks its best voice). */
@@ -51,11 +51,11 @@ export type TurnConfig = {
   readonly spokenSentences: number;
   /** Spoken bare replies (#94, opt-in): ellipses and dashes for pauses (VOICE_PUNCTUATION_STYLE=on). */
   readonly punctuationStyle: boolean;
-  /** Interrupting Jarvis, per browser: "vad" (just talk), "strict" (talk clearly, for weaker echo cancellation) or "push" (tap Interrupt). */
+  /** Interrupting Atlas, per browser: "vad" (just talk), "strict" (talk clearly, for weaker echo cancellation) or "push" (tap Interrupt). */
   readonly bargeIn: { readonly chrome: BargeInMode; readonly safari: BargeInMode; readonly other: BargeInMode };
 };
 
-/** Jarvis's ears (#74). The service URL is always on this machine. */
+/** Atlas's ears (#74). The service URL is always on this machine. */
 export type SttConfig = {
   readonly provider: SttProviderId;
   readonly whisperUrl: URL;
@@ -125,7 +125,7 @@ export type Config = {
   readonly gcloud: { readonly enabled: boolean; readonly keysPath: string };
   /**
    * VENDUS=on (#8): Claude can read KidClub's invoices in Vendus, GET only, two
-   * paths. The key of Jarvis's own Vendus user is in a file under data/
+   * paths. The key of Atlas's own Vendus user is in a file under data/
    * (npm run vendus:connect). Local only for now.
    */
   readonly vendus: { readonly enabled: boolean; readonly keyPath: string };
@@ -140,7 +140,7 @@ export type Config = {
     readonly env: string;
     /**
      * HOUSE_CONTROL=on (#166): Claude can move the blinds, each time after his
-     * OK on a card, through the domotics app's functions, signed in as Jarvis's
+     * OK on a card, through the domotics app's functions, signed in as Atlas's
      * own Firebase Auth user (npm run house:connect, data/house/firebase.json).
      * Local only for now.
      */
@@ -179,14 +179,14 @@ export type Config = {
      */
     readonly refresh: { readonly mode: "off" | "check" | "study"; readonly maxStudies: number };
     /**
-     * CODE_FIX=on (#162): Jarvis can propose a fix; after Renato's OK the agent
+     * CODE_FIX=on (#162): Atlas can propose a fix; after Renato's OK the agent
      * prepares it on a copy (data/fixes), he sees the diff, and his second OK
      * pushes a branch and opens a draft pull request. Needs a write token per
      * owner (npm run github:connect -- <owner> --write, in writeTokensPath).
      * CODE_FIX_MAX_USD (default 2) and CODE_FIX_MAX_TURNS (default 60) per fix.
      */
     /**
-     * CODE_TASKS=on (#191): Jarvis manages coding tasks that Claude Code works
+     * CODE_TASKS=on (#191): Atlas manages coding tasks that Claude Code works
      * on, with the repo's own setup, in copies under data/tasks, running a
      * list of commands (tests, typecheck, build, local git). Each start, push
      * and close needs his OK. CODE_TASK_MAX_USD (default 3) and
@@ -196,12 +196,12 @@ export type Config = {
     readonly fix: { readonly enabled: boolean; readonly maxUsd: number; readonly maxTurns: number; readonly writeTokensPath: string; readonly fixesPath: string };
   };
   /**
-   * MEMORY=on (#107), with BARE_MODE=on and Claude's tools: Jarvis remembers
+   * MEMORY=on (#107), with BARE_MODE=on and Claude's tools: Atlas remembers
    * across conversations like a person (short-term that fades, long-term that
    * lasts), saving and recalling with tools. Memories live in MEMORY_DB.
    */
   readonly bareMemory: boolean;
-  /** INTROSPECTION=on (#108), with MEMORY=on: every night at 03:30, Jarvis reviews his short-term memory. Report in data/introspection/. */
+  /** INTROSPECTION=on (#108), with MEMORY=on: every night at 03:30, Atlas reviews his short-term memory. Report in data/introspection/. */
   readonly introspection: boolean;
   /**
    * #177: the morning brief, prepared each day at BRIEF_AT (default 07:30, his
@@ -218,7 +218,7 @@ export type Config = {
    * last answers only; "all": every connected tool every time (as before).
    */
   readonly toolRouter: "model" | "rules" | "all";
-  /** Your name for the persona (JARVIS_USER_NAME, in the gitignored .env); none: "the person you're talking to". */
+  /** Your name for the persona (ATLAS_USER_NAME, in the gitignored .env); none: "the person you're talking to". */
   readonly userName: string | undefined;
   /** Names and phrases memories must never contain (colleagues and the like). Gitignored; missing is fine. */
   readonly neverRememberPath: string;
@@ -254,7 +254,7 @@ export const DEFAULTS = {
   ollamaModel: "qwen3:8b",
   whisperHintsPath: "data/whisper-hints.txt",
   endOfTurnMs: 500,
-  // Through laptop speakers both browsers can hear Jarvis himself (#75, #76):
+  // Through laptop speakers both browsers can hear Atlas himself (#75, #76):
   // Chrome's echo cancellation let "Sure" interrupt itself, so both take
   // clearer speech to interrupt. With headphones, "vad" is fine everywhere.
   bargeInChrome: "strict",
@@ -328,7 +328,7 @@ const EnvSchema = z.object({
       .regex(/^[A-Za-z0-9._:/-]{1,100}$/, { error: "must be an Ollama model name, e.g. qwen3:8b" })
       .optional(),
   ),
-  JARVIS_USER_NAME: z.preprocess(
+  ATLAS_USER_NAME: z.preprocess(
     (v) => (typeof v === "string" && v.trim() === "" ? undefined : v),
     z
       .string()
@@ -496,7 +496,9 @@ export const parseTimeZone = (value: string): Result<string, string> => {
   }
 };
 
-export const loadConfig = (env: Env): Result<Config, string> => {
+export const loadConfig = (given: Env): Result<Config, string> => {
+  // #205: from before the rename to Atlas, JARVIS_USER_NAME still works.
+  const env: Env = given.ATLAS_USER_NAME === undefined && given.JARVIS_USER_NAME !== undefined ? { ...given, ATLAS_USER_NAME: given.JARVIS_USER_NAME } : given;
   const parsed = EnvSchema.safeParse(env);
   const errors: string[] = parsed.success
     ? []
@@ -552,7 +554,7 @@ export const loadConfig = (env: Env): Result<Config, string> => {
   if (raw("HOUSE") === "on" && raw("GCLOUD") !== "on") errors.push("HOUSE: needs GCLOUD=on (the house's state is in an environment's database)");
   if (raw("HOUSE_CONTROL") === "on") {
     if (raw("HOUSE") !== "on") errors.push("HOUSE_CONTROL: needs HOUSE=on");
-    if (production) errors.push("HOUSE_CONTROL: local only for now (Jarvis's domotics user is a file on this Mac, not in Secret Manager)");
+    if (production) errors.push("HOUSE_CONTROL: local only for now (Atlas's domotics user is a file on this Mac, not in Secret Manager)");
   }
   if (raw("VENDUS") === "on") {
     if (production) errors.push("VENDUS: local only for now (its key is a file on this Mac, not in Secret Manager)");
@@ -617,7 +619,7 @@ export const loadConfig = (env: Env): Result<Config, string> => {
     },
     codeAgent: { enabled: e.GITHUB === "on" && e.CODE_AGENT === "on", maxUsd: e.CODE_AGENT_MAX_USD, maxTurns: e.CODE_AGENT_MAX_TURNS, reposPath: "data/repos", auth: e.CODE_AGENT_AUTH, model: e.CODE_AGENT_MODEL, study: { maxUsd: e.CODE_STUDY_MAX_USD, maxTurns: e.CODE_STUDY_MAX_TURNS, notesPath: "data/code" }, refresh: { mode: e.CODE_REFRESH, maxStudies: e.CODE_REFRESH_MAX }, tasks: { enabled: e.GITHUB === "on" && e.CODE_AGENT === "on" && e.CODE_TASKS === "on", maxUsd: e.CODE_TASK_MAX_USD, maxTurns: e.CODE_TASK_MAX_TURNS, path: "data/tasks" }, fix: { enabled: e.GITHUB === "on" && e.CODE_AGENT === "on" && e.CODE_FIX === "on", maxUsd: e.CODE_FIX_MAX_USD, maxTurns: e.CODE_FIX_MAX_TURNS, writeTokensPath: "data/github-write-tokens.json", fixesPath: "data/fixes" } },
     ollamaThink: e.OLLAMA_THINK === "on",
-    userName: e.JARVIS_USER_NAME,
+    userName: e.ATLAS_USER_NAME,
     tts: { provider: e.TTS_PROVIDER ?? DEFAULTS.ttsProvider, voice: e.TTS_VOICE ?? "", kokoroUrl, piperUrl },
     stt: { provider: e.STT_PROVIDER ?? DEFAULTS.sttProvider, whisperUrl, hintsPath: e.WHISPER_HINTS_PATH ?? DEFAULTS.whisperHintsPath },
     turn: {

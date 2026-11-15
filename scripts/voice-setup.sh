@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# One-time setup of Jarvis's local voice services on a Mac with Apple
+# One-time setup of Atlas's local voice services on a Mac with Apple
 # silicon (#73, #74). Everything goes into .voice/ (gitignored); nothing is
 # installed system-wide except Homebrew packages (uv, espeak-ng, whisper-cpp).
 #
@@ -44,7 +44,7 @@ fi
 if [[ "$(uname -s)" == "Darwin" && "$(brew --prefix)" != "/opt/homebrew" ]]; then
   cat >&2 <<EOF
 The brew on your PATH is at $(brew --prefix): that's the Intel Homebrew, which
-runs under Rosetta. Jarvis's voices need the native Apple-silicon Homebrew in
+runs under Rosetta. Atlas's voices need the native Apple-silicon Homebrew in
 /opt/homebrew. To install it:
 
   1. In this (native arm64) terminal, run Homebrew's installer:

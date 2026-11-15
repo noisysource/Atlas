@@ -3,13 +3,13 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Jarvis</title>
+    <title>Atlas</title>
     <link rel="stylesheet" href="/app.css" />
     <script type="module" src="/app.js"></script>
   </head>
   <body>
     <header>
-      <h1>Jarvis</h1>
+      <h1>Atlas</h1>
       <div class="settings">
         <label>
           <span class="visually-hidden">Language</span>
@@ -23,7 +23,7 @@
           <select id="voice" aria-label="Voice"></select>
         </label>
         <button id="brain" type="button" aria-pressed="false" title="Which model answers: Local (Ollama on this computer) or Claude">🧠 Local</button>
-        <button id="conversation" type="button" aria-pressed="true" title="After Jarvis speaks, listen for the next question">💬 Conversation on</button>
+        <button id="conversation" type="button" aria-pressed="true" title="After Atlas speaks, listen for the next question">💬 Conversation on</button>
         <button id="mute" type="button" aria-pressed="false">🔊 Sound on</button>
         <button id="read-typed" type="button" class="small" aria-pressed="false" title="Typed questions get text only. Turn on to have typed replies read aloud too.">🔈 Read typed replies: off</button>
         <button id="remember" type="button" aria-pressed="true" title="Turn off to keep this conversation out of memory">🧠 Remembering</button>
@@ -39,7 +39,7 @@
 
     <dialog id="memories-panel" aria-labelledby="memories-title">
       <div class="panel-head">
-        <h2 id="memories-title">What Jarvis remembers</h2>
+        <h2 id="memories-title">What Atlas remembers</h2>
         <button id="memories-close" type="button" aria-label="Close">✕</button>
       </div>
       <p class="note">
@@ -52,11 +52,11 @@
 
     <dialog id="skills-panel" aria-labelledby="skills-title">
       <div class="panel-head">
-        <h2 id="skills-title">Jarvis's skills</h2>
+        <h2 id="skills-title">Atlas's skills</h2>
         <button id="skills-close" type="button" aria-label="Close">✕</button>
       </div>
       <p class="note">
-        Routines Jarvis follows, drafted from his memory at night or taught in chat. Only approved skills are used, and
+        Routines Atlas follows, drafted from his memory at night or taught in chat. Only approved skills are used, and
         a skill never adds powers: actions still need your OK.
       </p>
       <p id="skills-status" class="note" role="status"></p>
@@ -64,7 +64,7 @@
     </dialog>
 
     <div class="layout">
-      <section id="brain-view" class="brain" aria-label="What Jarvis is reaching for" data-working="false"></section>
+      <section id="brain-view" class="brain" aria-label="What Atlas is reaching for" data-working="false"></section>
       <div class="chat">
     <main>
       <ol id="transcript" aria-live="polite"></ol>
@@ -79,8 +79,8 @@
       <p id="calendar-note" class="note" role="note" hidden></p>
       <p id="status" role="status"></p>
       <form id="ask-form">
-        <label for="question" class="visually-hidden">Ask Jarvis</label>
-        <textarea id="question" rows="2" maxlength="2000" placeholder="Ask Jarvis…" autocomplete="off"></textarea>
+        <label for="question" class="visually-hidden">Ask Atlas</label>
+        <textarea id="question" rows="2" maxlength="2000" placeholder="Ask Atlas…" autocomplete="off"></textarea>
         <div class="actions">
           <button id="mic" type="button" aria-pressed="false">🎤 Speak</button>
           <button id="send" type="submit">Send</button>

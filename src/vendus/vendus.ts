@@ -8,7 +8,7 @@
 // GET /documents/?since=&until=&type=&per_page=&page= (an empty page is 404
 // with errors[].code "A001"); one document: GET /documents/{id}/.
 //
-// Two locks: Renato gives Jarvis a key of his own Vendus user with the fewest
+// Two locks: Renato gives Atlas a key of his own Vendus user with the fewest
 // rights, and this module can only GET, only two paths, only these query
 // fields. Anything else is refused before any network call. The key is never
 // in an error or a log. Client names come back only for one document asked
@@ -51,7 +51,7 @@ export const makeVendusGet = (deps: { readonly apiKey: () => Promise<string | un
     if (res.ok) return ok(body);
     const codes = Array.isArray((body as { errors?: unknown } | undefined)?.errors) ? ((body as { errors: { code?: unknown }[] }).errors.map((e) => e.code)) : [];
     if (res.status === 404 && codes.includes("A001")) return ok([]); // Vendus's "no data"
-    if (res.status === 401 || res.status === 403) return err({ code: "auth", message: `Vendus refused the key (${res.status}): check Jarvis's Vendus user can see documents` });
+    if (res.status === 401 || res.status === 403) return err({ code: "auth", message: `Vendus refused the key (${res.status}): check Atlas's Vendus user can see documents` });
     if (res.status === 404) return err({ code: "not_found", message: "Vendus has no such document" });
     if (res.status === 429) return err({ code: "too_many", message: "Vendus says too many requests; try again later" });
     return err({ code: "api", message: `Vendus answered ${res.status}` });

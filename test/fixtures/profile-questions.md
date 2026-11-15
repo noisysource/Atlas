@@ -24,7 +24,7 @@ doesn't say" for the second list. No guessing.
 | What's my car's plate? | AA-00-BB |
 | Quando faz anos a minha filha? | 2 de setembro (answered in Portuguese) |
 
-## Not in the profile: Jarvis should say so
+## Not in the profile: Atlas should say so
 
 | Question | Expected |
 |---|---|

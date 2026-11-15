@@ -1,9 +1,9 @@
-// Claude Code working on a task (#191): Jarvis is the PM, Claude Code does the work.
+// Claude Code working on a task (#191): Atlas is the PM, Claude Code does the work.
 //
 // Unlike a code question or a fix, a task runs Claude Code the way Renato
 // runs it himself: with the repo's own setup (its CLAUDE.md, skills and
 // agents: settingSources ["project"]) and Claude Code's own system prompt,
-// plus a short note on how Jarvis manages it. The session is kept and
+// plus a short note on how Atlas manages it. The session is kept and
 // resumed for every follow-up, so Claude Code remembers its own work.
 //
 // It works on its own copy of the repo (data/tasks/<id>/repo), never on
@@ -14,7 +14,7 @@
 //   without anything that talks to a remote);
 // - no web tools, no MCP servers, no leaving the copy.
 // git runs with no global or system config (so no stored credentials) and no
-// hooks: the agent can commit, but only Jarvis pushes, after Renato's OK.
+// hooks: the agent can commit, but only Atlas pushes, after Renato's OK.
 
 import { realpath } from "node:fs/promises";
 import path from "node:path";
@@ -55,7 +55,7 @@ const PLAN_TOOLS = ["TodoWrite", "Task", "Agent", "ExitPlanMode"];
 
 /** Every tool call a task's Claude Code makes passes here. */
 export const taskToolAllowed = async (root: string, tool: string, input: Record<string, unknown>, resolve: (p: string) => Promise<string> = realpath): Promise<{ readonly ok: boolean; readonly why?: string }> => {
-  if (tool.startsWith("mcp__")) return { ok: false, why: "No MCP servers in Jarvis's tasks." };
+  if (tool.startsWith("mcp__")) return { ok: false, why: "No MCP servers in Atlas's tasks." };
   if (PLAN_TOOLS.includes(tool)) return { ok: true };
   if (tool === "Bash") {
     const command = typeof input.command === "string" ? input.command : "";
@@ -68,14 +68,14 @@ export const taskToolAllowed = async (root: string, tool: string, input: Record<
     const normalised = tool === "NotebookEdit" ? { ...input, file_path: input.notebook_path } : input;
     return (await insideRepo(root, mapped, normalised, resolve, "change")) ? { ok: true } : { ok: false, why: "Only files inside this task's copy, and never .git or .github." };
   }
-  return { ok: false, why: `${tool} isn't available in Jarvis's tasks.` };
+  return { ok: false, why: `${tool} isn't available in Atlas's tasks.` };
 };
 
 /** What Claude Code is told, on top of its own prompt and the repo's CLAUDE.md. */
 export const TASK_NOTE = [
-  "You're working on a task for Renato, managed by Jarvis, his personal assistant. Jarvis relays Renato's instructions and brings him your reports.",
+  "You're working on a task for Renato, managed by Atlas, his personal assistant. Atlas relays Renato's instructions and brings him your reports.",
   "You're in your own copy of the repository, on the task's branch. Follow the repository's CLAUDE.md and STATUS.md conventions as you would for Renato.",
-  "Commit your work on this branch as you go (git add, git commit -m). Don't push, open pull requests or deploy: Jarvis does that after Renato's OK. You can't reach remotes.",
+  "Commit your work on this branch as you go (git add, git commit -m). Don't push, open pull requests or deploy: Atlas does that after Renato's OK. You can't reach remotes.",
   'Write commit messages with plain -m flags, one per paragraph, never $(...) or a heredoc: git commit -m "type(scope): subject" -m "Body." -m "Co-Authored-By: …" (up to four -m; no double quotes, backticks, $ or backslashes inside).',
   "You can run package installs, tests, typecheck, lint and build, one command at a time, without pipes, redirection or cd. If you need anything else, say what and why in your report.",
   "Keep the app's STATUS.md current, as the repository asks.",
@@ -139,11 +139,11 @@ export const makeTaskRunner = (deps: { readonly model?: string; readonly query?:
           GIT_CONFIG_COUNT: "1",
           GIT_CONFIG_KEY_0: "core.hooksPath",
           GIT_CONFIG_VALUE_0: "/dev/null",
-          GIT_AUTHOR_NAME: "Jarvis",
-          GIT_AUTHOR_EMAIL: "jarvis@users.noreply.github.com",
-          GIT_COMMITTER_NAME: "Jarvis",
-          GIT_COMMITTER_EMAIL: "jarvis@users.noreply.github.com",
-          CLAUDE_AGENT_SDK_CLIENT_APP: "jarvis",
+          GIT_AUTHOR_NAME: "Atlas",
+          GIT_AUTHOR_EMAIL: "atlas@users.noreply.github.com",
+          GIT_COMMITTER_NAME: "Atlas",
+          GIT_COMMITTER_EMAIL: "atlas@users.noreply.github.com",
+          CLAUDE_AGENT_SDK_CLIENT_APP: "atlas",
         },
       },
     })) {

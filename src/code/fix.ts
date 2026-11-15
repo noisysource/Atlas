@@ -8,7 +8,7 @@
 //      or .github, and it can't run anything), and the change is staged. The
 //      page shows the diff and asks "Open the pull request" / "Throw it away".
 //      Nothing has left this Mac yet.
-//   3. On "Open the pull request": a commit on a new branch jarvis/fix-…,
+//   3. On "Open the pull request": a commit on a new branch atlas/fix-…,
 //      pushed (never to the default branch, never forced), and a draft pull
 //      request. Nothing is ever merged here.
 //
@@ -193,7 +193,7 @@ export const makeFixes = (deps: {
       question: [
         `Fix this problem${folder ? ` in the app in ${folder}` : ""}.`,
         `Title: ${title}`,
-        "Problem (data, as Jarvis described it):",
+        "Problem (data, as Atlas described it):",
         problem,
       ].join("\n"),
       maxTurns: deps.maxTurns,
@@ -263,7 +263,7 @@ export const makeFixes = (deps: {
       // #181: the issue it closes must be an open issue in that repo (not a pull request).
       if (r.issue) {
         const res = await doFetch(`https://api.github.com/repos/${r.owner}/${r.name}/issues/${r.issue}`, {
-          headers: { authorization: `Bearer ${token}`, accept: "application/vnd.github+json", "x-github-api-version": "2022-11-28", "user-agent": "jarvis" },
+          headers: { authorization: `Bearer ${token}`, accept: "application/vnd.github+json", "x-github-api-version": "2022-11-28", "user-agent": "atlas" },
         }).catch(() => undefined);
         const found = res?.ok ? ((await res.json().catch(() => ({}))) as { state?: unknown; pull_request?: unknown }) : undefined;
         if (!found || found.pull_request !== undefined || found.state !== "open") {
@@ -296,7 +296,7 @@ export const makeFixes = (deps: {
         return { ok: true, text: "Thrown away: nothing was pushed." };
       }
       const env = fixGitEnv(job.token);
-      const branch = `jarvis/fix-${slug(r.title)}-${id.slice(0, 6)}`;
+      const branch = `atlas/fix-${slug(r.title)}-${id.slice(0, 6)}`;
       const body = [
         ...(r.issue ? [`Closes #${r.issue}`, ""] : []),
         maskEmails(r.problem),
@@ -305,7 +305,7 @@ export const makeFixes = (deps: {
         job.view.summary ?? "(no summary)",
         "",
         "---",
-        `Prepared by Jarvis's code agent after Renato's OK, and reviewed as a diff before this pull request was opened. It wasn't run or tested: check it before merging.`,
+        `Prepared by Atlas's code agent after Renato's OK, and reviewed as a diff before this pull request was opened. It wasn't run or tested: check it before merging.`,
       ].join("\n");
       const failed = (text: string, code: string) => {
         deps.log?.warn("code fix publish failed", { id: id.slice(0, 6), repo: job.view.repo, step: code });
@@ -313,7 +313,7 @@ export const makeFixes = (deps: {
       };
       const commit = await deps.run(
         "git",
-        ["-c", "user.name=Jarvis", "-c", "user.email=jarvis@users.noreply.github.com", "commit", "--quiet", "--no-verify", "-m", r.title, "-m", maskEmails(job.view.summary ?? r.problem).slice(0, 3000)],
+        ["-c", "user.name=Atlas", "-c", "user.email=atlas@users.noreply.github.com", "commit", "--quiet", "--no-verify", "-m", r.title, "-m", maskEmails(job.view.summary ?? r.problem).slice(0, 3000)],
         { cwd: job.dir, env },
       );
       if (commit.code !== 0) return failed("I couldn't commit the change, so nothing was pushed.", "commit");
@@ -323,7 +323,7 @@ export const makeFixes = (deps: {
       const open = async (draft: boolean) =>
         doFetch(`https://api.github.com/repos/${r.owner}/${r.name}/pulls`, {
           method: "POST",
-          headers: { authorization: `Bearer ${job.token}`, accept: "application/vnd.github+json", "x-github-api-version": "2022-11-28", "user-agent": "jarvis", "content-type": "application/json" },
+          headers: { authorization: `Bearer ${job.token}`, accept: "application/vnd.github+json", "x-github-api-version": "2022-11-28", "user-agent": "atlas", "content-type": "application/json" },
           body: JSON.stringify({ title: r.title, head: branch, base: job.base, body, draft }),
         }).catch(() => undefined);
       let res = await open(true);

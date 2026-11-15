@@ -126,7 +126,7 @@ describe("listing and wording", () => {
   });
 });
 
-describe("asking Jarvis", () => {
+describe("asking Atlas", () => {
   it('"how much did we invoice this month?" reaches Vendus, read-only, with counts on the path', async () => {
     expect(groupsByWords("How much did we invoice this month?")).toContain("invoices");
     expect(groupsByWords("Quanto faturámos em outubro?")).toContain("invoices");

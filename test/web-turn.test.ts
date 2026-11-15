@@ -59,7 +59,7 @@ describe("chooseVoice (#82)", () => {
     expect(chooseVoice(kokoro(true))).toEqual({ server: { provider: "kokoro", voice: "bm_daniel" }, note: "" });
     expect(chooseVoice(kokoro(false))).toEqual({
       server: null,
-      note: "Kokoro isn't running at http://127.0.0.1:8880 (npm run voice:up), so Jarvis is using the browser voice.",
+      note: "Kokoro isn't running at http://127.0.0.1:8880 (npm run voice:up), so Atlas is using the browser voice.",
     });
     expect(chooseVoice({ provider: "browser", voice: "", providers: [] })).toEqual({ server: null, note: "" });
     expect(chooseVoice({ ...kokoro(true), voice: "" }).note).toContain("No kokoro voice is set");
@@ -246,7 +246,7 @@ describe("makeTurnDetector (#75)", () => {
     expect(events).toContain("max");
   });
 
-  it("while Jarvis talks, interrupts only on enough speech, then listens to it", () => {
+  it("while Atlas talks, interrupts only on enough speech, then listens to it", () => {
     const vad = makeTurnDetector({ bargeIn: "vad" });
     expect(feed(vad, [...frames(0.9, 128), 0.1], true)).not.toContain("barge-in"); // a cough
     const barge = feed(vad, frames(0.9, 224), true);

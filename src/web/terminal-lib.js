@@ -13,7 +13,7 @@ export const atEnd = (top, height, total, slack = FOLLOW_SLACK) => total - (top 
 export const clock = (d) => `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
 
 /** Who said a line, by the message's kind. @param {string} kind */
-export const speaker = (kind) => (kind === "user" ? "Renato" : kind === "error" ? "Jarvis (error)" : kind === "handoff" ? "Jarvis (handoff)" : "Jarvis");
+export const speaker = (kind) => (kind === "user" ? "Renato" : kind === "error" ? "Atlas (error)" : kind === "handoff" ? "Atlas (handoff)" : "Atlas");
 
 /**
  * The whole conversation as plain text, ready to paste.

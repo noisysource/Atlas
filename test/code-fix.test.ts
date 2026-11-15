@@ -163,12 +163,12 @@ describe("preparing and publishing a fix", () => {
     const done = await fixes.publish(id, "yes");
     expect(done).toMatchObject({ ok: true, url: "https://github.com/noisysource/noisysource/pull/42" });
     const push = git.ran.find((r) => r.args.includes("push"));
-    expect(push?.args).toEqual(["push", "--quiet", "origin", "HEAD:refs/heads/jarvis/fix-fix-timeout-in-billing-cutoff-aaaaaa"]);
+    expect(push?.args).toEqual(["push", "--quiet", "origin", "HEAD:refs/heads/atlas/fix-fix-timeout-in-billing-cutoff-aaaaaa"]);
     expect(push?.args.join(" ")).not.toMatch(/--force|-f\b|refs\/heads\/main/);
     const commit = git.ran.find((r) => r.args.includes("commit"));
     expect(commit?.args).toContain("--no-verify");
     expect(posted[0]?.url).toBe("https://api.github.com/repos/noisysource/noisysource/pulls");
-    expect(posted[0]?.body).toMatchObject({ title: request.title, head: "jarvis/fix-fix-timeout-in-billing-cutoff-aaaaaa", base: "main", draft: true });
+    expect(posted[0]?.body).toMatchObject({ title: request.title, head: "atlas/fix-fix-timeout-in-billing-cutoff-aaaaaa", base: "main", draft: true });
     expect(String(posted[0]?.body.body)).toContain("It wasn't run or tested");
     expect(removed).toHaveLength(1);
     expect(fixes.view(id)?.status).toBe("published");

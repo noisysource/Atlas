@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Starts Jarvis's local voice services (#73), bound to 127.0.0.1 only, and
+# Starts Atlas's local voice services (#73), bound to 127.0.0.1 only, and
 # waits until they answer. Ctrl-C stops them all.
 #
 #   Kokoro-FastAPI  http://127.0.0.1:8880   (KOKORO_PORT)

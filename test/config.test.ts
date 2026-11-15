@@ -69,7 +69,7 @@ describe("loadConfig", () => {
     });
   });
 
-  it("chooses Jarvis's voice, with its services on this machine only", () => {
+  it("chooses Atlas's voice, with its services on this machine only", () => {
     expect(loadOk({ TTS_PROVIDER: "kokoro", TTS_VOICE: "bm_george", KOKORO_URL: "http://localhost:9000" }).tts).toMatchObject({
       provider: "kokoro",
       voice: "bm_george",
@@ -132,19 +132,21 @@ describe("loadConfig", () => {
   });
 
   it("runs the local brain on Ollama on this machine only (#88)", () => {
-    const c = loadOk({ OLLAMA_MODEL: "qwen3:8b", OLLAMA_URL: "http://localhost:11500", BARE_MODE: "on", PROFILE: "on", JARVIS_USER_NAME: "Alex" });
+    const c = loadOk({ OLLAMA_MODEL: "qwen3:8b", OLLAMA_URL: "http://localhost:11500", BARE_MODE: "on", PROFILE: "on", ATLAS_USER_NAME: "Alex" });
     expect(c.models.local).toEqual({ provider: "ollama", model: "qwen3:8b" });
     expect(c.ollamaUrl).toEqual(new URL("http://localhost:11500"));
     expect(c.bareMode).toBe(true);
     expect(c.bareProfile).toBe(true); // the profile back in bare mode (#98)
     expect(c.userName).toBe("Alex");
+    // #205: the name from before the rename still works.
+    expect(loadOk({ OLLAMA_MODEL: "qwen3:8b", OLLAMA_URL: "http://localhost:11500", BARE_MODE: "on", PROFILE: "on", JARVIS_USER_NAME: "Alex" }).userName).toBe("Alex");
     for (const [name, value] of [
       ["OLLAMA_URL", "http://192.168.1.5:11434"],
       ["OLLAMA_URL", "https://ollama.example.com"],
       ["OLLAMA_MODEL", "llama 3"],
       ["BARE_MODE", "yes"],
       ["PROFILE", "yes"],
-      ["JARVIS_USER_NAME", "<script>"],
+      ["ATLAS_USER_NAME", "<script>"],
     ] as const) {
       const bad = loadConfig({ [name]: value });
       expect(!bad.ok && bad.error, `${name}=${value}`).toContain(`${name}: `);
@@ -165,9 +167,9 @@ describe("loadConfig", () => {
   });
 
   it("chooses where memories live", () => {
-    expect(loadOk({ MEMORY_DB: "/var/lib/jarvis/memory.sqlite" }).memoryStore).toEqual({
+    expect(loadOk({ MEMORY_DB: "/var/lib/atlas/memory.sqlite" }).memoryStore).toEqual({
       kind: "sqlite",
-      path: "/var/lib/jarvis/memory.sqlite",
+      path: "/var/lib/atlas/memory.sqlite",
     });
     expect(loadOk({ MEMORY_STORE: "memory" }).memoryStore).toEqual({ kind: "memory" });
     // Production keeps memories in RAM until Firestore (#24), unless told otherwise (e.g. on the Pi).
@@ -188,7 +190,7 @@ describe("loadConfig", () => {
       ANSWER_MODEL: " anthropic:claude-opus-5-5 ",
       CONTEXTS_PATH: "config/contexts.md",
       PROFILE_SOURCE: "file:/secrets/profile.md",
-      GOOGLE_CLOUD_PROJECT: "jarvis-prod",
+      GOOGLE_CLOUD_PROJECT: "atlas-prod",
       ANTHROPIC_SECRET_NAME: "claude-key",
       VENDUS_SECRET_NAME: "vendus-api-key",
     });
@@ -198,7 +200,7 @@ describe("loadConfig", () => {
       models: { answer: { provider: "anthropic", model: "claude-opus-5-5" } },
       contextsPath: "config/contexts.md",
       profileSource: { kind: "file", path: "/secrets/profile.md" },
-      secrets: { gcpProject: "jarvis-prod", anthropicSecretName: "claude-key", vendusSecretName: "vendus-api-key" },
+      secrets: { gcpProject: "atlas-prod", anthropicSecretName: "claude-key", vendusSecretName: "vendus-api-key" },
     });
   });
 

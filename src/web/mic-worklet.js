@@ -2,9 +2,9 @@
 // The mic's audio thread (#74): passes the raw samples to the page about
 // every 20 ms. Nothing is kept here.
 //
-// The one class in Jarvis: the Web Audio API only accepts a subclass of
+// The one class in Atlas: the Web Audio API only accepts a subclass of
 // AudioWorkletProcessor here (registerProcessor needs a constructor whose
-// prototype has process()). It holds no Jarvis logic; that's in mic-lib.js.
+// prototype has process()). It holds no Atlas logic; that's in mic-lib.js.
 
 // eslint-disable-next-line no-restricted-syntax -- registerProcessor requires an AudioWorkletProcessor subclass
 class CaptureProcessor extends AudioWorkletProcessor {
@@ -37,4 +37,4 @@ class CaptureProcessor extends AudioWorkletProcessor {
   }
 }
 
-registerProcessor("jarvis-capture", CaptureProcessor);
+registerProcessor("atlas-capture", CaptureProcessor);

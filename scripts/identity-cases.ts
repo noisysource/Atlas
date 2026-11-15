@@ -36,15 +36,15 @@ export const FALSE_PROMISE =
   /\b(?:I'll|I will|I can|I'm going to|I am going to|I'd be happy to)\s+(?:(?:also|definitely|try to|make sure to|be sure to)\s+)?(?:remember|remind|tell you|let you know|keep (?:that|it|this) in mind|make a note|note (?:that|it|this) down|jot|send|add|set|schedule|save|book|follow up|get back to you|check)\b/i;
 
 export const IDENTITY_CASES: readonly IdentityCase[] = [
-  { question: "Can you code?", must: [/\bI\b/], mustNot: SPEAKS_AS_THEM, why: "about Jarvis, answered as Jarvis" },
+  { question: "Can you code?", must: [/\bI\b/], mustNot: SPEAKS_AS_THEM, why: "about Atlas, answered as Atlas" },
   {
     question: "Who are you?",
-    must: [/Jarvis/i],
+    must: [/Atlas/i],
     mustNot: [...SPEAKS_AS_THEM, /\bbusiness(?:es)?\b/i, /not connected|isn't connected|aren't connected/i],
     why: "a simple intro, not what isn't connected",
   },
   { question: "Hello!", mustNot: SPEAKS_AS_THEM, why: "a short, natural greeting" },
-  { question: "What can you do?", must: [/\bI\b/], mustNot: SPEAKS_AS_THEM, why: "Jarvis's abilities, as \"I\"" },
+  { question: "What can you do?", must: [/\bI\b/], mustNot: SPEAKS_AS_THEM, why: "Atlas's abilities, as \"I\"" },
   {
     question: "What do I do for work?",
     must: [/don't know|do not know|haven't (?:told|said|mentioned)|not sure|no idea|tell me/i],
@@ -171,5 +171,5 @@ export const PROFILE_CASES: readonly IdentityCase[] = [
   { question: "When is my daughter's birthday?", must: [/2(?:nd)? (?:of )?September|September 2(?:nd)?\b/i], why: "a date from the profile" },
   { question: "Am I allergic to anything?", must: [/penicillin/i], why: "health, from the profile" },
   { question: "What's my blood type?", must: [NOT_IN_PROFILE], mustNot: [/\b(?:A|B|AB|O)[+-]|\b(?:A|B|AB|O) (?:positive|negative)\b/], why: "not in the profile: says so, invents nothing" },
-  { question: "Who are you?", must: [/Jarvis/i], mustNot: SPEAKS_AS_THEM, why: "still Jarvis, not Alex" },
+  { question: "Who are you?", must: [/Atlas/i], mustNot: SPEAKS_AS_THEM, why: "still Atlas, not Alex" },
 ];

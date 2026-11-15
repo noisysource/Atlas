@@ -1,4 +1,4 @@
-// The reasoning trace (#143): what Jarvis did for one answer, as a tree that
+// The reasoning trace (#143): what Atlas did for one answer, as a tree that
 // grows while he works: brain → Tools → the tool → the service → the account
 // (with what came back). Pure: brain.js draws it.
 //

@@ -69,7 +69,7 @@ describe("the house, worded", () => {
   });
 });
 
-describe("asking Jarvis", () => {
+describe("asking Atlas", () => {
   it('"is the heating on?" reads the state document, read-only', async () => {
     expect(groupsByWords("Is the heating on?")).toContain("house");
     expect(groupsByWords("Quanto solar estamos a produzir?")).toContain("house");

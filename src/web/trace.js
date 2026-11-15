@@ -1,5 +1,5 @@
 // The reasoning trace (#143), drawn: a tree that grows left to right while
-// Jarvis works (brain → Tools → tool → service → account · result) and
+// Atlas works (brain → Tools → tool → service → account · result) and
 // stays until the next question. States come from trace-lib.js.
 
 import { EMPTY_TRACE, settleTrace, traceOfPath, traceReach, traceStep, traceTree } from "./trace-lib.js";
@@ -25,7 +25,7 @@ export const makeTraceView = (root) => {
 
   /** @type {Trace} */
   let trace = EMPTY_TRACE;
-  let brain = "Jarvis";
+  let brain = "Atlas";
   let working = false;
   /** Parts already on screen: only new ones pop in. @type {Set<string>} */
   let seen = new Set();

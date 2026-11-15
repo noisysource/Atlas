@@ -192,8 +192,8 @@ describe("voices", () => {
   });
 
   it("remembers the voice per language", () => {
-    expect(voiceKey("en")).toBe("jarvis.voice.en");
-    expect(voiceKey("pt")).toBe("jarvis.voice.pt");
+    expect(voiceKey("en")).toBe("atlas.voice.en");
+    expect(voiceKey("pt")).toBe("atlas.voice.pt");
   });
 });
 
@@ -269,7 +269,7 @@ describe("conversation mode", () => {
     "OK, that's all, thank you",
     "obrigado, é tudo",
     "é tudo, obrigado",
-    "Jarvis, stop",
+    "Atlas, stop",
     "ok stop",
   ])("%j stops listening", (text) => {
     expect(isStopPhrase(text)).toBe(true);
@@ -377,7 +377,7 @@ describe("voice only in voice mode (#102)", () => {
 
 describe("the voice note (#102)", () => {
   it("shows only when the voice is actually used for the turn", () => {
-    const note = "Kokoro isn't running, so Jarvis is using the browser voice.";
+    const note = "Kokoro isn't running, so Atlas is using the browser voice.";
     expect(voiceNoteVisible({ note, voiceInUse: true })).toBe(true);
     expect(voiceNoteVisible({ note, voiceInUse: false })).toBe(false); // a typed, text-only turn
     expect(voiceNoteVisible({ note: "", voiceInUse: true })).toBe(false);

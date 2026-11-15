@@ -63,7 +63,7 @@ type QueryFn = (params: { prompt: string; options: Record<string, unknown> }) =>
  * - "subscription": Claude Code's own login on this Mac (`claude`, then /login
  *   with his Claude account). No API key is passed, so it runs on his plan.
  *   His own questions only: guests never reach the code agent this way.
- * - "api-key": the Anthropic API key Jarvis already has.
+ * - "api-key": the Anthropic API key Atlas already has.
  * - "auto": the subscription, and the API key if there's no login.
  */
 export type CodeAuth = "subscription" | "api-key" | "auto";
@@ -81,7 +81,7 @@ export const makeClaudeCodeAgent = (deps: { readonly apiKey?: string; readonly a
     let result: Record<string, unknown> | undefined;
     let keySource: unknown;
     let session: string | undefined;
-    // Only what Claude Code needs to start and find its login; never Jarvis's other settings.
+    // Only what Claude Code needs to start and find its login; never Atlas's other settings.
     const base = Object.fromEntries(
       (["PATH", "HOME", "USER", "LOGNAME", "TMPDIR"] as const).flatMap((k) => (process.env[k] ? [[k, process.env[k] ?? ""]] : [])),
     ) as Record<string, string>;
@@ -110,7 +110,7 @@ export const makeClaudeCodeAgent = (deps: { readonly apiKey?: string; readonly a
             PATH: "/usr/bin:/bin",
             ...base,
             ...(withKey && deps.apiKey ? { ANTHROPIC_API_KEY: deps.apiKey } : {}),
-            CLAUDE_AGENT_SDK_CLIENT_APP: "jarvis",
+            CLAUDE_AGENT_SDK_CLIENT_APP: "atlas",
           },
         },
       })) {
@@ -186,7 +186,7 @@ export const makeClaudeCodeAgent = (deps: { readonly apiKey?: string; readonly a
           // Resuming re-sends everything it read, so this costs about as much as one more step over the whole lot.
           maxBudgetUsd: wrapUpBudget(q.maxUsd),
           ...(deps.model ? { model: deps.model } : {}),
-          env: { PATH: "/usr/bin:/bin", ...base, ...(withKey && deps.apiKey ? { ANTHROPIC_API_KEY: deps.apiKey } : {}), CLAUDE_AGENT_SDK_CLIENT_APP: "jarvis" },
+          env: { PATH: "/usr/bin:/bin", ...base, ...(withKey && deps.apiKey ? { ANTHROPIC_API_KEY: deps.apiKey } : {}), CLAUDE_AGENT_SDK_CLIENT_APP: "atlas" },
         },
       })) {
         const m = message as Record<string, unknown>;

@@ -60,7 +60,7 @@ const oneLine = (s: string, max: number): string =>
     .trim()
     .slice(0, max + 1);
 
-/** Checks the brain's draft. `isEc`: the EC precheck, so EC mail is never written by Jarvis. */
+/** Checks the brain's draft. `isEc`: the EC precheck, so EC mail is never written by Atlas. */
 export const checkDraftRequest = (value: unknown, isEc: (text: string) => boolean): Result<DraftRequest, string> => {
   if (typeof value !== "object" || value === null) return err("not understood");
   const v = value as Record<string, unknown>;
@@ -109,7 +109,7 @@ export type GmailWriter = {
   readonly draft: (d: DraftRequest, original?: { readonly threadId: string; readonly messageId: string; readonly references: string }) => Promise<Result<SavedDraft, CalendarError>>;
   /** Sends a saved draft: only after his "Send it". */
   readonly send: (account: GmailAccount, draftId: string) => Promise<Result<{ readonly messageId: string }, CalendarError>>;
-  /** #124: deletes a draft Jarvis wrote, only after his "Delete it". Drafts only: never a sent or received email. */
+  /** #124: deletes a draft Atlas wrote, only after his "Delete it". Drafts only: never a sent or received email. */
   readonly discard?: (account: GmailAccount, draftId: string) => Promise<Result<undefined, CalendarError>>;
 };
 
@@ -127,7 +127,7 @@ export const makeGmailWriter = (deps: { readonly accessToken: (account: GmailAcc
       return err({ code: "network", message: "Couldn't reach Gmail" });
     }
     if (res.status === 401 || res.status === 403)
-      return err({ code: "auth", message: `Gmail refused (${res.status}): connect ${account} again with write access (GMAIL_WRITE=on npm run gmail:connect -- ${account}), then restart Jarvis` });
+      return err({ code: "auth", message: `Gmail refused (${res.status}): connect ${account} again with write access (GMAIL_WRITE=on npm run gmail:connect -- ${account}), then restart Atlas` });
     if (!res.ok) return err({ code: "api", message: `Gmail answered ${res.status}` });
     return ok(await res.json().catch(() => ({})));
   };
@@ -148,7 +148,7 @@ export const makeGmailWriter = (deps: { readonly accessToken: (account: GmailAcc
         return err({ code: "network", message: "Couldn't reach Gmail" });
       }
       if (res.status === 401 || res.status === 403)
-        return err({ code: "auth", message: `Gmail refused (${res.status}): connect ${account} again with write access (GMAIL_WRITE=on npm run gmail:connect -- ${account}), then restart Jarvis` });
+        return err({ code: "auth", message: `Gmail refused (${res.status}): connect ${account} again with write access (GMAIL_WRITE=on npm run gmail:connect -- ${account}), then restart Atlas` });
       if (res.status === 404) return err({ code: "api", message: "That draft isn't in Gmail any more" });
       if (!res.ok) return err({ code: "api", message: `Gmail answered ${res.status}` });
       return ok(undefined);
@@ -200,7 +200,7 @@ export const makePendingDrafts = (deps: { readonly now?: () => number; readonly 
 export type PendingDrafts = ReturnType<typeof makePendingDrafts>;
 
 /**
- * #124: the drafts Jarvis wrote since he started, by a short ref the brain
+ * #124: the drafts Atlas wrote since he started, by a short ref the brain
  * can name ("delete that draft"). In memory, a day at most. Only these can
  * be deleted: never a draft he didn't write, never other email.
  */

@@ -1,19 +1,19 @@
-# Jarvis — Plan & Architecture
+# Atlas — Plan & Architecture
 
-Jarvis is a personal AI orchestrator. It answers questions, works out which
+Atlas is a personal AI orchestrator. It answers questions, works out which
 **context** a question belongs to (from `contexts.md`), asks when it can't
 tell, and answers each context with the data and tools listed for it.
 
-Work is tracked in GitHub Issues and the **Jarvis** project board
+Work is tracked in GitHub Issues and the **Atlas** project board
 (Backlog → To Do → In Progress → Review → Done). Every PR closes an issue.
 
 ## Milestones
 
 | Milestone | Goal | Label |
 |---|---|---|
-| **M0: talk to Jarvis** | Chat page with voice, run locally; answers questions about you from your profile | `m0` |
-| **Voice** (proof of concept, English) | A real spoken conversation, all local except Claude: ~1.5 s from the end of your sentence to Jarvis's first audio, and you can interrupt it (#72–#76) | `voice` |
-| v0: KidClub invoices | Read-only Vendus tool; Cloud Run deploy | `after-m0`, `jarvis-v0` |
+| **M0: talk to Atlas** | Chat page with voice, run locally; answers questions about you from your profile | `m0` |
+| **Voice** (proof of concept, English) | A real spoken conversation, all local except Claude: ~1.5 s from the end of your sentence to Atlas's first audio, and you can interrupt it (#72–#76) | `voice` |
+| v0: KidClub invoices | Read-only Vendus tool; Cloud Run deploy | `after-m0`, `atlas-v0` |
 | After v0 | Memory in Firestore (#24) and its performance (#56), phone access (#19; Pi + Tailscale #53), daily brief (#49), local speech (#54), local models via Ollama (#55) | `after-v0`, `backlog` |
 
 ## Contexts
@@ -26,15 +26,15 @@ edit, not a code change.
 | `personal` | answer | Your profile, `data/profile.md` (#25) |
 | `kidclub` | answer | Vendus, read-only (after M0; "not connected yet" in M0) |
 | `noisysource` | answer | None connected yet. **Invoicing the European Commission belongs here.** |
-| `ec-hrt` (European Commission / HRT) | **handoff to Kiro** | None. Jarvis replies that this is for Kiro (the EC's agent) and stops: no answer model, no tools, no memory. |
+| `ec-hrt` (European Commission / HRT) | **handoff to Kiro** | None. Atlas replies that this is for Kiro (the EC's agent) and stops: no answer model, no tools, no memory. |
 
 **Routing rule.** Anything that needs no context's data (greetings, small
-talk, thanks, general knowledge, questions about Jarvis) goes to `personal`
+talk, thanks, general knowledge, questions about Atlas) goes to `personal`
 and is answered normally. So do questions about your own day, schedule or
 to-dos ("what's on my plate today?"): until the daily brief (#49) exists,
-Jarvis says honestly that it can't see your calendar or tasks yet. Jarvis asks "which context?" only when a request
+Atlas says honestly that it can't see your calendar or tasks yet. Atlas asks "which context?" only when a request
 needs some context's data and it's ambiguous which ("did the invoice get
-paid?"). The personal answerer knows what Jarvis can do, from `contexts.md`. After
+paid?"). The personal answerer knows what Atlas can do, from `contexts.md`. After
 a clarify, the page treats a reply that names an offered context (name, id
 or `Aliases` from `contexts.md`; case, accents and spacing ignored) as
 picking it, with no model call; anything else is a new question. Only one
@@ -55,7 +55,7 @@ means a sales commission.
 ## Request flow (M0)
 
 ```
-Chat page (GET /)                         Hono server (npm run jarvis / dev, localhost)
+Chat page (GET /)                         Hono server (npm run atlas / dev, localhost)
  ├ text box / mic (SpeechRecognition)      POST /ask { question, context?, history[] }
  ├ history[] in page memory only   ───────►  precheck(question)            ← cues in contexts.md, no model
  │                                           ├ EC cue + invoicing word → noisysource
@@ -85,7 +85,7 @@ question, and after a clarify response it re-sends the question with
   stubs. Library objects (Anthropic SDK client, Secret Manager client) are
   consumed, never defined.
 - **Never guess the context.** Ambiguous → ask.
-- **Never guess facts about you.** If the profile doesn't say, Jarvis says so.
+- **Never guess facts about you.** If the profile doesn't say, Atlas says so.
 - **Local server, no login, so other sites are kept out:** outside
   production it only accepts `Host: 127.0.0.1:<port>` or `localhost:<port>`
   (403 otherwise; blocks DNS rebinding), and `POST /ask` requires
@@ -124,7 +124,7 @@ question, and after a clarify response it re-sends the question with
 | `src/sentences.ts` | Streaming sentence splitter, language as a parameter | #72 |
 | `src/tts/*` | `TtsProvider` (text, language, voice → streamed 16-bit mono PCM): Kokoro (Kokoro-FastAPI), Piper, browser | #73 |
 | `src/tts-routes.ts` | `GET /tts` (providers and voices), `POST /speak` (streamed PCM; Host + JSON guards; no text in logs) | #73 |
-| `src/local-url.ts` | Local service URLs must be loopback, or Jarvis won't start | #73 |
+| `src/local-url.ts` | Local service URLs must be loopback, or Atlas won't start | #73 |
 | `src/web/audio.js`, `src/web/voices.*` | PCM player for /speak; the dev-only /voices audition page | #73 |
 | `src/stt/*` | `SttProvider` (16 kHz mono WAV, language → text): whisper.cpp's server | #74 |
 | `src/stt-routes.ts` | `GET /stt` (ready?), `POST /transcribe` (audio/wav only, 2 MB, Host guard; audio never stored, transcripts never logged) | #74 |
@@ -184,7 +184,7 @@ start without a profile. Only the `personal` answerer sees it.
 
 **Chat page (M0).** One HTML page and one JS file served by Hono, no build
 step, no external scripts. English by default with a `pt-PT` toggle.
-Listening and Jarvis's voice are local since the Voice milestone (below); the
+Listening and Atlas's voice are local since the Voice milestone (below); the
 browser voice is the fallback. The browser voice is picked automatically (exact
 region first, then Premium > Enhanced > Natural/Neural/Online, then the system
 default), with a voice menu whose choice is remembered per language in
@@ -193,7 +193,7 @@ localStorage. Conversation history lives only in the page.
 **Conversation mode (M0, #51; turn manager #75).** A toggle, on by default
 and remembered. With it on, one press of the mic opens a spoken
 conversation that stays open; with it off, the mic closes after one
-question's answer. Listening resumes 0.4 s after Jarvis finishes speaking.
+question's answer. Listening resumes 0.4 s after Atlas finishes speaking.
 The conversation ends after ~8 s of silence, on a whole-utterance stop
 phrase ("that's all", "stop", "obrigado", "é tudo" and small variants; not
 sent to the server), on Stop or Escape, or when you type.
@@ -341,7 +341,7 @@ and no conversation content is logged.
   for ~100 ms starts an utterance. Below 0.35 for `VOICE_END_OF_TURN_MS`
   (default 500) ends it, which sends the WAV from 320 ms before speech to
   ~200 ms after. 8 s of nothing ends the conversation; ~55 s is the most.
-  **Barge-in:** while Jarvis thinks or speaks only an interruption is looked
+  **Barge-in:** while Atlas thinks or speaks only an interruption is looked
   for. `vad`: ≥ 0.5 for 200 ms. `strict`: ≥ 0.85 for 450 ms, the Safari
   default, since its echo cancellation is weaker. `push`: the mic is
   ignored; ✋ Interrupt or Space. Set per browser with `BARGE_IN_CHROME`,
@@ -351,7 +351,7 @@ and no conversation content is logged.
   sentences, then the cut one up to the share played, ending in "—". That
   goes into history and the playback report, and the interruption is the
   start of the next utterance. Talking again within 4 s of your turn ending,
-  before Jarvis has started speaking, cancels that question and sends the
+  before Atlas has started speaking, cancels that question and sends the
   whole utterance instead. The phase line (Listening / Thinking / Speaking,
   text plus colour, read out) says how to interrupt.
 
@@ -371,8 +371,8 @@ gives the labels. An Ollama error carries a message the page can show
 spoken, gets the local EC precheck (a handoff goes to Kiro with no model
 call), then the selected brain with **only** the history and a short
 persona (`src/answer/bare.ts`):
-- "You are Jarvis, (`JARVIS_USER_NAME`)'s personal assistant": "I" is
-  Jarvis, the person is "you". The name comes from the gitignored `.env`,
+- "You are Atlas, (`ATLAS_USER_NAME`)'s personal assistant": "I" is
+  Atlas, the person is "you". The name comes from the gitignored `.env`,
   never the code.
 - It knows nothing of their life beyond the conversation.
 - The conversational style: 1–3 sentences unless asked, react first, a
@@ -382,7 +382,7 @@ No classifier, no contexts, no profile, no memory reads or writes, no held
 turn. With Local selected, nothing reaches Claude. `npm run eval:identity`
 checks who is who and the style on both brains.
 
-The bare persona lists what Jarvis can actually do: only talk. No calendar,
+The bare persona lists what Atlas can actually do: only talk. No calendar,
 reminders, notes, email, web or tools. It says so when asked, and never
 claims to have done one. `eval:identity` covers those cases too. It's
 informational: more than 4 sentences is a warning, and it exits 0 unless
@@ -429,7 +429,7 @@ piece Kokoro speaks is tiny and starts at once.
   opening more than half the replies fails). False promises after a
   refusal fail every ability case.
 
-**Milestone "Conversation"** (now): talking to Jarvis should feel like
+**Milestone "Conversation"** (now): talking to Atlas should feel like
 talking to a person, tuned on the free local brain (`qwen3:8b`), keeping
 the current architecture.
 1. Bare mode on Ollama with `think: false`, and the real abilities in the
@@ -480,7 +480,7 @@ the current architecture.
    bare persona also gets `data/profile.md`, re-read when it changes.
    - It has the personal answerer's who-is-who rules, and says so when the
      profile doesn't say (never guesses).
-   - The name comes from `JARVIS_USER_NAME`, or else the profile's
+   - The name comes from `ATLAS_USER_NAME`, or else the profile's
      `Name:` line.
    - Still no memory, contexts or classifier.
    - `eval:identity --profile` uses the made-up example profile, never
@@ -508,7 +508,7 @@ the current architecture.
      - **The date read is always stated**, worded by code: the answer
        opens with "Looking at Wednesday 11 November." (streamed first,
        outside the spoken sentence limit; no opening reaction then).
-     - **Retry:** a bare "yes" after Jarvis offered to try again, or a
+     - **Retry:** a bare "yes" after Atlas offered to try again, or a
        bare "try again", repeats the last calendar question with a real
        read. The prompt says that without events at its end, nothing was
        read: never claim what's on or whether it can be reached.
@@ -575,7 +575,7 @@ the current architecture.
    contexts and the classifier, each behind its own switch and checked
    with the evals.
 
-**Milestone "Reach"** (now, from 10 Nov 2026): make Jarvis useful first,
+**Milestone "Reach"** (now, from 10 Nov 2026): make Atlas useful first,
 built and tested with **Claude as the reference brain**. If something fails
 with Claude, it's the code; local brains (Qwen) are measured afterwards
 with the evals, to see which jobs they can take. One PR at a time:
@@ -605,7 +605,7 @@ with the evals, to see which jobs they can take. One PR at a time:
      never checked, though every answer came from a real read.
    - The honesty guard stays a narrow safety net. Its calendar-claims check
      (built for the local brain, which invented calendar contents) is **off
-     for Claude**: it kept dropping true answers, e.g. about an event Jarvis
+     for Claude**: it kept dropping true answers, e.g. about an event Atlas
      had just added. Fake actions, promises and perception are still dropped
      for every brain. For Local, calendar claims pass when a read (or an add)
      ran this turn, or earlier in the conversation and the question names no
@@ -623,7 +623,7 @@ with the evals, to see which jobs they can take. One PR at a time:
      "Add to your calendar: “Work”, Wednesday 11 November, 21:00–22:00?",
      with **Add it** / **Don't add**.
    - Only **Add it** (`POST /calendar/confirm`) creates the event, with the
-     one non-GET calendar call. Jarvis's reply is worded by code from
+     one non-GET calendar call. Atlas's reply is worded by code from
      Google's answer ("Added “Work” on Wednesday 11 November,
      21:00–22:00.") and goes into the history with its tool record.
    - The honesty guard still drops "I've added it" from the model: a
@@ -655,7 +655,7 @@ with the evals, to see which jobs they can take. One PR at a time:
      is worded by code from Gmail's answer (it must say SENT). A draft
      isn't "an action succeeded", so "I've sent it" is always dropped.
      Needs `gmail.compose` (`GMAIL_WRITE=on npm run gmail:connect -- …`).
-4. **Skills:** saved playbooks that use tools (the Jarvis Builder backlog).
+4. **Skills:** saved playbooks that use tools (the Atlas Builder backlog).
 5. Later: Vendus, the daily brief (#49), phone access.
 
 Kept as they are: EC → Kiro (precheck and the EC event filter), your OK
@@ -791,11 +791,11 @@ each behind its own switch and checked with evals.
 | Layer | Holds | Lasts | Today |
 |---|---|---|---|
 | **Working** | This conversation: the messages and the tool calls that really ran for each answer | The conversation | Done (#104): the page sends each answer's tool record; the prompt lists it |
-| **Short-term** (#107) | Things just said or done: "Duarte has football tomorrow", a dated log of what Jarvis did (dates and counts only) | Days, then they expire | Partly: dated one-off memories and 30-day history lines |
+| **Short-term** (#107) | Things just said or done: "Duarte has football tomorrow", a dated log of what Atlas did (dates and counts only) | Days, then they expire | Partly: dated one-off memories and 30-day history lines |
 | **Long-term** | Stable facts and preferences | Until changed or deleted | The SQLite memory and the profile |
 | **Routine** (#108) | How things are done: playbooks, later learned skills | Until changed | Playbooks; skills in the Builder backlog |
 
-**Built (#107, `MEMORY=on`, Claude's tools).** Jarvis remembers and recalls
+**Built (#107, `MEMORY=on`, Claude's tools).** Atlas remembers and recalls
 by himself, and code enforces every memory rule (the same `filterSuggestions`
 as before):
 - `memory_remember` (text, short or long term, fact or routine, context,
@@ -813,7 +813,7 @@ as before):
   memory yet (no tool calling).
 
 **Introspection (#108, built; `INTROSPECTION=on`, decided by Renato):** every
-night at 03:30 Lisbon time, while Jarvis runs (or now, with
+night at 03:30 Lisbon time, while Atlas runs (or now, with
 `npm run memory:reflect`), faded memories are purged, then the answer model
 (Claude) reviews up to 60 short-term memories, with when each fades and
 whether it was recalled, next to up to 80 long-term ones. For each it decides:
@@ -828,9 +828,9 @@ whether it was recalled, next to up to 80 long-term ones. For each it decides:
 - The report (`data/introspection/<date>.md`, mode 600, gitignored, refused
   by CI) lists what changed. Logs carry counts only.
 - Next: a log of tool sequences, so repeated procedures can be spotted from
-  what Jarvis did, not only from what he noted.
+  what Atlas did, not only from what he noted.
 
-**Skills (#116, built, with `MEMORY=on`):** routines Jarvis follows.
+**Skills (#116, built, with `MEMORY=on`):** routines Atlas follows.
 - A skill is text: a title, when to use it, and up to 12 short steps using
   tools he already has. It can't add powers; actions still need Renato's OK.
   Rules in code: sensible lengths, never secrets, never EC work.
@@ -854,7 +854,7 @@ existing tools). Nothing becomes permanent without Renato's OK. New tools
 (code) are never built automatically: the Builder can only draft a PR.
 
 **Never stored:** what tools fetch (calendar, email). It goes stale, so it's
-read again. Memory keeps what Renato said and what Jarvis did.
+read again. Memory keeps what Renato said and what Atlas did.
 
 The existing memory rules carry over to every layer: EC never, secrets never,
 sensitive details only on an explicit "remember", deletes are real.
@@ -870,7 +870,7 @@ browser in the logs, sticky context decided with real numbers).
 
 Done: #1 decisions · #2 scaffold · #3 CI
 
-**M0: talk to Jarvis** (one PR per issue)
+**M0: talk to Atlas** (one PR per issue)
 1. #4 types → #22 contexts.md → #5 config → #6 secrets (+ local `.env`)
 2. #10 LLM interface → #25 profile → #11 classifier → #13 personal answerer
 3. #23 memory hook stubs → #14 ask handler → #26 M0 ask flow
@@ -880,7 +880,7 @@ Done: #1 decisions · #2 scaffold · #3 CI
 #17 Dockerfile → #18 Cloud Run deploy guide.
 
 Backlog after M0 (labels in brackets):
-- #53 Run Jarvis on the Raspberry Pi with Tailscale for phone access
+- #53 Run Atlas on the Raspberry Pi with Tailscale for phone access
   [`infra`, `backlog`]: a private alternative to Cloud Run (#17, #18).
   systemd service; `tailscale serve` for HTTPS (the mic needs it) on the
   Pi's tailnet name; an `ALLOWED_HOSTS` setting for the Host guard (#44);
@@ -905,7 +905,7 @@ deployment.
 
 ## Roadmap: four phases to a demo
 
-Agreed 13 Nov 2026. The goal: Jarvis solves Renato's own problem first
+Agreed 13 Nov 2026. The goal: Atlas solves Renato's own problem first
 (one assistant across the businesses, the money and the house), and that
 daily use becomes the pitch. Each phase is a GitHub milestone; the order
 inside a phase is the build order. Voice is used daily, so its fixes can
@@ -934,7 +934,7 @@ be pulled forward at any time.
    #168 tools as plug-ins: one core, connectors swapped per person or
    country.
 4. **Proof and pitch.**
-   #169 hours saved, counted by Jarvis · #170 demo, video and one-page
+   #169 hours saved, counted by Atlas · #170 demo, video and one-page
    memo · #171 easy questions to the local model (idea from OpenJarvis;
    only once there is data) · #55 #129 local brains.
 
@@ -962,7 +962,7 @@ Confirmed for M0 (2026-11-06):
   local dev only; the cloud uses Secret Manager.
 - **Speech:** English by default, `pt-PT` toggle; best installed voice by
   default, with a remembered voice menu (#48).
-- **Conversation mode:** on by default; the mic reopens after Jarvis speaks,
+- **Conversation mode:** on by default; the mic reopens after Atlas speaks,
   stops on ~8 s silence, a stop phrase or a tap (#51).
 - **Personality:** warm and conversational, natural spoken length instead of
   a sentence limit (#48).
@@ -976,14 +976,14 @@ Confirmed for M0 (2026-11-06):
 
 Confirmed for the page (2026-11-11):
 
-- **Brain view (#130–#134):** the page shows Jarvis as a core with nodes
+- **Brain view (#130–#134):** the page shows Atlas as a core with nodes
   around it (Profile, Memory, Skills, Calendar, Gmail, GitHub, Google Cloud, Code agent,
   Kiro). A line goes to a node only when a real path step reaches it (live
   `reach`/`step` events, then the final path): blue while reaching and when
   used, amber while an action waits for Renato's OK, red and short when it
   failed. Nodes become the controls (panels, badges). Browser first, built
   responsive so it works on a phone later; no animation when reduced motion
-  is set. Mockup: the "Jarvis brain UI" artifact.
+  is set. Mockup: the "Atlas brain UI" artifact.
 
 Confirmed (2026-11-12):
 
@@ -1020,7 +1020,7 @@ Confirmed (2026-11-12):
 - **Vendus (#7, #8, #9):** KidClub's invoices, read-only, as a tool group
   (`invoices`: `vendus_invoices` for a period's totals with and without
   VAT, by month and type; `vendus_invoice` for one). Two locks: a Vendus
-  user of Jarvis's own with the fewest rights, and a GET-only client with a
+  user of Atlas's own with the fewest rights, and a GET-only client with a
   two-path, five-field allowlist (`src/vendus/vendus.ts`). Contract in
   `docs/vendus.md`. The old "KidClub answerer" design (#12) is replaced by
   this tool group: the same answerer, routing and trace as everything else.
@@ -1035,33 +1035,33 @@ Confirmed (2026-11-12):
 
 - **The blinds, after an OK (#166, part 2):** the blinds are Legrand,
   behind the Netatmo API, which only the domotics app's Cloud Functions
-  reach, so Jarvis calls those functions (`legrandGetHome` for names and
+  reach, so Atlas calls those functions (`legrandGetHome` for names and
   rooms, `legrandGetStatus` for positions, `legrandSetState` to move), not
   the bridge's `domotics_commands` queue (Tuya only). He signs in as his own
   Firebase Auth user (email and password in `data/house/firebase.json`,
   local only), the way the Pi bridge does: no service-account key, and the
   functions decide who may call them (the monorepo's change, made as a
-  Jarvis coding task, lets in the owner and Jarvis only). `house_blinds`
+  Atlas coding task, lets in the owner and Atlas only). `house_blinds`
   proposes; a card ("Move them" / "Leave them") moves them, one
   `legrandSetState` call for all, 0 closed and 100 open; an OK lasts ten
   minutes; at most 20 moves an hour in code. Lights and heating next, the
   same way.
 
-- **Google Cloud (#161):** Jarvis (not the code agent) reads errors and
+- **Google Cloud (#161):** Atlas (not the code agent) reads errors and
   logs, read-only, from Cloud Logging. Each environment is a project and a
   read-only service account (`jarvis-read`, Logs Viewer only) named in
   `data/gcloud/<env>.json`; access grows by connecting environments, dev
   first, prod last. No key is stored (the organisation blocks service
   account keys): `gcloud` on the Mac gives a 30-minute token of that
   account by impersonation, so read-only rests on that account's single
-  role, and Jarvis never holds Renato's own login. Errors are
+  role, and Atlas never holds Renato's own login. Errors are
   `severity>=ERROR` or anything on stderr (`console.error` arrives with
   no severity). The filter is built in code from checked values; email
   addresses are masked. Two tools: `gcloud_errors`
   (grouped) and `gcloud_logs`.
 - **The database (#167, dev):** the apps keep their best error records in
   Firestore, so the same account also gets Cloud Datastore Viewer and
-  Jarvis three reading tools (`gcloud_db_collections`, `gcloud_db_query`,
+  Atlas three reading tools (`gcloud_db_collections`, `gcloud_db_query`,
   `gcloud_db_get`). Renato chose the whole dev database rather than a
   list of collections. Code builds every query from checked values,
   makes reading calls only, caps and cuts what comes back, masks email
@@ -1080,7 +1080,7 @@ Confirmed (2026-11-12):
   It reads a shallow copy in `data/repos/` with Read/Grep/Glob only, every
   call path-checked to stay inside the copy, the repo's settings and hooks
   not loaded, and a cost and turn cap per question.
-- **Studying code (#127):** Jarvis learns a repo once, with a high ceiling,
+- **Studying code (#127):** Atlas learns a repo once, with a high ceiling,
   in the background (monorepo: top level, then each app), and keeps a note
   per repo or app in his own code-knowledge store (`data/code/`), not in
   the profile or the personal memory. Each note has prose plus a small map
@@ -1090,8 +1090,8 @@ Confirmed (2026-11-12):
   (apps, modules, services, data, outside), lines for connections, pick a
   part to see its links, path and one-line description. The page gets the
   maps only (`GET /code/maps`), never the notes' text.
-- **Jarvis as PM (#191):** Claude Code keeps the code's context (the
-  repo's CLAUDE.md, STATUS.md, its sessions and agents); Jarvis keeps the
+- **Atlas as PM (#191):** Claude Code keeps the code's context (the
+  repo's CLAUDE.md, STATUS.md, its sessions and agents); Atlas keeps the
   work: a task list in `data/tasks/tasks.json` (status, session id, branch,
   last report, PR). A task runs Claude Code with `settingSources:
   ["project"]` and its own preset prompt plus a short note (report as
@@ -1127,7 +1127,7 @@ Confirmed (2026-11-12):
   with a separate write token, the agent in "change" mode: Read, Grep,
   Glob, Edit, Write, path-checked to the copy, never `.git` or `.github`,
   no shell); he sees the diff; the second commits (hooks off,
-  `--no-verify`), pushes `HEAD:refs/heads/jarvis/fix-<slug>-<id>` (never
+  `--no-verify`), pushes `HEAD:refs/heads/atlas/fix-<slug>-<id>` (never
   the default branch, never forced) and opens a draft PR (a normal one if
   the plan has no drafts). The diff is shown before anything leaves the
   Mac because a pushed branch can run CI with the repo's secrets. A fix

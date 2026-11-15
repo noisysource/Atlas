@@ -1,4 +1,4 @@
-// Connects a Google Calendar to Jarvis (#100), once per account, on this Mac.
+// Connects a Google Calendar to Atlas (#100), once per account, on this Mac.
 //
 //   npm run calendar:connect                  your personal Google account
 //   npm run calendar:connect -- noisysource   Noisy Source's Google account (#137)
@@ -13,9 +13,9 @@
 //    127.0.0.1 for the answer. Allow read access to your calendar's events.
 // 3. The refresh token is saved to data/google-tokens.json for personal, or
 //    data/google-calendar-<account>.json (gitignored, readable only by you).
-//    Then set CALENDAR=on and restart Jarvis.
+//    Then set CALENDAR=on and restart Atlas.
 //
-// To let Jarvis add events (always after your OK), connect with write access:
+// To let Atlas add events (always after your OK), connect with write access:
 //
 //   CALENDAR_WRITE=on npm run calendar:connect [-- noisysource]
 //
@@ -62,7 +62,7 @@ const write = process.env.CALENDAR_WRITE === "on";
 const scope = write ? CALENDAR_WRITE_SCOPE : CALENDAR_SCOPE;
 const url = authorizationUrl({ clientId: oauthClient.clientId, redirectUri, challenge, state, scope });
 console.log(`Connecting the "${account}" calendar. On Google's screen, pick that account.`);
-console.log(write ? "Asking for read and add access to its events (Jarvis adds only after your OK).\n" : "Asking for read-only access to its events.\n");
+console.log(write ? "Asking for read and add access to its events (Atlas adds only after your OK).\n" : "Asking for read-only access to its events.\n");
 
 console.log("Opening Google's sign-in in your browser. If it doesn't open, visit:\n");
 console.log(`  ${url}\n`);
@@ -75,9 +75,9 @@ const code = await new Promise<string>((resolve) => {
     const params = new URL(req.url ?? "/", redirectUri).searchParams;
     const page = (text: string) => {
       res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
-      res.end(`<!doctype html><meta charset="utf-8"><title>Jarvis</title><p style="font:16px system-ui;margin:2rem">${text}</p>`);
+      res.end(`<!doctype html><meta charset="utf-8"><title>Atlas</title><p style="font:16px system-ui;margin:2rem">${text}</p>`);
     };
-    if (params.get("state") !== state) return page("This isn't the sign-in Jarvis started. Close this tab.");
+    if (params.get("state") !== state) return page("This isn't the sign-in Atlas started. Close this tab.");
     const error = params.get("error");
     if (error) {
       page("Access wasn't allowed. You can close this tab.");
@@ -101,7 +101,7 @@ const granted = tokens.ok ? tokens.value.scope.split(" ") : [];
 if (write) {
   console.log(
     granted.includes(CALENDAR_WRITE_SCOPE)
-      ? "✓ Write access granted: Jarvis can add events, always after your OK."
+      ? "✓ Write access granted: Atlas can add events, always after your OK."
       : "✗ Write access was NOT granted (the box for editing events was probably unticked on Google's screen). Run this again and tick it.",
   );
 }
@@ -115,4 +115,4 @@ const read = makeGoogleCalendarReader({
 const today = localDate(new Date(), config.timeZone);
 const events = await read({ from: today, to: today });
 console.log(events.ok ? `✓ Read today's ${account} calendar: ${events.value.length} event(s).` : `✗ Reading it failed: ${events.error.message}`);
-console.log(`\nNow put CALENDAR=on${write ? " and CALENDAR_WRITE=on" : ""} in .env (with BARE_MODE=on) and restart Jarvis: a running Jarvis keeps using the old connection until it restarts.`);
+console.log(`\nNow put CALENDAR=on${write ? " and CALENDAR_WRITE=on" : ""} in .env (with BARE_MODE=on) and restart Atlas: a running Atlas keeps using the old connection until it restarts.`);

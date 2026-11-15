@@ -60,7 +60,7 @@ export const parseTokensFile = (text: string): Result<StoredTokens, string> => {
   } catch {
     /* falls through */
   }
-  return err("isn't a Jarvis tokens file");
+  return err("isn't a Atlas tokens file");
 };
 
 /** PKCE: a random verifier and its S256 challenge. */

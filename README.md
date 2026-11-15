@@ -1,4 +1,4 @@
-# Jarvis
+# Atlas
 
 A personal AI orchestrator. Architecture, milestones and decisions are in
 [`PLAN.md`](PLAN.md); contexts are in [`contexts.md`](contexts.md).
@@ -24,7 +24,7 @@ Requires Node 22.13 or later (the memory store uses `node:sqlite`, which needs a
    set `GOOGLE_CLOUD_PROJECT` to read the key from Secret Manager with your
    `gcloud auth application-default login` credentials.
 
-3. Create your profile. Jarvis answers questions about you only from this
+3. Create your profile. Atlas answers questions about you only from this
    file, and it won't start without it:
 
    ```bash
@@ -72,13 +72,13 @@ Requires Node 22.13 or later (the memory store uses `node:sqlite`, which needs a
 5. Start everything with one command:
 
    ```bash
-   npm run jarvis
+   npm run atlas
    ```
 
    It starts the voice services (if they're set up and not already running),
    checks Ollama, starts the server and opens the page, all in one terminal
-   with each line marked `[voice]` or `[jarvis]`. Ctrl-C stops everything.
-   `npm run jarvis -- --no-voice` skips the voice services; `--no-open`
+   with each line marked `[voice]` or `[atlas]`. Ctrl-C stops everything.
+   `npm run atlas -- --no-voice` skips the voice services; `--no-open`
    doesn't open the browser. For coding, `npm run dev` starts just the
    server and restarts it when a file changes.
 
@@ -92,22 +92,22 @@ Requires Node 22.13 or later (the memory store uses `node:sqlite`, which needs a
    System Settings → Accessibility → Spoken Content → System voice → Manage
    Voices; reload the page after downloading one.
    **Conversation mode** (💬, on by default): once you've asked something by
-   voice, the mic reopens by itself after Jarvis finishes speaking, and a red
-   "Listening" banner shows while it's open. It never listens while Jarvis is
+   voice, the mic reopens by itself after Atlas finishes speaking, and a red
+   "Listening" banner shows while it's open. It never listens while Atlas is
    talking. It stops after about 8 seconds of silence, when you say "that's
    all", "stop", "obrigado" or "é tudo", or when you tap ■ Stop. Typed
    questions never open the mic. If the browser won't reopen the mic without a
    tap, a note says so and you use 🎤 Speak as usual.
-   When Jarvis asks which context you mean, tap a button or just type or
+   When Atlas asks which context you mean, tap a button or just type or
    say its name ("kid club", "pessoal"). The conversation lives only in
    the page: reload or "New conversation" clears it. Chrome's speech recognition sends audio to Google's speech
-   service and Safari's to Apple's; Jarvis itself uses no other services.
+   service and Safari's to Apple's; Atlas itself uses no other services.
 
    Memories are kept in `data/memory.sqlite` (gitignored, readable only by
    you; set `MEMORY_DB` to move it, or `MEMORY_STORE=memory` to keep them in
    RAM only). Deleting the file forgets everything.
 
-   To see what Jarvis remembers, open **Memories** on the chat page (a badge
+   To see what Atlas remembers, open **Memories** on the chat page (a badge
    counts new ones): delete any memory, or wipe a whole context. Turn off
    **🧠 Remembering** to keep the current conversation out of memory; it
    comes back on with New conversation. You can also ask "what do you
@@ -121,7 +121,7 @@ Requires Node 22.13 or later (the memory store uses `node:sqlite`, which needs a
    `wipe --context <id>` which asks you to confirm, and `export`, which
    prints JSON and writes no file).
 
-   Jarvis learns automatically after each answer, within rules it enforces
+   Atlas learns automatically after each answer, within rules it enforces
    in code: nothing about EC/HRT work, no secrets, no invoice data, and
    health, money or sensitive things about other people only when you say
    so ("remember", "take note", "lembra", "guarda", "não te esqueças",
@@ -132,7 +132,7 @@ Requires Node 22.13 or later (the memory store uses `node:sqlite`, which needs a
    say), copy `data/never-remember.example.txt` to `data/never-remember.txt`
    (gitignored) and list them, one per line.
 
-   **Jarvis's voice (optional, Mac with Apple silicon).** Jarvis can speak
+   **Atlas's voice (optional, Mac with Apple silicon).** Atlas can speak
    with a local voice instead of the browser's. Nothing goes to the cloud:
 
    ```bash
@@ -151,9 +151,9 @@ Requires Node 22.13 or later (the memory store uses `node:sqlite`, which needs a
    Then, with `npm run dev` running, open **http://localhost:8080/voices**:
    every voice reads the same five sentences and shows its time to first
    audio. Type your own sentence in the box to hear it in any voice
-   (pauses, dashes, CAPITALS); "Numbers in words" sends it the way Jarvis
+   (pauses, dashes, CAPITALS); "Numbers in words" sends it the way Atlas
    would. "Use this voice" shows two lines to put in `.env` (`TTS_PROVIDER`,
-   `TTS_VOICE`); restart Jarvis to use it. Kokoro's first start takes a
+   `TTS_VOICE`); restart Atlas to use it. Kokoro's first start takes a
    minute or two; until it's up, `/voices` says "Kokoro is starting" and
    refreshes by itself.
 
@@ -171,15 +171,15 @@ Requires Node 22.13 or later (the memory store uses `node:sqlite`, which needs a
    services listen on 127.0.0.1 only (Kokoro on 8880, Piper on 5001,
    Whisper on 8178). Kokoro and Piper log at warning level, so the text being
    spoken isn't logged; Whisper doesn't print what it heard and keeps the
-   audio in memory. Jarvis refuses to start if `KOKORO_URL`, `PIPER_URL` or
+   audio in memory. Atlas refuses to start if `KOKORO_URL`, `PIPER_URL` or
    `WHISPER_URL` points anywhere but this machine.
 
-   **Talking to Jarvis.** Press 🎤 Speak once and talk back and forth: the
+   **Talking to Atlas.** Press 🎤 Speak once and talk back and forth: the
    line above the box says **Listening**, **Thinking** or **Speaking**.
    - Your turn ends after half a second of silence (`VOICE_END_OF_TURN_MS`,
      200–3000, default 500). Say "that's all" or press Escape / ■ Stop to end
      the conversation; 8 s of silence ends it too.
-   - Jarvis answers in the configured voice (`TTS_PROVIDER` / `TTS_VOICE`,
+   - Atlas answers in the configured voice (`TTS_PROVIDER` / `TTS_VOICE`,
      e.g. `kokoro` / `bm_daniel`), sentence by sentence while the answer is
      still being written. If that service is down, the browser's voice
      speaks instead and a note says why.
@@ -195,7 +195,7 @@ Requires Node 22.13 or later (the memory store uses `node:sqlite`, which needs a
      `strict`: through laptop speakers it heard Daniel's own "Sure" and
      interrupted him. For the first 0.6 s of his voice, nothing interrupts
      him while echo cancellation settles. If an answer is interrupted,
-     Jarvis doesn't apologise or go back to it unless you ask.
+     Atlas doesn't apologise or go back to it unless you ask.
    - **Testing echo:** on the speakers, at your usual volume, ask something
      with a long answer and **stay silent** until he's done. The timing line
      ends with `echo peak 0.62, 96 ms ≥ 0.5`: the voice detector's highest
@@ -234,7 +234,7 @@ Requires Node 22.13 or later (the memory store uses `node:sqlite`, which needs a
      tells it to answer without thinking first, which is much quicker to
      start talking) and `OLLAMA_URL` (default
      `http://127.0.0.1:11434`, and it must be on this machine).
-   - Jarvis loads the model when it starts and asks Ollama to keep it loaded
+   - Atlas loads the model when it starts and asks Ollama to keep it loaded
      for 30 minutes, so turns don't wait for it to load. If Ollama isn't
      running, the answer says so.
    - The page only ever sends "local" or "claude": which model each one is
@@ -242,14 +242,14 @@ Requires Node 22.13 or later (the memory store uses `node:sqlite`, which needs a
    - The classifier, memory and the EC rules are unchanged.
    - **`BARE_MODE=on`: a bare conversation.** Every question, typed or
      spoken, goes straight to the brain you picked with only the
-     conversation so far and a short persona: "You are Jarvis, (your
+     conversation so far and a short persona: "You are Atlas, (your
      name)'s personal assistant", in the conversational style (1–3
      sentences, react first, a question back when it helps, no lists).
      - Only the local EC precheck runs first (EC still goes to Kiro, with
        no model).
      - No classifier, contexts, profile or memory, read or written. With
        Local selected, nothing at all goes to Claude.
-     - Put your name in your `.env` as `JARVIS_USER_NAME`; it's gitignored,
+     - Put your name in your `.env` as `ATLAS_USER_NAME`; it's gitignored,
        so it's never committed.
      - Profile, memory and contexts come back one at a time, each behind its
        own switch.
@@ -265,14 +265,14 @@ Requires Node 22.13 or later (the memory store uses `node:sqlite`, which needs a
      never splits a piece of speech. Capitals for emphasis aren't allowed
      yet: Kokoro says most all-caps words with extra stress, but spells out
      some short ones ("IT", "US"), so test them on `/voices` first.
-   - In bare mode Jarvis knows it can **only talk** for now: no calendar,
+   - In bare mode Atlas knows it can **only talk** for now: no calendar,
      reminders, notes, email, web or tools. Asked for one, it says so and
      offers to talk it through. It never claims to have done it.
    - **Honesty guard (#96), for every brain and every mode:** any sentence
      that claims an action ("I've added it", "Done"), promises one ("I'll
      remind you", "I'll remember") or claims to see or hear you ("you look
      tired") is dropped before it's shown or spoken, unless a tool really
-     ran and succeeded in that turn. If nothing useful is left, Jarvis
+     ran and succeeded in that turn. If nothing useful is left, Atlas
      says "I can't do that yet." It never says yes then no: when you ask
      it to do something, an opening "Sure." waits until the next sentence
      passes, so you get "Actually, I can't do that yet." instead. The log
@@ -280,7 +280,7 @@ Requires Node 22.13 or later (the memory store uses `node:sqlite`, which needs a
    - **`PROFILE=on` (with `BARE_MODE=on`): the profile back.** The brain
      also gets `data/profile.md`, so "Tell me about me" or "When is my
      daughter's birthday?" is answered from it. If it isn't in the profile,
-     Jarvis says so. Everything else is still bare: no memory, contexts or
+     Atlas says so. Everything else is still bare: no memory, contexts or
      classifier. With Claude selected, the profile goes to Anthropic; with
      Local, it stays on your Mac.
    - **`CALENDAR=on` (with `BARE_MODE=on`, on your Mac only): reading your
@@ -288,7 +288,7 @@ Requires Node 22.13 or later (the memory store uses `node:sqlite`, which needs a
      Friday?". It reads the primary calendar of each connected Google
      account: `personal`, and `noisysource` (#137), each connected
      separately. A read covers both unless you ask about one, every event
-     says which calendar it's from, and if one isn't connected Jarvis says
+     says which calendar it's from, and if one isn't connected Atlas says
      so instead of treating it as empty. Set it up once:
      1. In [Google Cloud](https://console.cloud.google.com/), enable the
         **Google Calendar API**. Create an **OAuth client ID** of type
@@ -323,13 +323,13 @@ Requires Node 22.13 or later (the memory store uses `node:sqlite`, which needs a
        plainly; EC items are named only as EC work.
        **Each morning (#177)** it's prepared at `BRIEF_AT` (default 07:30,
        your time) and waits as a card above the conversation until you
-       click **Got it**. If Jarvis wasn't running then, the first page load
+       click **Got it**. If Atlas wasn't running then, the first page load
        after it prepares one. It's kept for the day in `data/brief/`
        (gitignored). "Good morning" or "bom dia" also gets you the brief.
        `BRIEF_SCHEDULE=off` turns the morning card off.
      - **Only the tools a question needs (#175).** Tools come in groups
        (calendar, Gmail, GitHub, code, Google Cloud); memory and skills
-       are always there. Before Claude sees a question, Jarvis picks the
+       are always there. Before Claude sees a question, Atlas picks the
        groups from its words (English and Portuguese, and the names of
        the apps he has studied), from what the last answers used, and
        from a one-word pick by the small model (Haiku), asked in parallel
@@ -354,14 +354,14 @@ Requires Node 22.13 or later (the memory store uses `node:sqlite`, which needs a
      - **No claims without a read.** The honesty guard drops any statement
        about what's on your calendar ("your calendar is clear", "you have
        one event…") or about having checked it, unless the calendar was
-       really read in that turn. Jarvis then says "I haven't checked your
+       really read in that turn. Atlas then says "I haven't checked your
        calendar for that. Which day shall I look at?"
-     - **"Did you check?"** makes Jarvis read now and say truthfully
+     - **"Did you check?"** makes Atlas read now and say truthfully
        whether the earlier answer came from a read: "No, I hadn't checked
        before. I've checked now: looking at Wednesday 11 November. …"
-     - **Today.** Jarvis always knows today's date, weekday and time in
+     - **Today.** Atlas always knows today's date, weekday and time in
        Lisbon.
-     - **Memory (`MEMORY=on`, ☁️ Claude).** Jarvis remembers across
+     - **Memory (`MEMORY=on`, ☁️ Claude).** Atlas remembers across
        conversations, like a person: short-term things (plans, what
        happened) fade in about two weeks, or the day after a dated event;
        long-term facts and preferences last. He notes things himself and
@@ -369,7 +369,7 @@ Requires Node 22.13 or later (the memory store uses `node:sqlite`, which needs a
        and the 🧠 Memories panel lets you delete anything. Never secrets or
        EC work; health, money and others' private details only when you
        say "remember". "Off the record" keeps a conversation out.
-     - **Email drafts and sending (`GMAIL_WRITE=on`).** Ask Jarvis to write
+     - **Email drafts and sending (`GMAIL_WRITE=on`).** Ask Atlas to write
        or reply to an email: it's saved in your Gmail Drafts, and a card
        asks **Send it** / **Keep as draft**. Nothing is sent until you press
        Send it. Never to europa.eu or about EC work. Reconnect each account
@@ -377,12 +377,12 @@ Requires Node 22.13 or later (the memory store uses `node:sqlite`, which needs a
        `GMAIL_WRITE=on npm run gmail:connect -- personal` (and
        `noisysource`), then add `GMAIL_WRITE=on` to `.env`.
      - **Introspection (`INTROSPECTION=on`, with `MEMORY=on`).** Every
-       night at 03:30, while Jarvis runs, he reviews his short-term memory:
+       night at 03:30, while Atlas runs, he reviews his short-term memory:
        drops what's done, makes lasting things long-term, merges updates,
        and lets the rest fade. He may also draft skills and tools; those are
        only proposals. Run it now with `npm run memory:reflect`; the report
        is in `data/introspection/<date>.md` (readable only by you).
-     - **Skills (with `MEMORY=on`).** Routines Jarvis follows: say "make
+     - **Skills (with `MEMORY=on`).** Routines Atlas follows: say "make
        that a skill" (or let introspection draft them overnight), approve
        the card or use the ✨ Skills panel, and from then on he follows the
        steps when a request matches. A skill only uses tools he already has;
@@ -394,23 +394,23 @@ Requires Node 22.13 or later (the memory store uses `node:sqlite`, which needs a
        `npm run gmail:connect -- personal` and
        `npm run gmail:connect -- noisysource`, put `GMAIL=on` in `.env`
        and restart. Ask "anything from the school this week?" or "unread
-       at Noisy Source?". Jarvis can't send, delete or label; EC email shows
+       at Noisy Source?". Atlas can't send, delete or label; EC email shows
        only as "EC email, handled by Kiro".
      - **Vendus (`VENDUS=on`, ☁️ Claude), read-only.** KidClub's invoices:
        "how much did we invoice this month?", "quanto faturámos em
        outubro?", VAT for a quarter, one invoice. In Vendus, create a user
-       for Jarvis with the fewest rights (it only needs to see documents),
+       for Atlas with the fewest rights (it only needs to see documents),
        sign in as it, copy its API key (APPS → API), then
        `npm run vendus:connect` (it checks the key with one read and keeps
        it in `data/vendus.json`, gitignored, readable only by you), put
-       `VENDUS=on` in `.env` and restart. Jarvis can only GET two paths
+       `VENDUS=on` in `.env` and restart. Atlas can only GET two paths
        with it; he can't issue, change or cancel anything. Contract and
        checks: [docs/vendus.md](docs/vendus.md).
      - **The house (`HOUSE=on`, with `GCLOUD=on`), read-only.** "Is the
        heating on?", "why is the pump on?", "how much solar now?". The
        domotics bridge on the Pi publishes the house's state to the
        database of `HOUSE_ENV` (default `dev`, where it runs today), and
-       Jarvis reads that one document: the heating automation's own
+       Atlas reads that one document: the heating automation's own
        explanation and plan, room and outdoor temperatures, each
        thermostat, the heat pump, solar, battery, grid and consumption.
        If the bridge hasn't reported for 15 minutes he says so.
@@ -418,7 +418,7 @@ Requires Node 22.13 or later (the memory store uses `node:sqlite`, which needs a
        "Close the living room blinds", "abre as persianas do Duarte". A
        card shows which blinds and where they are now; they move only on
        "Move them" (an OK lasts ten minutes, at most 20 moves an hour).
-       Jarvis calls the domotics app's own functions (`legrandGetHome`,
+       Atlas calls the domotics app's own functions (`legrandGetHome`,
        `legrandGetStatus`, `legrandSetState`), signed in as his own
        Firebase Auth user, like the Pi bridge: in the domotics project's
        Firebase console add a user for him, then run
@@ -436,7 +436,7 @@ Requires Node 22.13 or later (the memory store uses `node:sqlite`, which needs a
        signed in, run `npm run gcloud:connect -- dev <project-id>` (it
        checks with one read and writes `data/gcloud/dev.json`: names only),
        put `GCLOUD=on` in `.env` and restart. Ask "what's failing in dev?".
-       Jarvis asks `gcloud` for a 30-minute token of `jarvis-read`, never
+       Atlas asks `gcloud` for a 30-minute token of `jarvis-read`, never
        your own login; builds the log filter himself; counts `console.error`
        output as errors (it arrives without a severity); and masks email
        addresses before the brain sees a line. To let him read the
@@ -453,12 +453,12 @@ Requires Node 22.13 or later (the memory store uses `node:sqlite`, which needs a
        statuses. Then `npm run github:connect -- <owner>` and paste it (it
        isn't shown or printed; it's saved to `data/github-tokens.json`,
        gitignored, readable only by you). Put `GITHUB=on` in `.env` and
-       restart. Ask "what's open on Jarvis?" or "is CI green on KidClub?".
-       Jarvis only reads (GET calls); repos that look like EC work show only
+       restart. Ask "what's open on Atlas?" or "is CI green on KidClub?".
+       Atlas only reads (GET calls); repos that look like EC work show only
        as "EC repo, handled by Kiro".
      - **Code agent (`CODE_AGENT=on`, with `GITHUB=on`, ☁️ Claude).** For
        questions that need the code itself ("how does memory expire in
-       Jarvis?"), Jarvis asks Claude Code. It reads a shallow local copy of
+       Atlas?"), Atlas asks Claude Code. It reads a shallow local copy of
        the repo in `data/repos/` (gitignored; cloned with your read-only
        token, which stays out of the URL and `.git/config`) and can only
        read and search inside it: no edits, no commands, no network, and the
@@ -467,7 +467,7 @@ Requires Node 22.13 or later (the memory store uses `node:sqlite`, which needs a
        `CODE_AGENT_MAX_TURNS` (default 25); the cost shows on the path and
        the trace.
 
-       **Studying (#127):** say "study the noisysource repo" and Jarvis
+       **Studying (#127):** say "study the noisysource repo" and Atlas
        studies it in the background, once and thoroughly (ceiling per repo
        or app: `CODE_STUDY_MAX_USD`, default 5, and `CODE_STUDY_MAX_TURNS`,
        default 150). In a monorepo he studies the top level, then each app.
@@ -492,7 +492,7 @@ Requires Node 22.13 or later (the memory store uses `node:sqlite`, which needs a
        for you only, never for guests. The trace shows "Claude plan" or the
        dollar cost for each question.
      - **Keeping the code notes current (#128).** Each night at 04:00 (and
-       a minute after starting, if the last check is a day old) Jarvis asks
+       a minute after starting, if the last check is a day old) Atlas asks
        GitHub, read-only, how many commits touched each studied app since
        he studied it. Stale notes are marked ("5 commits since") and he
        says so when he uses them. `CODE_REFRESH=check` (default) only
@@ -500,20 +500,20 @@ Requires Node 22.13 or later (the memory store uses `node:sqlite`, which needs a
        stale apps a night, most changed first, on your Claude plan; `off`
        turns it off. A whole monorepo's note counts as stale only after 20
        commits.
-     - **Coding tasks, with Jarvis as the PM (`CODE_TASKS=on`, with
+     - **Coding tasks, with Atlas as the PM (`CODE_TASKS=on`, with
        `CODE_AGENT=on`).** For anything bigger than a quick fix ("continue
-       the restructure", "add guest checkout to KidClub"), Jarvis proposes a
+       the restructure", "add guest checkout to KidClub"), Atlas proposes a
        task and you OK it. Claude Code then works on it the way you use it
        yourself, with the repo's own `CLAUDE.md`, skills and agents, in its
        own copy under `data/tasks/` (never your checkout), on a new
        `agent/…` branch off `staging`. It can run a short list of commands:
        package installs, tests, typecheck, lint, build and local git, one at
-       a time, with no pipes, `cd`, push or remotes. Jarvis keeps the list
+       a time, with no pipes, `cd`, push or remotes. Atlas keeps the list
        (status, last report, pull request) and passes your words on by
        resuming the same Claude Code session, so it remembers its own work.
        Pushing and opening the pull request into `staging` (which deploys a
        preview to dev), and closing a task, each ask your OK. The pull
-       request closes an issue: the one you name, or a new one Jarvis opens
+       request closes an issue: the one you name, or a new one Atlas opens
        from the task (the write token needs Issues: Read and write). Open tasks
        show above the conversation and in the morning brief.
        `CODE_TASK_MAX_USD` (3) and `CODE_TASK_MAX_TURNS` (80) cap each turn.
@@ -529,29 +529,29 @@ Requires Node 22.13 or later (the memory store uses `node:sqlite`, which needs a
        started, what's next, and what needs you: a pull request ready to
        merge, or a step the plan says you do by hand. Steps are matched to
        pull requests by "PR 3" in their title, branch or description, and
-       when the file's own Status column is behind GitHub, Jarvis says so.
+       when the file's own Status column is behind GitHub, Atlas says so.
        The morning brief gets a line per plan. The list is `data/plans.json`
        (gitignored); the read token needs Pull requests: Read-only.
      - **Fixes as pull requests (`CODE_FIX=on`, with `CODE_AGENT=on`).**
-       When Jarvis has found a problem and you want it fixed, he proposes
+       When Atlas has found a problem and you want it fixed, he proposes
        it (`code_fix`) and you get a card: **Prepare it** / **Not now**.
        On "Prepare it" the code agent makes the change on a fresh copy in
        `data/fixes/` (it can edit files there, never `.git` or `.github`,
        and can't run anything), and the card shows the diff: **Open the
        pull request** / **Throw it away**. Only that second OK pushes a new
-       `jarvis/fix-…` branch and opens a draft pull request. He never
+       `atlas/fix-…` branch and opens a draft pull request. He never
        pushes to the default branch, forces, merges or deploys. It needs a
        separate write token: `npm run github:connect -- noisysource --write`
        with Contents, Pull requests and Issues set to Read and write (not
        Workflows). `CODE_FIX_MAX_USD` (default 2) and `CODE_FIX_MAX_TURNS`
        (default 60) cap each fix.
        If there's an issue for the fix, he passes its number and the pull
-       request says `Closes #N` (Jarvis's own repo requires one); he checks
+       request says `Closes #N` (Atlas's own repo requires one); he checks
        it's an open issue in that repo before preparing anything.
        He can also close a pull request (`github_pr_close`), behind a
        **Close it** / **Keep it** card, with the same write token. It's
        never merged, and its branch is deleted only when it's one of his own
-       (`jarvis/…` in the same repo).
+       (`atlas/…` in the same repo).
      - **Adding events (`CALENDAR_WRITE=on`, ☁️ Claude).** Ask "add a
        meeting called Work tomorrow at 9pm". Claude proposes it; a card
        shows the event with **Add it** / **Don't add**, and nothing is
@@ -586,7 +586,7 @@ Requires Node 22.13 or later (the memory store uses `node:sqlite`, which needs a
      button for its plain text. "⧉ Copy all" copies the whole
      conversation as plain text, with who said what and when.
    - **A terminal.** The chat is a dark, monospace terminal: one line per
-     message (`renato ❯`, `jarvis ›`), no bubbles. On wide screens only
+     message (`renato ❯`, `atlas ›`), no bubbles. On wide screens only
      the conversation scrolls, with the input always in view; it follows
      new text while you're at the end and stays put while you scroll up.
      The morning brief folds to one line, task reports to two.
@@ -607,7 +607,7 @@ Requires Node 22.13 or later (the memory store uses `node:sqlite`, which needs a
    and `msAfterFirstAudio`. Numbers and fixed words only.
    **Speed (#76).** In development, each answer has a small timing line:
    end of turn · Whisper · classifier · Claude's first sentence · first audio ·
-   **total** (from when you stopped talking to Jarvis's first sound), with a
+   **total** (from when you stopped talking to Atlas's first sound), with a
    running median. The same numbers, and your browser, go to the server log
    as one `latency` line; never any of the text. The settings that matter:
    - `VOICE_THINKING=off` (default): spoken answers start without Claude
@@ -632,7 +632,7 @@ Requires Node 22.13 or later (the memory store uses `node:sqlite`, which needs a
      most turns. The caveat is like sticky context's: an EC question the
      precheck misses reaches the answer model before it's thrown away. The
      EC rule says it shouldn't, so it's your call.
-   - Jarvis warms its connection to Claude when it starts and when you
+   - Atlas warms its connection to Claude when it starts and when you
      start a spoken conversation (one fixed question to the classifier,
      nothing of yours), and keeps it open between turns. Every API attempt
      is logged as `anthropic http` with its status, time and whether it was
@@ -642,7 +642,7 @@ Requires Node 22.13 or later (the memory store uses `node:sqlite`, which needs a
      `WHISPER_MODEL=base.en npm run voice:setup`) to compare with
      `small.en`. `npm run voice:bench` times the running Kokoro and Whisper.
      `voice:up` warms both up, so the first turn isn't the slow one.
-   - **Fillers:** if Jarvis hasn't started speaking 800 ms after you stop, he
+   - **Fillers:** if Atlas hasn't started speaking 800 ms after you stop, he
      says a short "One moment." or "Let me think.". They're pre-rendered in
      his voice when the page loads, so they play at once. Never the same one
      twice in a row, never on two turns in a row, and never part of the

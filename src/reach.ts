@@ -1,4 +1,4 @@
-// What Jarvis can reach (#133): for the brain view's node panels, each node's
+// What Atlas can reach (#133): for the brain view's node panels, each node's
 // tools and, where there are accounts, which are connected. Read-only and
 // content-free: names, on/off and counts only; never a token, an address, a
 // title or a memory.
@@ -28,7 +28,7 @@ export type ReachNode = {
 
 export type ReachInput = {
   readonly config: Pick<Config, "bareMode" | "bareProfile" | "toolCalling" | "bareMemory" | "introspection" | "calendar" | "gmail" | "github" | "gcloud" | "vendus" | "house" | "codeAgent">;
-  /** Whether a token file exists: connected, as far as Jarvis can tell without calling Google. */
+  /** Whether a token file exists: connected, as far as Atlas can tell without calling Google. */
   readonly exists: (path: string) => Promise<boolean>;
   /** How many draft skills wait for review. */
   readonly draftSkills?: () => Promise<number>;
@@ -131,7 +131,7 @@ export const reachView = async (input: ReachInput): Promise<readonly ReachNode[]
         { name: "github_read", does: "read a file or list a folder" },
         { name: "github_issues", does: "list issues or pull requests" },
         { name: "github_checks", does: "CI results for a branch" },
-        ...(config.codeAgent.fix.enabled ? [{ name: "github_pr_close", does: "close a pull request, after your OK (deletes its branch if it's one of Jarvis's)" }] : []),
+        ...(config.codeAgent.fix.enabled ? [{ name: "github_pr_close", does: "close a pull request, after your OK (deletes its branch if it's one of Atlas's)" }] : []),
       ],
       accounts: githubOwners.map((name) => ({ name, connected: true })),
       ...(config.github.enabled ? (githubOwners.length === 0 ? { hint: "npm run github:connect -- <owner>" } : {}) : { hint: "GITHUB=on in .env" }),
@@ -203,7 +203,7 @@ export const reachView = async (input: ReachInput): Promise<readonly ReachNode[]
     {
       id: "kiro",
       status: "on",
-      about: "European Commission / HRT work goes to Kiro, the EC's agent. Jarvis replies with the handoff and does nothing else: no answer model, no tools, no memory.",
+      about: "European Commission / HRT work goes to Kiro, the EC's agent. Atlas replies with the handoff and does nothing else: no answer model, no tools, no memory.",
       tools: [],
     },
   ];

@@ -236,13 +236,13 @@ export const pickVoice = (voices, speechLang, preferredName) => {
 };
 
 /** localStorage key for the chosen voice, per language. @param {"en" | "pt"} language */
-export const voiceKey = (language) => `jarvis.voice.${language}`;
+export const voiceKey = (language) => `atlas.voice.${language}`;
 
 /** Conversation mode timings. */
 export const CONVERSATION = {
   /** Stop listening after this long without hearing anything. */
   silenceMs: 8000,
-  /** Pause between the end of Jarvis's speech and reopening the mic, so the tail of the audio isn't heard. */
+  /** Pause between the end of Atlas's speech and reopening the mic, so the tail of the audio isn't heard. */
   reopenDelayMs: 400,
 };
 
@@ -261,8 +261,8 @@ const STOP_PHRASES = new Set(
   ].map((p) => nameWords(p).join(" ")),
 );
 
-/** Polite words around a stop phrase ("thanks, that's all", "obrigado, é tudo", "Jarvis, stop"). */
-const STOP_FILLERS = new Set(["ok", "okay", "jarvis", "thanks", "thank", "you", "please", "obrigado", "obrigada", "muito", "pronto"]);
+/** Polite words around a stop phrase ("thanks, that's all", "obrigado, é tudo", "Atlas, stop"). */
+const STOP_FILLERS = new Set(["ok", "okay", "atlas", "thanks", "thank", "you", "please", "obrigado", "obrigada", "muito", "pronto"]);
 
 /**
  * Is this spoken reply a request to stop listening? Only the whole utterance

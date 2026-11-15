@@ -2,7 +2,7 @@
 // dialog. Pick a part to light up what it connects to and read what it is
 // and where it lives. Positions come from codemap-lib.js.
 //
-// Everything shown is from Jarvis's own note on the code (names, paths, one
+// Everything shown is from Atlas's own note on the code (names, paths, one
 // line each): set as text, never as HTML.
 
 import { connectionsOf, layoutMap, mapTitle, NODE_H, NODE_W } from "./codemap-lib.js";
@@ -68,7 +68,7 @@ export const makeCodeMapView = (dialog) => {
     scroll.replaceChildren();
     if (!current) return;
     title.textContent = mapTitle(current);
-    note.textContent = `From Jarvis's study on ${current.studiedAt.slice(0, 10)}${current.partial ? " (it hit its limit, so this may be incomplete)" : ""}. ${current.nodes.length} parts, ${current.edges.length} connections.`;
+    note.textContent = `From Atlas's study on ${current.studiedAt.slice(0, 10)}${current.partial ? " (it hit its limit, so this may be incomplete)" : ""}. ${current.nodes.length} parts, ${current.edges.length} connections.`;
     if (current.nodes.length === 0) {
       scroll.append(el("p", "codemap-hint", "This study didn't produce a map. Ask him to study it again."));
       drawDetail();
@@ -168,7 +168,7 @@ export const makeCodeMapView = (dialog) => {
       pick.hidden = maps.length < 2;
       if (!current) {
         title.textContent = "Code maps";
-        note.textContent = 'Nothing studied yet. Ask Jarvis to "study" a repo.';
+        note.textContent = 'Nothing studied yet. Ask Atlas to "study" a repo.';
         scroll.replaceChildren();
         detail.replaceChildren();
       } else draw();

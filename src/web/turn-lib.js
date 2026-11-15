@@ -31,7 +31,7 @@ export const parseSse = (buffer) => {
 };
 
 /**
- * What Jarvis actually said: the sentences played in full, then the one cut
+ * What Atlas actually said: the sentences played in full, then the one cut
  * off, up to the share of it that played (at a word boundary), ending in "—".
  * @param {readonly string[]} sentences
  * @param {{ full: number, cutFraction?: number }} played
@@ -57,12 +57,12 @@ export const spokenText = (sentences, played) => {
  * @returns {{ server: { provider: string, voice: string } | null, note: string }}
  */
 export const chooseVoice = (info) => {
-  if (!info || typeof info.provider !== "string") return { server: null, note: "Jarvis's voice settings couldn't be read, so it's using the browser voice." };
+  if (!info || typeof info.provider !== "string") return { server: null, note: "Atlas's voice settings couldn't be read, so it's using the browser voice." };
   if (info.provider === "browser") return { server: null, note: "" };
   const status = (info.providers ?? []).find((p) => p.id === info.provider);
-  if (!info.voice) return { server: null, note: `No ${info.provider} voice is set (TTS_VOICE), so Jarvis is using the browser voice.` };
+  if (!info.voice) return { server: null, note: `No ${info.provider} voice is set (TTS_VOICE), so Atlas is using the browser voice.` };
   if (!status?.available) {
-    return { server: null, note: `${status?.problem ?? `${info.provider} isn't available`}, so Jarvis is using the browser voice.` };
+    return { server: null, note: `${status?.problem ?? `${info.provider} isn't available`}, so Atlas is using the browser voice.` };
   }
   return { server: { provider: info.provider, voice: info.voice }, note: "" };
 };
@@ -89,7 +89,7 @@ export const phaseLabel = (phase, language, bargeIn = null) => {
 
 /**
  * How barge-in works in a browser (#75), set per browser in config:
- * "vad": speaking over Jarvis interrupts him (needs good echo cancellation);
+ * "vad": speaking over Atlas interrupts him (needs good echo cancellation);
  * "strict": the same, but it takes clearer, longer speech while he talks;
  * "push": the mic is ignored while he talks; tap Interrupt (or press Space).
  * @typedef {"vad" | "strict" | "push"} BargeInMode
@@ -110,7 +110,7 @@ export const browserFamily = (userAgent) => {
  * speech/silence: probabilities above / below which a frame is speech / quiet.
  * minSpeechMs: this much speech starts an utterance (a click or a cough doesn't).
  * endSilenceMs: this much quiet after speech ends the turn (config, default 500).
- * bargeIn: while Jarvis is speaking, per mode.
+ * bargeIn: while Atlas is speaking, per mode.
  */
 export const TURN = {
   frameMs: 32,
@@ -130,13 +130,13 @@ export const TURN = {
 /**
  * "quiet": nothing yet; "start": speech just started; "speech": still going;
  * "end": the turn ended (a pause after speech); "max": too long, ended;
- * "no-speech": nothing said for a while; "barge-in": you spoke over Jarvis.
+ * "no-speech": nothing said for a while; "barge-in": you spoke over Atlas.
  * @typedef {"quiet" | "start" | "speech" | "end" | "max" | "no-speech" | "barge-in"} TurnEvent
  */
 
 /**
  * Turns Silero's per-frame probabilities into turn events. `feed` takes the
- * frame's probability and whether Jarvis is talking (or thinking) right now:
+ * frame's probability and whether Atlas is talking (or thinking) right now:
  * then only barge-in is looked for, with that mode's thresholds; "push"
  * ignores the mic until `interrupt()`.
  *
@@ -176,12 +176,12 @@ export const makeTurnDetector = (options = {}) => {
   return {
     /**
      * @param {number} p Silero's probability for this frame
-     * @param {boolean} jarvisTalking
+     * @param {boolean} atlasTalking
      * @returns {TurnEvent}
      */
-    feed: (p, jarvisTalking) => {
+    feed: (p, atlasTalking) => {
       frame += 1;
-      if (jarvisTalking) {
+      if (atlasTalking) {
         // Only an interruption counts; the utterance it starts is listened to as usual.
         speechFrom = undefined;
         quietSince = frame;
@@ -221,7 +221,7 @@ export const makeTurnDetector = (options = {}) => {
     /** Push-to-interrupt, or Stop: listen afresh from now. */
     interrupt: () => listen(),
     /**
-     * You carried on talking after the turn ended (while Jarvis was still
+     * You carried on talking after the turn ended (while Atlas was still
      * thinking): treat it as one utterance, from where the last one began.
      * @param {number} fromFrame
      */
@@ -253,7 +253,7 @@ export const makeTurnDetector = (options = {}) => {
 
 /**
  * The numbers worth showing and logging, derived from a turn's timings.
- * total: from the end of your speech (or pressing Send) to Jarvis's first sound.
+ * total: from the end of your speech (or pressing Send) to Atlas's first sound.
  * @param {TurnTiming} t
  */
 export const timingStages = (t) => {
@@ -333,7 +333,7 @@ export const medianOf = (values) => {
 /** Short lines that cover a slow start. Never part of the answer, the history or memory. */
 export const FILLERS = ["Let me think.", "One moment.", "Hmm, good question.", "Let me see.", "Just a second."];
 
-/** A filler plays if Jarvis hasn't started this long after you stopped talking. */
+/** A filler plays if Atlas hasn't started this long after you stopped talking. */
 export const FILLER_AFTER_MS = 800;
 
 /**

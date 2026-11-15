@@ -2,7 +2,7 @@
 // "noisysource", each connected separately (npm run calendar:connect -- <account>).
 // A read covers every account asked for (all of them by default); each event
 // says which calendar it's from. An account that can't be read is reported,
-// never silently skipped, so Jarvis can say so.
+// never silently skipped, so Atlas can say so.
 
 import { err, ok, type Result } from "../result.js";
 import type { CalendarReader } from "./google.js";

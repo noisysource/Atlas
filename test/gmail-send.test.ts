@@ -197,7 +197,7 @@ describe("Claude drafts, Renato sends", () => {
   });
 });
 
-describe("deleting a draft Jarvis wrote (#124)", () => {
+describe("deleting a draft Atlas wrote (#124)", () => {
   it("DELETE on the draft only; a missing draft and a read-only connection are said plainly", async () => {
     const calls: { url: string; method: string | undefined }[] = [];
     const writer = makeGmailWriter({

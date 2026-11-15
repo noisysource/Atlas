@@ -1,4 +1,4 @@
-// Runs Jarvis's introspection now (#108), instead of waiting for 03:30.
+// Runs Atlas's introspection now (#108), instead of waiting for 03:30.
 //
 //   npm run memory:reflect
 //
@@ -21,7 +21,7 @@ if (!cfg.bareMemory) fail("Introspection needs MEMORY=on (with BARE_MODE=on) in 
 if (cfg.memoryStore.kind !== "sqlite") fail("Introspection needs the SQLite memory (MEMORY_STORE=sqlite, the default).");
 const store = cfg.memoryStore.kind === "sqlite" ? await openSqliteMemoryStore({ path: cfg.memoryStore.path }) : undefined;
 if (!store?.ok) fail(store && !store.ok ? store.error : "Couldn't open the memory database.");
-const log = makeJsonLogger({ fields: { service: "jarvis-reflect" } });
+const log = makeJsonLogger({ fields: { service: "atlas-reflect" } });
 const deps = await buildDeps({ config: cfg, env: process.env, log, memoryStore: store?.ok ? store.value.store : fail("") });
 if (!deps.ok) fail(deps.error);
 const introspect = deps.ok ? deps.value.introspect : undefined;

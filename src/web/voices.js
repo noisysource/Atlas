@@ -20,8 +20,8 @@ const browserBody = byId("browser-body");
 
 // Your own sentence (#94): kept in this browser only, for the next visit.
 const ownText = /** @type {HTMLTextAreaElement} */ (byId("own-text"));
-const ownAsJarvis = /** @type {HTMLInputElement} */ (byId("own-as-jarvis"));
-const OWN_KEY = "jarvis.voices.own";
+const ownAsAtlas = /** @type {HTMLInputElement} */ (byId("own-as-atlas"));
+const OWN_KEY = "atlas.voices.own";
 try {
   ownText.value = localStorage.getItem(OWN_KEY) ?? OWN_SENTENCE_EXAMPLE;
 } catch {
@@ -151,7 +151,7 @@ const addRow = (row, into = body) => {
   const ownTime = document.createElement("span");
   ownTime.className = "ttfa";
   ownButton.addEventListener("click", async () => {
-    const text = ownSentence(ownText.value, { asJarvis: ownAsJarvis.checked });
+    const text = ownSentence(ownText.value, { asAtlas: ownAsAtlas.checked });
     if (text === "") {
       status.textContent = "Type a sentence first.";
       return;

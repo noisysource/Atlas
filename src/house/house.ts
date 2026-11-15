@@ -3,7 +3,7 @@
 //
 // The domotics bridge on the Pi publishes the house's live state to one
 // Firestore document, domotics_state/tuya, in the Google Cloud environment
-// it runs against (kidclub-dev today). Jarvis reads that document with the
+// it runs against (kidclub-dev today). Atlas reads that document with the
 // read-only database access he already has (#167), and words it here: the
 // heating automation's own plain sentences (what it's doing and why, today's
 // plan), room and outdoor temperatures, solar, battery and grid, and each

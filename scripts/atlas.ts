@@ -1,12 +1,12 @@
-// One command to start Jarvis on the Mac (#122):
+// One command to start Atlas on the Mac (#122):
 //
-//   npm run jarvis                 voice services, the server, then the page
-//   npm run jarvis -- --no-voice   without Kokoro / Piper / Whisper
-//   npm run jarvis -- --no-open    don't open the browser
+//   npm run atlas                 voice services, the server, then the page
+//   npm run atlas -- --no-voice   without Kokoro / Piper / Whisper
+//   npm run atlas -- --no-open    don't open the browser
 //
 // It starts the voice services (npm run voice:up) unless they're already
 // running, checks Ollama, starts the server, waits for it, and opens the page.
-// Output comes in one terminal, each line marked [voice] or [jarvis].
+// Output comes in one terminal, each line marked [voice] or [atlas].
 // Ctrl-C stops everything it started; if the server stops, voice stops too.
 //
 // Local only. It prints no settings or keys: the server reads .env itself.
@@ -32,7 +32,7 @@ const { voice, open } = args.ok ? args.value : { voice: true, open: true };
 const config = loadConfig(process.env);
 if (!config.ok) fail(config.error);
 const c = config.ok ? config.value : fail("");
-if (c.env === "production") fail("npm run jarvis is for your Mac. In production the server starts on its own.");
+if (c.env === "production") fail("npm run atlas is for your Mac. In production the server starts on its own.");
 
 const url = pageUrl(c.host, c.port);
 const answers = async (target: string): Promise<boolean> => {
@@ -44,16 +44,16 @@ const answers = async (target: string): Promise<boolean> => {
   }
 };
 
-const [jarvisUp, voiceUp, ollamaUp] = await Promise.all([
+const [atlasUp, voiceUp, ollamaUp] = await Promise.all([
   answers(new URL("/healthz", url).toString()),
   answers(new URL("/health", c.tts.kokoroUrl).toString()),
   answers(new URL("/api/tags", c.ollamaUrl).toString()),
 ]);
-const plan = planLaunch({ voice, open }, { jarvisUp, voiceUp, ollamaUp, voiceInstalled: existsSync(path.join(root, ".voice/kokoro-fastapi/.venv")) });
+const plan = planLaunch({ voice, open }, { atlasUp, voiceUp, ollamaUp, voiceInstalled: existsSync(path.join(root, ".voice/kokoro-fastapi/.venv")) });
 for (const note of plan.notes) say(note);
 
 const openPage = () => {
-  if (!open) return say(`Jarvis is at ${url}`);
+  if (!open) return say(`Atlas is at ${url}`);
   say(`Opening ${url}`);
   const opener = process.platform === "darwin" ? "open" : process.platform === "win32" ? "explorer" : "xdg-open";
   execFile(opener, [url], () => undefined);
@@ -115,12 +115,12 @@ process.on("SIGINT", () => stop(130));
 process.on("SIGTERM", () => stop(143));
 
 if (plan.startVoice) run("voice", "bash", [path.join(root, "scripts/voice-up.sh")]);
-run("jarvis", process.execPath, ["--import", "tsx", path.join(root, "src/main.ts")]);
+run("atlas", process.execPath, ["--import", "tsx", path.join(root, "src/main.ts")]);
 
 // Wait for the server (up to a minute), then open the page.
 for (let i = 0; i < 60 && !stopping; i++) {
   if (await answers(new URL("/healthz", url).toString())) {
-    say("Jarvis is up. Ctrl-C stops everything.");
+    say("Atlas is up. Ctrl-C stops everything.");
     openPage();
     break;
   }

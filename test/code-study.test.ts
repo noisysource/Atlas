@@ -55,7 +55,7 @@ describe("a study's result", () => {
   it("a monorepo's apps are found from the map", () => {
     expect(appsToStudy(parseStudy(mapBlock(monorepoMap)).map)).toEqual(["apps/kidclub", "apps/finance", "apps/hrt-tools"]);
     // One app is not a monorepo: the repo's own study covered it.
-    expect(appsToStudy(parseStudy(mapBlock({ nodes: [{ id: "srv", label: "Jarvis server", kind: "app", path: "src" }], edges: [] })).map)).toEqual([]);
+    expect(appsToStudy(parseStudy(mapBlock({ nodes: [{ id: "srv", label: "Atlas server", kind: "app", path: "src" }], edges: [] })).map)).toEqual([]);
   });
 
   it("asks for the whole repo, or one app's folder", () => {
@@ -71,12 +71,12 @@ describe("the code-knowledge store", () => {
     expect(noteFile("noisysource/noisysource", "apps/kidclub")).toBe("noisysource__noisysource__apps-kidclub.json");
     const files = memoryFiles();
     const store = makeNoteStore(files);
-    const note: CodeNote = { repo: "noisysource/Jarvis", folder: "", studiedAt: NOW.toISOString(), text: "## Summary\nAssistant.", map: { nodes: [{ id: "srv", label: "Server", kind: "module" }], edges: [] }, partial: false, turns: 40, costUsd: 1.2, via: "subscription" };
+    const note: CodeNote = { repo: "noisysource/Atlas", folder: "", studiedAt: NOW.toISOString(), text: "## Summary\nAssistant.", map: { nodes: [{ id: "srv", label: "Server", kind: "module" }], edges: [] }, partial: false, turns: 40, costUsd: 1.2, via: "subscription" };
     await store.save(note);
-    expect(await store.get("noisysource/Jarvis", "")).toEqual(note);
+    expect(await store.get("noisysource/Atlas", "")).toEqual(note);
     expect(await store.get("noisysource/other", "")).toBeUndefined();
     files.files.set("broken.json", "{nope");
-    expect((await store.all()).map((n) => n.repo)).toEqual(["noisysource/Jarvis"]);
+    expect((await store.all()).map((n) => n.repo)).toEqual(["noisysource/Atlas"]);
   });
 });
 
@@ -133,7 +133,7 @@ describe("studying in the background", () => {
   });
 });
 
-describe("Jarvis using what he studied", () => {
+describe("Atlas using what he studied", () => {
   const usage = { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0 };
   const common = { servedBy: "claude-test", usage, payload: { provider: "anthropic", data: "x" } };
   const personal = { id: "personal", name: "Personal" } as unknown as Context;
@@ -179,16 +179,16 @@ describe("Jarvis using what he studied", () => {
   });
 
   it("no note yet: says so and offers to study", async () => {
-    const { steps, toolResult } = await run("code_notes", { repo: "noisysource/Jarvis" });
+    const { steps, toolResult } = await run("code_notes", { repo: "noisysource/Atlas" });
     expect(steps[0]).toMatchObject({ ok: false, error: "not studied yet" });
     expect(toolResult).toContain("Offer to study it");
   });
 
   it("code_study starts in the background and the answer doesn't wait for it", async () => {
-    const { steps, toolResult, store } = await run("code_study", { repo: "noisysource/Jarvis" }, []);
-    expect(steps[0]).toEqual({ kind: "tool", name: "code_study", args: "noisysource/Jarvis", by: "model", ok: true, result: "started in the background" });
+    const { steps, toolResult, store } = await run("code_study", { repo: "noisysource/Atlas" }, []);
+    expect(steps[0]).toEqual({ kind: "tool", name: "code_study", args: "noisysource/Atlas", by: "model", ok: true, result: "started in the background" });
     expect(toolResult).toContain("Don't describe the code yet");
-    expect((await store.all()).map((n) => n.repo)).toEqual(["noisysource/Jarvis"]); // done after the answer
+    expect((await store.all()).map((n) => n.repo)).toEqual(["noisysource/Atlas"]); // done after the answer
   });
 
   it("doesn't redo a study he already has, unless asked to study it again", async () => {
@@ -297,24 +297,24 @@ describe("seeing and stopping a study (#156)", () => {
 
   it("shows the running study's steps and latest files, then lists it as finished", async () => {
     const { studies, release } = slowSetup();
-    studies.start("noisysource", "Jarvis", "");
+    studies.start("noisysource", "Atlas", "");
     studies.start("noisysource", "kidclub", "");
     await tick();
     expect(studies.active()).toEqual([
-      { repo: "noisysource/Jarvis", folder: "", state: "running", startedAt: NOW.toISOString(), steps: 2, recent: [{ tool: "Read", target: "README.md" }, { tool: "Grep", target: "firebase" }] },
+      { repo: "noisysource/Atlas", folder: "", state: "running", startedAt: NOW.toISOString(), steps: 2, recent: [{ tool: "Read", target: "README.md" }, { tool: "Grep", target: "firebase" }] },
       { repo: "noisysource/kidclub", folder: "", state: "queued" },
     ]);
     release();
     await tick();
-    expect(studies.finished()[0]).toMatchObject({ repo: "noisysource/Jarvis", turns: 12, partial: false, parts: 1 });
+    expect(studies.finished()[0]).toMatchObject({ repo: "noisysource/Atlas", turns: 12, partial: false, parts: 1 });
     release();
     await studies.idle();
-    expect(studies.finished().map((d) => d.repo)).toEqual(["noisysource/kidclub", "noisysource/Jarvis"]);
+    expect(studies.finished().map((d) => d.repo)).toEqual(["noisysource/kidclub", "noisysource/Atlas"]);
   });
 
   it("Stop cancels the running study and drops the queue; nothing is saved", async () => {
     const { studies, store, wasAborted } = slowSetup();
-    studies.start("noisysource", "Jarvis", "");
+    studies.start("noisysource", "Atlas", "");
     studies.start("noisysource", "kidclub", "");
     await tick();
     expect(studies.stop()).toBe(2);

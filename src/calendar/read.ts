@@ -243,7 +243,7 @@ export const calendarForBrain = (
   const which = many ? `Google Calendars (${accounts.read.join(" and ")})` : `${accounts.read[0] ?? "personal"} Google Calendar`;
   const unread = accounts.unread.map(({ account, code }) =>
     code === "not_connected"
-      ? `The ${account} calendar isn't connected to Jarvis yet, so you can't see it (npm run calendar:connect -- ${account}). If it matters to the question, say so plainly.`
+      ? `The ${account} calendar isn't connected to Atlas yet, so you can't see it (npm run calendar:connect -- ${account}). If it matters to the question, say so plainly.`
       : `The ${account} calendar couldn't be read just now (${code}). If it matters to the question, say so plainly; don't guess what's on it.`,
   );
   return [

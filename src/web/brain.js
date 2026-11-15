@@ -1,5 +1,5 @@
 // The brain view (#131): the core, the nodes around it, and a line to each
-// node Jarvis reaches for in the current answer. States come from brain-lib.js;
+// node Atlas reaches for in the current answer. States come from brain-lib.js;
 // this file only draws them.
 
 import { EMPTY, NODES, NODE_TAGS, applyReach, applyStep, connectCommand, isReaching, lineGeometry, mesh, nodePosition, offeredNodes, restOf, settle, stateOfPath } from "./brain-lib.js";
@@ -175,7 +175,7 @@ export const makeBrainView = (root, options = {}) => {
     panel.append(head);
 
     if (!info) {
-      panel.append(text("p", "brain-panel-about", "Couldn't load what this can do. Is Jarvis running?"));
+      panel.append(text("p", "brain-panel-about", "Couldn't load what this can do. Is Atlas running?"));
       return;
     }
     panel.append(text("p", "brain-panel-about", info.about));
@@ -285,7 +285,7 @@ export const makeBrainView = (root, options = {}) => {
     name.textContent = brain;
   };
 
-  setBrain("Jarvis");
+  setBrain("Atlas");
   draw();
 
   return {

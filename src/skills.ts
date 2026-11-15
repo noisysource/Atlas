@@ -1,7 +1,7 @@
-// Skills (#116): routines Jarvis follows, learned from memory or taught in chat.
+// Skills (#116): routines Atlas follows, learned from memory or taught in chat.
 //
 // A skill is text: a title, when to use it, and its steps. It only says how to
-// use tools Jarvis already has, so it can't add powers, and actions still need
+// use tools Atlas already has, so it can't add powers, and actions still need
 // Renato's OK (the calendar's "Add it" card, for one).
 //
 // Where they come from: the nightly introspection drafts them (#108), or Claude

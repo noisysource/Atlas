@@ -124,7 +124,7 @@ describe("introspection", () => {
 
   it("report: says nothing is switched on", () => {
     const md = reportMarkdown({ date: "2026-11-12", kept: 2, promoted: [], merged: [], dropped: ["x"], refused: 0, skills: [], tools: [] });
-    expect(md).toContain("# Jarvis introspection, 2026-11-12");
+    expect(md).toContain("# Atlas introspection, 2026-11-12");
     expect(md).toContain("2 kept (they fade on their own), 0 made long-term, 0 merged, 1 dropped.");
   });
 

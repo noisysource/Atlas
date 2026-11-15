@@ -1,6 +1,6 @@
 // Streamed (spoken) answers and the memory wrap-up (#72).
 //
-// A streamed answer usually finishes long before Jarvis has finished
+// A streamed answer usually finishes long before Atlas has finished
 // *speaking* it, so the server can't tell on its own whether you heard it
 // all. The wrap-up of a streamed answer is held here until the page reports
 // how playback ended (`POST /ask/spoken`):
@@ -32,7 +32,7 @@ export type HeldTurn = {
 
 export type PlaybackReport = {
   readonly interrupted: boolean;
-  /** What Jarvis actually said aloud (the sentences played, the last one cut where it stopped). */
+  /** What Atlas actually said aloud (the sentences played, the last one cut where it stopped). */
   readonly spoken: string;
 };
 

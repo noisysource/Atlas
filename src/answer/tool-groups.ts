@@ -2,7 +2,7 @@
 //
 // Offering every connected tool on every question cost tokens on every turn,
 // hit Anthropic's limits (#174), and gave Claude more ways to pick wrong. So
-// tools come in groups, and Jarvis picks the groups before Claude sees the
+// tools come in groups, and Atlas picks the groups before Claude sees the
 // question:
 //   - a dictionary of words (English and Portuguese, plus the studied apps),
 //   - the groups his last answers used (follow-ups: "and tomorrow?"),
@@ -180,7 +180,7 @@ export const makeToolRouter =
   async ({ question, history, available, signal }) => {
     if (available.length === 0) return [];
     if (signal?.aborted) return undefined;
-    const recent = history.slice(-ROUTER_HISTORY).map((t) => `${t.role === "user" ? "Renato" : "Jarvis"}: ${t.text.replace(/\s+/g, " ").slice(0, 300)}`);
+    const recent = history.slice(-ROUTER_HISTORY).map((t) => `${t.role === "user" ? "Renato" : "Atlas"}: ${t.text.replace(/\s+/g, " ").slice(0, 300)}`);
     const call = deps
       .llm({
         system: [
