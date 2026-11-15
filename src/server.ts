@@ -348,6 +348,18 @@ export const makeServer = (
     );
   }
 
+  // #166: his answer to moving the blinds. Only "yes" moves them, and only what the card showed.
+  const houseBlinds = deps.houseBlinds;
+  if (houseBlinds) {
+    const BlindsBody = z.object({ id: z.string().regex(/^[a-f0-9]{8,64}$/), decision: z.enum(["yes", "no"]) }).strict();
+    app.post("/house/blinds", bodyLimit({ maxSize: 1024, onError: (c) => c.json(errorBody("The request is too large."), 413) }), async (c) => {
+      if (!isJson(c.req.header("content-type"))) return c.json(errorBody("POST /house/blinds needs Content-Type: application/json."), 415);
+      const body = BlindsBody.safeParse(await c.req.json().catch(() => undefined));
+      if (!body.success) return c.json(errorBody('Send { id, decision: "yes" | "no" }.'), 400);
+      return c.json(await houseBlinds.decide(body.data.id, body.data.decision));
+    });
+  }
+
   // #162: fixes as pull requests. Each step is his answer; nothing is pushed without the second one.
   const codeFixes = deps.codeFixes;
   if (codeFixes) {

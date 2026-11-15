@@ -27,7 +27,7 @@ export const GROUP_ABOUT: Record<ToolGroup, string> = {
   code: "understanding his code: notes on studied repos and apps, studying, asking the code agent",
   cloud: "his Google Cloud environments: errors, logs and the database",
   invoices: "KidClub's invoices in Vendus: totals, VAT, one invoice",
-  house: "the house now: heating, heat pump, temperatures, solar, battery, energy",
+  house: "the house: heating, heat pump, temperatures, solar, battery, energy, and moving the blinds",
 };
 
 export const TOOLS_MORE = "tools_more";
@@ -114,7 +114,8 @@ const RULES: readonly { readonly pattern: RegExp; readonly groups: readonly Tool
       house, home, heating, heater, heat pump, pump, thermostat*, temperature*, warm*, cold, room*, solar, panel*, battery,
       inverter, energy, power, electricity, consumption, grid, domotics,
       casa, aquecimento, aquecer, bomba, termostato*, temperatura*, frio, quente, quarto*, sala, painei*, paineis, bateria,
-      energia, eletricidade, consumo, rede`),
+      energia, eletricidade, consumo, rede,
+      blind, blinds, shutter*, persiana*, estore*, estores`),
     groups: ["house"],
   },
   {

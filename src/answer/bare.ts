@@ -43,6 +43,7 @@ import {
   type GithubReader,
 } from "../github/github.js";
 import { HOUSE_NOW_TOOL, HOUSE_STATE_PATH, houseForBrain, houseSummary } from "../house/house.js";
+import { blindsForBrain, HOUSE_BLINDS_TOOL, type Blinds } from "../house/blinds.js";
 import { checkInvoicesRequest, invoiceForBrain, invoicesForBrain, listInvoices, VENDUS_INVOICES_TOOL, VENDUS_TOOLS, type VendusGet } from "../vendus/vendus.js";
 import { staleNote, staleSuffix, type CodeRefresh } from "../code/freshness.js";
 import { checkStart, TASK_LIST_TOOL, TASK_PUBLISH_TOOL, TASK_START_TOOL, TASK_TELL_TOOL, TASK_TOOLS, taskForBrain, type Tasks } from "../code/tasks.js";
@@ -252,6 +253,8 @@ export const barePrompt = (
     readonly vendus?: boolean;
     /** It can read the house's state (#166). With tools only. */
     readonly house?: boolean;
+    /** It can move the blinds, after an OK (#166). */
+    readonly houseControl?: boolean;
     /** It can read the environments' database, read-only (#167). With gcloud only. */
     readonly gcloudDb?: boolean;
     /** Not every tool group is offered on every question (#175); tools_more adds one. */
@@ -316,7 +319,9 @@ export const barePrompt = (
   const houseLines =
     options.house === true && options.tools === true
       ? [
-          "You can see the house right now, read-only, with house_now: what the heating automation is doing and why, today's plan, room and outdoor temperatures, each thermostat, the heat pump, solar, battery, grid and consumption. Answer from it in plain words; quote the automation's reason when he asks why. You can't change anything in the house yet: say so if he asks, and that it's coming with an OK step.",
+          options.houseControl === true
+            ? "You can see the house right now with house_now: what the heating automation is doing and why, today's plan, room and outdoor temperatures, each thermostat, the heat pump, solar, battery, grid and consumption, and where each blind is. Answer from it in plain words; quote the automation's reason when he asks why. You can move the blinds with house_blinds: it shows him a card and they move only after his OK, so call it directly when he asks (\"close the blinds in the living room\", \"abre as persianas\"). Nothing else in the house can be changed yet (lights, heating): say so if he asks."
+            : "You can see the house right now, read-only, with house_now: what the heating automation is doing and why, today's plan, room and outdoor temperatures, each thermostat, the heat pump, solar, battery, grid and consumption. Answer from it in plain words; quote the automation's reason when he asks why. You can't change anything in the house yet: say so if he asks, and that it's coming with an OK step.",
         ]
       : [];
   const cloudLines =
@@ -605,7 +610,7 @@ export const makeBareAnswerer = (deps: {
   /** #9: KidClub's invoices in Vendus, GET only. With tools only. */
   readonly vendus?: { readonly get: VendusGet; readonly timeZone: string };
   /** #166: the house now, read-only, from the domotics bridge's state in an environment's database. */
-  readonly house?: { readonly db: DbReader; readonly env: string; readonly timeZone: string };
+  readonly house?: { readonly db: DbReader; readonly env: string; readonly timeZone: string; readonly blinds?: Blinds };
   /**
    * #175: which tool groups Claude gets per question. Without it, every tool
    * every time. "rules": the words of the question and the last answers;
@@ -641,7 +646,7 @@ export const makeBareAnswerer = (deps: {
   const prompts = (profile?: string) => {
     // JARVIS_USER_NAME wins; otherwise the profile's "Name:" line.
     const name = deps.userName ?? (profile ? profileName(profile) : undefined);
-    const extra = { ...(profile ? { profile } : {}), ...(deps.calendar ? { calendar: true } : {}), ...(deps.calendar && deps.tools === true ? { tools: true } : {}), ...(deps.calendar?.create && deps.tools === true ? { create: true } : {}), ...(deps.gmail && deps.tools === true ? { email: true, tools: true } : {}), ...(deps.gmail?.writer && deps.tools === true ? { emailDrafts: true } : {}), ...(deps.memory && deps.tools === true ? { memory: true, tools: true } : {}), ...(deps.memory && deps.skills && deps.tools === true ? { skills: true } : {}), ...(deps.github && deps.tools === true ? { github: true, tools: true } : {}), ...(deps.github && deps.code && deps.tools === true ? { code: true } : {}), ...(deps.github && deps.code?.study && deps.tools === true ? { study: true } : {}), ...(deps.gcloud && deps.tools === true ? { gcloud: true, tools: true } : {}), ...(deps.vendus && deps.tools === true ? { vendus: true, tools: true } : {}), ...(deps.house && deps.tools === true ? { house: true, tools: true } : {}), ...(deps.gcloud?.db && deps.tools === true ? { gcloudDb: true } : {}), ...(deps.route && deps.route.mode !== "all" && deps.tools === true ? { routed: true } : {}), ...(deps.brief === true && deps.calendar && deps.tools === true ? { brief: true } : {}), ...(deps.github && deps.code?.fix && deps.tools === true ? { fix: true } : {}), ...(deps.github && deps.code?.tasks && deps.tools === true ? { tasks: true } : {}) };
+    const extra = { ...(profile ? { profile } : {}), ...(deps.calendar ? { calendar: true } : {}), ...(deps.calendar && deps.tools === true ? { tools: true } : {}), ...(deps.calendar?.create && deps.tools === true ? { create: true } : {}), ...(deps.gmail && deps.tools === true ? { email: true, tools: true } : {}), ...(deps.gmail?.writer && deps.tools === true ? { emailDrafts: true } : {}), ...(deps.memory && deps.tools === true ? { memory: true, tools: true } : {}), ...(deps.memory && deps.skills && deps.tools === true ? { skills: true } : {}), ...(deps.github && deps.tools === true ? { github: true, tools: true } : {}), ...(deps.github && deps.code && deps.tools === true ? { code: true } : {}), ...(deps.github && deps.code?.study && deps.tools === true ? { study: true } : {}), ...(deps.gcloud && deps.tools === true ? { gcloud: true, tools: true } : {}), ...(deps.vendus && deps.tools === true ? { vendus: true, tools: true } : {}), ...(deps.house && deps.tools === true ? { house: true, tools: true } : {}), ...(deps.house?.blinds && deps.tools === true ? { houseControl: true } : {}), ...(deps.gcloud?.db && deps.tools === true ? { gcloudDb: true } : {}), ...(deps.route && deps.route.mode !== "all" && deps.tools === true ? { routed: true } : {}), ...(deps.brief === true && deps.calendar && deps.tools === true ? { brief: true } : {}), ...(deps.github && deps.code?.fix && deps.tools === true ? { fix: true } : {}), ...(deps.github && deps.code?.tasks && deps.tools === true ? { tasks: true } : {}) };
     return { typed: barePrompt(name, extra), spoken: barePrompt(name, { spoken: true, maxSentences: max, pauses, ...extra }) };
   };
   const withoutProfile = prompts();
@@ -767,7 +772,7 @@ export const makeBareAnswerer = (deps: {
               ? [...GCLOUD_TOOLS, ...(deps.gcloud?.db ? DB_TOOLS : [])]
               : g === "invoices"
                 ? VENDUS_TOOLS
-                : [HOUSE_NOW_TOOL];
+                : [HOUSE_NOW_TOOL, ...(deps.house?.blinds ? [HOUSE_BLINDS_TOOL] : [])];
   const routing = deps.tools === true && deps.route !== undefined && deps.route.mode !== "all";
 
   return async ({ question, history, onText, signal, spoken, onStep, onReach, onOffered, now, remember, onToolSucceeded }) => {
@@ -971,8 +976,22 @@ export const makeBareAnswerer = (deps: {
           return { callId: call.id, content: `The house: ${got.error.message}. Say so plainly; don't guess.`, isError: true };
         }
         const fields = got.value?.fields;
+        // The blinds too, when Jarvis can see them; a failure there doesn't hide the rest.
+        const blinds = deps.house.blinds ? await deps.house.blinds.list(signal) : undefined;
+        const extra = blinds === undefined ? [] : blinds.ok ? [blindsForBrain(blinds.value)] : [`The blinds: ${blinds.error.message}.`];
         onStep?.({ kind: "tool", name: call.name, args: deps.house.env, by: "model", ok: true, result: houseSummary(fields, now) });
-        return { callId: call.id, content: houseForBrain(fields, now, deps.house.timeZone) };
+        return { callId: call.id, content: houseForBrain(fields, now, deps.house.timeZone, extra, deps.house.blinds !== undefined) };
+      }
+      if (deps.house?.blinds && call.name === HOUSE_BLINDS_TOOL.name) {
+        const input = typeof call.input === "object" && call.input !== null ? (call.input as Record<string, unknown>) : {};
+        const asked = Array.isArray(input.blinds) ? input.blinds.filter((b): b is string => typeof b === "string").slice(0, 20).map((b) => b.slice(0, 80)) : [];
+        const proposed = await deps.house.blinds.propose(asked, input.position, signal);
+        if (!proposed.ok) {
+          onStep?.({ kind: "tool", name: call.name, args: asked.join(", "), by: "model", ok: false, error: `refused: ${proposed.error.slice(0, 60)}` });
+          return { callId: call.id, content: `Not proposed: ${proposed.error}. Tell him plainly, or ask which blinds he means.`, isError: true };
+        }
+        onStep?.({ kind: "tool", name: call.name, args: asked.join(", "), by: "model", ok: true, result: "waiting for your OK", confirm: { id: proposed.value.id, label: proposed.value.label, kind: "house" } });
+        return { callId: call.id, content: `Not moved yet: the app is asking him "Move them" / "Leave them" for: ${proposed.value.label}. Say in one sentence that it needs his OK. Never say they've moved.` };
       }
       if (deps.gcloud?.db && DB_TOOLS.some((t) => t.name === call.name)) return runGcloudDb(deps.gcloud.reader, deps.gcloud.db, call);
       if (deps.github && deps.code && call.name === CODE_ASK_TOOL.name) return runCode(deps.code, call);

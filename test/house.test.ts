@@ -127,6 +127,6 @@ describe("asking Jarvis", () => {
     const bad = loadConfig({ ANTHROPIC_API_KEY: "sk-test", BARE_MODE: "on", HOUSE: "on" });
     expect(!bad.ok && bad.error).toContain("HOUSE: needs GCLOUD=on");
     const good = loadConfig({ ANTHROPIC_API_KEY: "sk-test", BARE_MODE: "on", GCLOUD: "on", HOUSE: "on" });
-    expect(good.ok && good.value.house).toEqual({ enabled: true, env: "dev" });
+    expect(good.ok && good.value.house).toEqual({ enabled: true, env: "dev", control: { enabled: false, userPath: "data/house/firebase.json" } });
   });
 });
