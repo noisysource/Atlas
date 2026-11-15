@@ -78,6 +78,20 @@ export type Commit = { readonly sha: string; readonly date: string; readonly mes
 
 export type IssuesRequest = { readonly repo: RepoRef; readonly kind: "issues" | "prs"; readonly state: "open" | "closed" | "all" };
 export type ChecksRequest = { readonly repo: RepoRef; readonly ref?: string };
+/** #203: a pull request with what a plan needs: where it goes, whether it merged, and the start of its description. */
+export type Pull = {
+  readonly number: number;
+  readonly title: string;
+  readonly body: string;
+  readonly state: "open" | "closed";
+  readonly merged: boolean;
+  readonly mergedAt: string;
+  readonly draft: boolean;
+  readonly head: string;
+  readonly base: string;
+  readonly headSha: string;
+  readonly updatedAt: string;
+};
 
 const asRepo = (v: unknown): RepoRef | undefined => {
   if (typeof v !== "string" || !REPO.test(v) || v.includes("..")) return undefined;
@@ -236,6 +250,8 @@ export type GithubReader = {
    * anywhere), newest first. For code: not offered to the brain as a tool.
    */
   readonly commits?: (r: CommitsRequest, signal?: AbortSignal) => Promise<Result<readonly Commit[], GithubError>>;
+  /** #203: the most recently updated pull requests, open and closed (for following plans). Not a tool of its own. */
+  readonly pulls?: (repo: RepoRef, signal?: AbortSignal) => Promise<Result<readonly Pull[], GithubError>>;
 };
 
 export type GithubTokens = {
@@ -360,6 +376,32 @@ export const makeGithubReader = (deps: { readonly tokens: GithubTokens; readonly
                 ]
               : [],
           ),
+      );
+    },
+    pulls: async (repo, signal) => {
+      const got = await get(repo.owner, `${repoPath(repo)}/pulls?state=all&per_page=100&sort=updated&direction=desc`, signal);
+      if (!got.ok) return got;
+      return ok(
+        (Array.isArray(got.value) ? got.value : []).flatMap((x): Pull[] => {
+          const o = object(x);
+          if (typeof o?.number !== "number" || typeof o.title !== "string") return [];
+          const head = object(o.head);
+          return [
+            {
+              number: o.number,
+              title: o.title,
+              body: typeof o.body === "string" ? o.body.slice(0, 1000) : "",
+              state: o.state === "open" ? "open" : "closed",
+              merged: typeof o.merged_at === "string",
+              mergedAt: typeof o.merged_at === "string" ? o.merged_at : "",
+              draft: o.draft === true,
+              head: typeof head?.ref === "string" ? head.ref : "",
+              base: typeof object(o.base)?.ref === "string" ? String(object(o.base)?.ref) : "",
+              headSha: typeof head?.sha === "string" ? head.sha : "",
+              updatedAt: typeof o.updated_at === "string" ? o.updated_at : "",
+            },
+          ];
+        }),
       );
     },
     commits: async (r, signal) => {
