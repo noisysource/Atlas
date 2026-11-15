@@ -587,6 +587,20 @@ Requires Node 22.13 or later (the memory store uses `node:sqlite`, which needs a
    yet) or `error`. `GET /healthz` returns `{"status":"ok"}`. Logs are JSON
    lines and never include your questions or answers.
 
+## Tasks
+
+Tasks let Jarvis hand a coding job to Claude Code.
+
+1. **Start a task.** Describe the change you want. Jarvis creates the task
+   and Claude Code works on it in its own copy of the repository.
+2. **Claude Code works on its own branch.** Each task gets a separate
+   `agent/…` branch, so `main` and your own work are never touched. It
+   commits as it goes but doesn't push, open pull requests or deploy.
+3. **Review and publish.** When it's done, Jarvis reports what changed. Look
+   over the result; only after your OK does Jarvis push the branch and open
+   a pull request against `main`. The pull request references the issue it
+   closes (`Closes #N`), as the repo's `CLAUDE.md` requires.
+
 ## Checks
 
 ```bash
