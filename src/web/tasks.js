@@ -3,6 +3,8 @@
 // follows them every few seconds while one is working, and slowly otherwise.
 // Everything is set as text. "Stop" interrupts the task's current turn.
 
+import { inlineMarks } from "./terminal-lib.js";
+
 const STATUS = {
   preparing: "getting a copy",
   queued: "waiting its turn",
@@ -62,8 +64,27 @@ export const startTasksPanel = (before) => {
       }
       li.append(head);
       if (t.report) {
+        // #195: **bold** and `code` shown as such (set as text, never HTML); long reports fold to a few lines.
         const p = document.createElement("p");
-        p.textContent = t.report;
+        p.className = "task-report";
+        for (const seg of inlineMarks(String(t.report))) {
+          if (seg.kind === "text") p.append(seg.text);
+          else {
+            const mark = document.createElement(seg.kind === "bold" ? "strong" : "code");
+            mark.textContent = seg.text;
+            p.append(mark);
+          }
+        }
+        p.tabIndex = 0;
+        p.title = "Click to show all of it, or fold it";
+        const toggle = () => p.classList.toggle("open");
+        p.addEventListener("click", toggle);
+        p.addEventListener("keydown", (e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            toggle();
+          }
+        });
         li.append(p);
       }
       if (typeof t.prUrl === "string" && t.prUrl.startsWith("https://github.com/")) {
