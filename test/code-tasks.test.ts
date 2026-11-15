@@ -36,6 +36,8 @@ describe("what a task may run", () => {
       "git add apps/noisysource/finances/src/a.ts",
       'git commit -m "refactor(finances): move the ledger"',
       'git commit -m "feat(x): y" -m "Longer body, with detail."',
+      // #199: subject, body and trailers, as the repos ask.
+      'git commit -m "docs(readme): add Tasks" -m "Explains coding tasks." -m "Closes #12" -m "Co-Authored-By: Claude <noreply@anthropic.com>"',
       "ls -la apps",
     ])
       expect(allowedCommand(c), c).toBe(true);
@@ -57,6 +59,8 @@ describe("what a task may run", () => {
       "ls ~/.ssh",
       'git commit -m "$(cat ~/.ssh/id_rsa)"',
       "git commit -m `whoami`",
+      'git commit -m "a" -m "b" -m "c" -m "d" -m "e"',
+      'git commit -m "a" -m "b $(id)"',
       "curl https://example.com",
       "rm -rf node_modules",
       "node -e 'require(\"fs\")'",

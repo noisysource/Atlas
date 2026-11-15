@@ -38,18 +38,20 @@ export const showMorningBrief = async (before) => {
     brief = null;
   }
   if (!brief || typeof brief.text !== "string" || typeof brief.day !== "string" || read(KEY) === brief.day) return;
-  const card = document.createElement("section");
+  // #195: folded to one line (the day and the summary); open it to read the brief.
+  const card = document.createElement("details");
   card.className = "morning";
   card.setAttribute("aria-label", "Morning brief");
-  const head = document.createElement("div");
+  const head = document.createElement("summary");
   head.className = "morning-head";
   const title = document.createElement("h2");
-  title.textContent = `☀️ ${dayLabel(brief.day)}`;
+  title.textContent = `☀️ ${dayLabel(brief.day)}${typeof brief.summary === "string" && brief.summary ? ` · ${brief.summary}` : ""}`;
   const done = document.createElement("button");
   done.type = "button";
   done.textContent = "Got it";
   const day = brief.day;
-  done.addEventListener("click", () => {
+  done.addEventListener("click", (e) => {
+    e.preventDefault();
     write(KEY, day);
     card.remove();
   });
@@ -59,12 +61,6 @@ export const showMorningBrief = async (before) => {
     const p = document.createElement("p");
     p.textContent = para.trim();
     if (p.textContent) card.append(p);
-  }
-  if (typeof brief.summary === "string" && brief.summary) {
-    const small = document.createElement("p");
-    small.className = "morning-summary";
-    small.textContent = brief.summary;
-    card.append(small);
   }
   before.before(card);
 };
