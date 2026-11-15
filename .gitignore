@@ -32,6 +32,8 @@ data/fixes/
 data/brief/
 # #151: the page's switches (what's off)
 data/settings.json
+# #138: what Atlas couldn't do (general words)
+data/gaps.json
 # #186: his decisions log
 data/decisions.json
 # #203: the plans Atlas follows (repo, file, name)

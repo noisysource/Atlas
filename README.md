@@ -529,6 +529,15 @@ Requires Node 22.13 or later (the memory store uses `node:sqlite`, which needs a
        allows, never turn on what it leaves off. Kept in
        `data/settings.json` (gitignored). The morning brief and other
        background jobs still follow `.env`.
+     - **Gaps: what Atlas couldn't do.** When you ask for something he
+       can't do because a tool, account or ability is missing ("switch off
+       the lights"), he notes it in general words (no personal details),
+       counts how often it comes up, and says plainly what he can't do
+       yet. When it keeps coming up, or you want it, he proposes an issue
+       in noisysource/Atlas: a card asks, and only "Open it" creates it
+       (the write token needs Issues: Read and write). A coding task can
+       take it from there. "What can't you do yet?" lists them. Never EC
+       work. Kept in `data/gaps.json`; the GitHub panel has a switch.
      - **A decisions log.** When you clearly decide something ("let's go
        with Atlas", "keep everything local until we're happy with it"),
        Atlas writes it down with the date and the app or topic, and says
