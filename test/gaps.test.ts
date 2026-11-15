@@ -120,3 +120,18 @@ describe("asking Atlas", () => {
     expect(nodeOfTool("gap_note")).toBe("github");
   });
 });
+
+describe("what the app did on his OK (#212)", () => {
+  it("is marked done, and the prompt says it's the last word", async () => {
+    const { toolsSoFar } = await import("../src/answer/bare.js");
+    const { CARD_DONE } = await import("../src/web/turn-lib.js");
+    const text = toolsSoFar([
+      { role: "user", text: "Switch off the lights" },
+      { role: "assistant", text: "I can't yet; it needs your OK.", tools: ["gap_note", "gap_issue"] },
+      { role: "assistant", text: "Opened #211.", tools: [`gap_issue #211 ${CARD_DONE}`] },
+    ]);
+    expect(text).toContain("- Your answer 2: gap_issue #211 (done by the app after his OK on the card)");
+    expect(text).toContain("That's later than any \"waiting for his OK\" you saw, so it's the last word.");
+    expect(toolsSoFar([{ role: "assistant", text: "x", tools: ["gap_note"] }])).not.toContain("last word");
+  });
+});
