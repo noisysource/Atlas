@@ -292,7 +292,7 @@ export const barePrompt = (
   const taskLines =
     options.tasks === true && options.tools === true
       ? [
-          "You manage his coding tasks like a project manager; Claude Code does the work and keeps the code's details in its own session and the repo's notes. For something bigger than a quick fix (a feature, a refactor), propose a task with task_start (a card asks him). For \"how's it going?\" read task_list; to pass on his answer, a change of plan or \"continue\", use task_tell (it carries on in the same session); to push and open its pull request, task_publish (a card asks him). Bring him what needs him: questions, decisions, a finished task to review. Don't do the coding yourself, and never claim a task did something its report doesn't say.",
+          "You manage his coding tasks like a project manager; Claude Code does the work and keeps the code's details in its own session and the repo's notes. For something bigger than a quick fix (a feature, a refactor), propose a task with task_start (a card asks him). For \"how's it going?\" read task_list; to pass on his answer, a change of plan or \"continue\", use task_tell (it carries on in the same session); to push and open its pull request, task_publish (a card asks him; it opens an issue for the pull request to close, unless he named one, so don't refuse for want of an issue). Bring him what needs him: questions, decisions, a finished task to review. Don't do the coding yourself, and never claim a task did something its report doesn't say.",
         ]
       : [];
   const briefLines =
@@ -1184,7 +1184,9 @@ export const makeBareAnswerer = (deps: {
         step({ args: id, ok: told.ok, ...(told.ok ? { result: "passed on" } : { error: told.error }) });
         return told.ok ? { callId: call.id, content: `${told.value} Its report will be in the task list when it's done; say so, don't make one up.` } : { callId: call.id, content: `Not passed on: ${told.error}.`, isError: true };
       }
-      const proposed = call.name === TASK_PUBLISH_TOOL.name ? await tasks.proposePublish(id) : await tasks.proposeClose(id);
+      const issue = typeof input.issue === "number" && Number.isInteger(input.issue) && input.issue > 0 && input.issue < 1_000_000 ? input.issue : undefined;
+      if (input.issue !== undefined && input.issue !== null && !issue) return refuse("issue is an issue number");
+      const proposed = call.name === TASK_PUBLISH_TOOL.name ? await tasks.proposePublish(id, issue) : await tasks.proposeClose(id);
       if (!proposed.ok) return refuse(proposed.error);
       const kind = call.name === TASK_PUBLISH_TOOL.name ? "task-publish" : "task-close";
       step({ args: id, ok: true, result: "waiting for your OK", confirm: { id: proposed.value.card, label: proposed.value.label, kind } });
@@ -1203,7 +1205,7 @@ export const makeBareAnswerer = (deps: {
       const r = checked.value;
       if (isEc(`${r.owner}/${r.name} ${r.folder} ${r.title}`)) return refuse("EC repo", "Refused: that's EC work, which Kiro handles. Say so.");
       if (!(await fixes.canWrite(r.owner)))
-        return refuse("no write token", `Refused: Jarvis can't write to ${r.owner}'s repos yet. Tell him to run npm run github:connect -- ${r.owner} --write (a token with Contents and Pull requests: Read and write), then ask again.`);
+        return refuse("no write token", `Refused: Jarvis can't write to ${r.owner}'s repos yet. Tell him to run npm run github:connect -- ${r.owner} --write (a token with Contents, Pull requests and Issues: Read and write), then ask again.`);
       const id = fixes.propose(r);
       deps.log?.info("code fix proposed", { repo: `${r.owner}/${r.name}` });
       onStep?.({

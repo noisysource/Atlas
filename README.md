@@ -500,7 +500,9 @@ Requires Node 22.13 or later (the memory store uses `node:sqlite`, which needs a
        (status, last report, pull request) and passes your words on by
        resuming the same Claude Code session, so it remembers its own work.
        Pushing and opening the pull request into `staging` (which deploys a
-       preview to dev), and closing a task, each ask your OK. Open tasks
+       preview to dev), and closing a task, each ask your OK. The pull
+       request closes an issue: the one you name, or a new one Jarvis opens
+       from the task (the write token needs Issues: Read and write). Open tasks
        show above the conversation and in the morning brief.
        `CODE_TASK_MAX_USD` (3) and `CODE_TASK_MAX_TURNS` (80) cap each turn.
        Note: tests and installs run your repo's own scripts and its
@@ -515,7 +517,7 @@ Requires Node 22.13 or later (the memory store uses `node:sqlite`, which needs a
        `jarvis/fix-…` branch and opens a draft pull request. He never
        pushes to the default branch, forces, merges or deploys. It needs a
        separate write token: `npm run github:connect -- noisysource --write`
-       with Contents and Pull requests set to Read and write (not
+       with Contents, Pull requests and Issues set to Read and write (not
        Workflows). `CODE_FIX_MAX_USD` (default 2) and `CODE_FIX_MAX_TURNS`
        (default 60) cap each fix.
        If there's an issue for the fix, he passes its number and the pull

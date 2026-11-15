@@ -5,7 +5,7 @@
 //   npm run github:connect -- noisysource --write     (#162, for fixes as pull requests)
 //
 // --write keeps a second, separate token for fixes: Repository permissions
-// Contents and Pull requests: Read and write (nothing else, and not
+// Contents, Pull requests and Issues: Read and write (nothing else, and not
 // Workflows). It's only used after your OK, to push a jarvis/fix-… branch and
 // open a draft pull request. It goes to data/github-write-tokens.json.
 //
