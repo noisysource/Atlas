@@ -77,7 +77,8 @@ const RULES: readonly { readonly pattern: RegExp; readonly groups: readonly Tool
   {
     pattern: words(`
       email*, e-mail*, mail*, inbox, unread, message*, repl*, draft*, send, sent, wrote, newsletter*, sender, subject,
-      correio*, mensage*, rascunho*, responde*, enviar, envia*, escreveu, caixa de entrada`),
+      triage, tidy, archive*, label*, what needs me, needs me,
+      correio*, mensage*, rascunho*, responde*, enviar, envia*, escreveu, caixa de entrada, arquiva*, arruma*`),
     groups: ["gmail"],
   },
   {

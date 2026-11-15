@@ -12,6 +12,7 @@ import { makePrCloser } from "./github/pr-close.js";
 import { makePlans } from "./plans/plans.js";
 import { makeDecisions } from "./decisions/decisions.js";
 import { makeGaps } from "./gaps/gaps.js";
+import { makeGmailTidier, makeInboxTidy } from "./gmail/tidy.js";
 import { availableSwitches, makeSettings, makeSwitchedAnswerer, type BareDeps } from "./switches.js";
 import { makeBlinds, makeCallable, readFirebaseUser } from "./house/blinds.js";
 import { makeVendusGet, type VendusGet } from "./vendus/vendus.js";
@@ -239,8 +240,10 @@ export const buildDeps = async (inputs: AppInputs): Promise<Result<Deps, string>
   const drafts = config.gmail.write
     ? { write: inputs.gmailWriter ?? makeGmailWriter({ accessToken: gmailToken }), pending: makePendingDrafts(), book: makeDraftBook(), deletions: makePendingDrafts() }
     : undefined;
+  // #214 (GMAIL_TIDY=on): archive and label after "Tidy it"; never delete.
+  const inboxTidy = config.gmail.tidy ? makeInboxTidy({ tidier: makeGmailTidier({ accessToken: gmailToken }), isEc: isEcText, log }) : undefined;
   const gmail = config.gmail.enabled
-    ? { reader: inputs.gmailReader ?? makeGmailReader({ accessToken: gmailToken }), isEc: isEcText, ...(drafts ? { writer: drafts } : {}) }
+    ? { reader: inputs.gmailReader ?? makeGmailReader({ accessToken: gmailToken }), isEc: isEcText, ...(drafts ? { writer: drafts } : {}), ...(inboxTidy ? { tidy: inboxTidy } : {}) }
     : undefined;
   const gmailSend = drafts
     ? async (id: string, decision: "yes" | "no") => {
@@ -610,6 +613,7 @@ export const buildDeps = async (inputs: AppInputs): Promise<Result<Deps, string>
     ...(prs ? { prClose: prs } : {}),
     ...(blinds && config.house.enabled ? { houseBlinds: blinds } : {}),
     ...(gaps ? { gapIssue: gaps } : {}),
+    ...(inboxTidy ? { gmailTidy: inboxTidy } : {}),
     classify: makeClassifier({ contexts: contexts.value, llm: classifierLlm.value, log, thinking: config.turn.classifierThinking }),
     stickyContext: config.turn.stickyContext,
     speculativeAnswer: config.turn.speculativeAnswer,

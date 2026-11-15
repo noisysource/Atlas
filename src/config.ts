@@ -107,7 +107,13 @@ export type Config = {
    * (npm run gmail:connect -- <account>); its token file is under data/.
    */
   /** `write` (GMAIL_WRITE=on, #120): drafts, and sending after "Send it". Needs gmail:connect with write access. */
-  readonly gmail: { readonly enabled: boolean; readonly write: boolean; readonly tokensPath: (account: string) => string };
+  readonly gmail: {
+    readonly enabled: boolean;
+    readonly write: boolean;
+    /** #214 (GMAIL_TIDY=on): archive and label after his OK. Needs gmail:connect with tidying allowed. */
+    readonly tidy: boolean;
+    readonly tokensPath: (account: string) => string;
+  };
   /**
    * GITHUB=on (#125): Claude can read Renato's repos, read-only (GET calls
    * only): list repos, read files, issues and PRs, CI status. Tokens are
@@ -429,6 +435,7 @@ const EnvSchema = z.object({
       .default(25),
   ),
   GMAIL_WRITE: onOff,
+  GMAIL_TIDY: onOff,
   MEMORY: onOff,
   INTROSPECTION: onOff,
   BRIEF_SCHEDULE: onOff,
@@ -538,6 +545,7 @@ export const loadConfig = (given: Env): Result<Config, string> => {
   if (raw("INTROSPECTION") === "on" && raw("MEMORY") !== "on") errors.push("INTROSPECTION: needs MEMORY=on");
   if (raw("MEMORY") === "on" && raw("BARE_MODE") !== "on") errors.push("MEMORY: needs BARE_MODE=on (without it, the older memory runs on its own)");
   if (raw("GMAIL_WRITE") === "on" && raw("GMAIL") !== "on") errors.push("GMAIL_WRITE: needs GMAIL=on");
+  if (raw("GMAIL_TIDY") === "on" && raw("GMAIL") !== "on") errors.push("GMAIL_TIDY: needs GMAIL=on");
   if (raw("GMAIL") === "on") {
     if (production) errors.push("GMAIL: local only for now");
     if (raw("BARE_MODE") !== "on") errors.push("GMAIL: needs BARE_MODE=on for now");
@@ -608,7 +616,7 @@ export const loadConfig = (given: Env): Result<Config, string> => {
       minute: Number(e.BRIEF_AT.split(":")[1]),
       path: "data/brief",
     },
-    gmail: { enabled: e.GMAIL === "on", write: e.GMAIL === "on" && e.GMAIL_WRITE === "on", tokensPath: (account: string) => `data/google-gmail-${account}.json` },
+    gmail: { enabled: e.GMAIL === "on", write: e.GMAIL === "on" && e.GMAIL_WRITE === "on", tidy: e.GMAIL === "on" && e.GMAIL_TIDY === "on", tokensPath: (account: string) => `data/google-gmail-${account}.json` },
     github: { enabled: e.GITHUB === "on", tokensPath: "data/github-tokens.json" },
     gcloud: { enabled: e.GCLOUD === "on", keysPath: "data/gcloud" },
     vendus: { enabled: e.VENDUS === "on", keyPath: "data/vendus.json" },
