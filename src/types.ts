@@ -9,6 +9,7 @@ import type { MorningBriefs } from "./morning.js";
 import type { CodeRefresh } from "./code/freshness.js";
 import type { PrCloser } from "./github/pr-close.js";
 import type { Blinds } from "./house/blinds.js";
+import type { Gaps } from "./gaps/gaps.js";
 import type { CodeMapView, Studies } from "./code/study.js";
 import type { ReachNode } from "./reach.js";
 import type { Result } from "./result.js";
@@ -141,7 +142,7 @@ export type PathStep =
        * card with "Add it" / "Don't add", and POSTs `id` to /calendar/confirm.
        * Page only: the path is never logged.
        */
-      readonly confirm?: { readonly id: string; readonly label: string; readonly kind?: "calendar" | "skill" | "email" | "draft-delete" | "fix" | "pr-close" | "task-start" | "task-publish" | "task-close" | "house" };
+      readonly confirm?: { readonly id: string; readonly label: string; readonly kind?: "calendar" | "skill" | "email" | "draft-delete" | "fix" | "pr-close" | "task-start" | "task-publish" | "task-close" | "house" | "gap-issue" };
     }
   | {
       readonly kind: "guard";
@@ -347,6 +348,8 @@ export type Deps = {
   readonly codeFixes?: Pick<Fixes, "decide" | "view" | "publish">;
   /** #191: coding tasks: his answers to their cards (POST /code/task), the list (GET /code/tasks), stop (POST /code/tasks/stop). */
   readonly codeTasks?: Pick<Tasks, "decide" | "list" | "stop">;
+  /** #138: his answer to opening an issue for a gap (POST /gaps/issue). Only "yes" opens it. */
+  readonly gapIssue?: Pick<Gaps, "decide">;
   /** #166: his answer to moving the blinds (POST /house/blinds). Only "yes" moves them. */
   readonly houseBlinds?: Pick<Blinds, "decide">;
   /** #183: his answer to closing a pull request (POST /github/pr-close). */

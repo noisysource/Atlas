@@ -11,6 +11,7 @@ import { makeTaskRunner } from "./code/task-runner.js";
 import { makePrCloser } from "./github/pr-close.js";
 import { makePlans } from "./plans/plans.js";
 import { makeDecisions } from "./decisions/decisions.js";
+import { makeGaps } from "./gaps/gaps.js";
 import { availableSwitches, makeSettings, makeSwitchedAnswerer, type BareDeps } from "./switches.js";
 import { makeBlinds, makeCallable, readFirebaseUser } from "./house/blinds.js";
 import { makeVendusGet, type VendusGet } from "./vendus/vendus.js";
@@ -376,6 +377,8 @@ export const buildDeps = async (inputs: AppInputs): Promise<Result<Deps, string>
       : undefined;
   // #162: fixes as pull requests, with a separate write token per owner; every step after his OK.
   const writeTokens = makeGithubTokens({ readFile: () => readFileFs(config.codeAgent.fix.writeTokensPath, "utf8") });
+  // #138: what Atlas couldn't do, and issues for it in his own repo after Renato's OK (with the write token).
+  const gaps = config.toolCalling ? makeGaps({ path: "data/gaps.json", repo: "noisysource/Atlas", isEc: isEcText, writeToken: writeTokens.token, today: () => new Intl.DateTimeFormat("en-CA", { timeZone: config.timeZone }).format(new Date()), log }) : undefined;
   const fixesRoot = path.resolve(config.codeAgent.fix.fixesPath);
   // #191: coding tasks, with Atlas as the PM and Claude Code doing the work in copies under data/tasks.
   const tasksFile = path.join(config.codeAgent.tasks.path, "tasks.json");
@@ -606,6 +609,7 @@ export const buildDeps = async (inputs: AppInputs): Promise<Result<Deps, string>
     ...(codeRefresh ? { codeRefresh } : {}),
     ...(prs ? { prClose: prs } : {}),
     ...(blinds && config.house.enabled ? { houseBlinds: blinds } : {}),
+    ...(gaps ? { gapIssue: gaps } : {}),
     classify: makeClassifier({ contexts: contexts.value, llm: classifierLlm.value, log, thinking: config.turn.classifierThinking }),
     stickyContext: config.turn.stickyContext,
     speculativeAnswer: config.turn.speculativeAnswer,
@@ -634,6 +638,7 @@ export const buildDeps = async (inputs: AppInputs): Promise<Result<Deps, string>
               // #125: his GitHub repos, read-only, with tools (Claude).
               ...(github && config.toolCalling ? { github: { ...github, ...(prs ? { prs } : {}), ...(plans ? { plans } : {}) } } : {}),
               ...(decisions ? { decisions } : {}),
+              ...(gaps ? { gaps } : {}),
               ...(code && config.toolCalling ? { code } : {}),
               // #161: errors and logs in his Google Cloud environments, read-only, with tools (Claude).
               ...(gcloud && config.toolCalling ? { gcloud } : {}),

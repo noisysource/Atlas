@@ -43,6 +43,7 @@ import {
   type GithubReader,
 } from "../github/github.js";
 import { HOUSE_NOW_TOOL, HOUSE_STATE_PATH, houseForBrain, houseSummary } from "../house/house.js";
+import { GAP_LIST_TOOL, GAP_NOTE_TOOL, GAP_TOOLS, gapLine, type Gaps } from "../gaps/gaps.js";
 import { DECISION_LIST_TOOL, DECISION_RECORD_TOOL, DECISION_TOOLS, decisionLine, decisionsForPrompt, type Decisions } from "../decisions/decisions.js";
 import { PLAN_FOLLOW_TOOL, PLAN_STATUS_TOOL, PLAN_TOOLS, planForBrain, type Plans } from "../plans/plans.js";
 import { blindsForBrain, HOUSE_BLINDS_TOOL, type Blinds } from "../house/blinds.js";
@@ -251,6 +252,8 @@ export const barePrompt = (
     readonly elsewhere?: readonly string[];
     /** #186: it writes down his decisions and keeps to them. With tools only. */
     readonly decisions?: boolean;
+    /** #138: it notes what it couldn't do, and proposes issues for it. With tools only. */
+    readonly gaps?: boolean;
     /** It can ask a code agent about a repo (#126). With GitHub only. */
     readonly code?: boolean;
     /** It can study repos and keeps notes (#127). With the code agent only. */
@@ -348,6 +351,11 @@ export const barePrompt = (
     ...(options.elsewhere && options.elsewhere.length > 0
       ? [
           `You're the local model on his computer and have no tools: you can't see ${options.elsewhere.join(", ")}. If he asks about any of that, say in one sentence that ☁️ Claude can answer it and that the 🧠 button at the top switches to Claude. Never guess where something stands, and never send him to someone else for it.`,
+        ]
+      : []),
+    ...(options.gaps === true && options.tools === true
+      ? [
+          "When you can't do something he asked because a tool, an account or an ability is missing (not a one-off error, not something you chose not to do), call gap_note in general words with no personal details, then tell him plainly what you can't do yet. If it has come up before (gap_note says how often) or he wants it built, offer to propose an issue with gap_issue: a card asks him, and only his OK opens it; after that, a coding task can take it. For \"what can't you do yet?\", use gap_list.",
         ]
       : []),
     ...(options.decisions === true && options.tools === true
@@ -609,6 +617,8 @@ export const makeBareAnswerer = (deps: {
   readonly memory?: MemoryToolDeps;
   /** #186: his decisions, written down when he makes them, and kept to. With tools only. */
   readonly decisions?: Decisions;
+  /** #138: what it couldn't do, and issues proposed for it after his OK. With tools only. */
+  readonly gaps?: Gaps;
   /** The local model (no tools): what Claude can reach, so it says to switch instead of guessing. */
   readonly elsewhere?: readonly string[];
   /** Reach 3: their Gmail, read-only, with tools only. `isEc` hides EC email (Kiro's). */
@@ -682,7 +692,7 @@ export const makeBareAnswerer = (deps: {
   const prompts = (profile?: string) => {
     // ATLAS_USER_NAME wins; otherwise the profile's "Name:" line.
     const name = deps.userName ?? (profile ? profileName(profile) : undefined);
-    const extra = { ...(deps.elsewhere && deps.tools !== true ? { elsewhere: deps.elsewhere } : {}), ...(deps.decisions && deps.tools === true ? { decisions: true, tools: true } : {}), ...(profile ? { profile } : {}), ...(deps.calendar ? { calendar: true } : {}), ...(deps.calendar && deps.tools === true ? { tools: true } : {}), ...(deps.calendar?.create && deps.tools === true ? { create: true } : {}), ...(deps.gmail && deps.tools === true ? { email: true, tools: true } : {}), ...(deps.gmail?.writer && deps.tools === true ? { emailDrafts: true } : {}), ...(deps.memory && deps.tools === true ? { memory: true, tools: true } : {}), ...(deps.memory && deps.skills && deps.tools === true ? { skills: true } : {}), ...(deps.github && deps.tools === true ? { github: true, tools: true } : {}), ...(deps.github?.plans && deps.tools === true ? { plans: true } : {}), ...(deps.github && deps.code && deps.tools === true ? { code: true } : {}), ...(deps.github && deps.code?.study && deps.tools === true ? { study: true } : {}), ...(deps.gcloud && deps.tools === true ? { gcloud: true, tools: true } : {}), ...(deps.vendus && deps.tools === true ? { vendus: true, tools: true } : {}), ...(deps.house && deps.tools === true ? { house: true, tools: true } : {}), ...(deps.house?.blinds && deps.tools === true ? { houseControl: true } : {}), ...(deps.gcloud?.db && deps.tools === true ? { gcloudDb: true } : {}), ...(deps.route && deps.route.mode !== "all" && deps.tools === true ? { routed: true } : {}), ...(deps.brief === true && deps.calendar && deps.tools === true ? { brief: true } : {}), ...(deps.github && deps.code?.fix && deps.tools === true ? { fix: true } : {}), ...(deps.github && deps.code?.tasks && deps.tools === true ? { tasks: true } : {}) };
+    const extra = { ...(deps.elsewhere && deps.tools !== true ? { elsewhere: deps.elsewhere } : {}), ...(deps.decisions && deps.tools === true ? { decisions: true, tools: true } : {}), ...(deps.gaps && deps.tools === true ? { gaps: true, tools: true } : {}), ...(profile ? { profile } : {}), ...(deps.calendar ? { calendar: true } : {}), ...(deps.calendar && deps.tools === true ? { tools: true } : {}), ...(deps.calendar?.create && deps.tools === true ? { create: true } : {}), ...(deps.gmail && deps.tools === true ? { email: true, tools: true } : {}), ...(deps.gmail?.writer && deps.tools === true ? { emailDrafts: true } : {}), ...(deps.memory && deps.tools === true ? { memory: true, tools: true } : {}), ...(deps.memory && deps.skills && deps.tools === true ? { skills: true } : {}), ...(deps.github && deps.tools === true ? { github: true, tools: true } : {}), ...(deps.github?.plans && deps.tools === true ? { plans: true } : {}), ...(deps.github && deps.code && deps.tools === true ? { code: true } : {}), ...(deps.github && deps.code?.study && deps.tools === true ? { study: true } : {}), ...(deps.gcloud && deps.tools === true ? { gcloud: true, tools: true } : {}), ...(deps.vendus && deps.tools === true ? { vendus: true, tools: true } : {}), ...(deps.house && deps.tools === true ? { house: true, tools: true } : {}), ...(deps.house?.blinds && deps.tools === true ? { houseControl: true } : {}), ...(deps.gcloud?.db && deps.tools === true ? { gcloudDb: true } : {}), ...(deps.route && deps.route.mode !== "all" && deps.tools === true ? { routed: true } : {}), ...(deps.brief === true && deps.calendar && deps.tools === true ? { brief: true } : {}), ...(deps.github && deps.code?.fix && deps.tools === true ? { fix: true } : {}), ...(deps.github && deps.code?.tasks && deps.tools === true ? { tasks: true } : {}) };
     return { typed: barePrompt(name, extra), spoken: barePrompt(name, { spoken: true, maxSentences: max, pauses, ...extra }) };
   };
   const withoutProfile = prompts();
@@ -832,7 +842,7 @@ export const makeBareAnswerer = (deps: {
     // Native tool calling (#104): the brain reads the calendar itself, and answers "did you
     // check?" from the record of what really ran (toolsSoFar). Code only checks each call.
     // Without tools (the local brain), code decides and words the date sentence, as before.
-    const tools = deps.tools === true && (deps.calendar !== undefined || deps.gmail !== undefined || deps.memory !== undefined || deps.github !== undefined || deps.gcloud !== undefined || deps.vendus !== undefined || deps.house !== undefined || deps.decisions !== undefined);
+    const tools = deps.tools === true && (deps.calendar !== undefined || deps.gmail !== undefined || deps.memory !== undefined || deps.github !== undefined || deps.gcloud !== undefined || deps.vendus !== undefined || deps.house !== undefined || deps.decisions !== undefined || deps.gaps !== undefined);
     // #107: this turn's memory: recent short-term notes go in the prompt; the rest is recalled on demand.
     const memoryTurn = tools && deps.memory ? makeMemoryTurn(deps.memory, { question, remember: remember !== false, now, ...(onStep ? { onStep } : {}) }) : undefined;
     const memoryCore = memoryTurn ? await memoryTurn.core() : undefined;
@@ -881,6 +891,7 @@ export const makeBareAnswerer = (deps: {
         ...(on.includes("gmail") ? toolsOf("gmail") : []),
         ...(memoryTurn ? MEMORY_TOOLS : []),
         ...(tools && deps.decisions ? DECISION_TOOLS : []),
+        ...(tools && deps.gaps ? GAP_TOOLS : []),
         ...(skillTurn ? [SKILL_FOLLOW_TOOL, SKILL_PROPOSE_TOOL] : []),
         ...(on.includes("github") ? toolsOf("github") : []),
         ...(on.includes("code") ? toolsOf("code") : []),
@@ -970,6 +981,30 @@ export const makeBareAnswerer = (deps: {
         deps.log?.info("tools added", { group: g });
         onStep?.({ kind: "tool", name: TOOLS_MORE, args: g, by: "model", ok: true, result: `${added.length} ${added.length === 1 ? "tool" : "tools"}` });
         return { callId: call.id, content: `Added the ${g} tools (${GROUP_ABOUT[g]}): ${added.join(", ")}. Use them now.` };
+      }
+      if (tools && deps.gaps && GAP_TOOLS.some((t) => t.name === call.name)) {
+        const gaps = deps.gaps;
+        const input = typeof call.input === "object" && call.input !== null ? (call.input as Record<string, unknown>) : {};
+        const text = (k: string, max: number): string => (typeof input[k] === "string" ? String(input[k]).trim().slice(0, max) : "");
+        const refused = (why: string): LlmToolResult => {
+          onStep?.({ kind: "tool", name: call.name, args: "", by: "model", ok: false, error: `refused: ${why.slice(0, 60)}` });
+          return { callId: call.id, content: `${call.name}: ${why}.`, isError: true };
+        };
+        if (call.name === GAP_NOTE_TOOL.name) {
+          const got = await gaps.note({ asked: text("asked", 200), missing: text("missing", 300) });
+          if (!got.ok) return refused(got.error);
+          onStep?.({ kind: "tool", name: call.name, args: got.value.id, by: "model", ok: true, result: got.value.count === 1 ? "noted" : `noted, ${got.value.count} times now` });
+          return { callId: call.id, content: `Noted gap ${got.value.id}${got.value.count > 1 ? `; it has come up ${got.value.count} times` : ""}${got.value.issue ? ` (issue #${got.value.issue} exists)` : ""}. Tell him plainly what you can't do yet${got.value.count > 1 && !got.value.issue ? ", and offer to propose an issue for it" : ""}.` };
+        }
+        if (call.name === GAP_LIST_TOOL.name) {
+          const list = await gaps.list();
+          onStep?.({ kind: "tool", name: call.name, args: "", by: "model", ok: true, result: `${list.length} ${list.length === 1 ? "gap" : "gaps"}` });
+          return { callId: call.id, content: list.length === 0 ? "No gaps noted yet." : ["What you couldn't do for him, most frequent first:", ...list.slice(0, 30).map(gapLine)].join("\n") };
+        }
+        const proposed = await gaps.propose({ id: text("id", 20), title: text("title", 140), body: text("body", 1600) });
+        if (!proposed.ok) return refused(proposed.error);
+        onStep?.({ kind: "tool", name: call.name, args: text("id", 20), by: "model", ok: true, result: "waiting for your OK", confirm: { id: proposed.value.id, label: proposed.value.label, kind: "gap-issue" } });
+        return { callId: call.id, content: `Not opened yet: the app is asking him "Open it" / "Not now" for ${proposed.value.label}. Say in one sentence that it needs his OK.` };
       }
       if (tools && deps.decisions && DECISION_TOOLS.some((t) => t.name === call.name)) {
         const log = deps.decisions;

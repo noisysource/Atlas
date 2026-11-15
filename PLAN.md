@@ -1107,6 +1107,15 @@ Confirmed (2026-11-12):
   himself aren't picked up yet: the handoff between them is the branch,
   the PR and STATUS.md.
 
+- **Gaps (#138):** `src/gaps/gaps.ts`. `gap_note` (what was asked and
+  what's missing, in general words; emails masked; EC refused; the same
+  gap, by most words of what was asked, is counted instead of repeated),
+  `gap_list` (most frequent first), `gap_issue` (a card, kind
+  `gap-issue`; "Open it" posts the issue to noisysource/Atlas with the
+  write token, with how often it came up; the issue number is kept on the
+  gap). Always offered with tools; switch `gaps` on the GitHub node.
+  The issue then goes through the normal path: a coding task, a PR,
+  Renato's test and merge. `data/gaps.json`, at most 200.
 - **Switches on the page (#151):** `src/switches.ts`. `availableSwitches`
   lists only what Claude's deps have (.env is the ceiling); `withSwitches`
   takes parts of the deps away per question (a whole tool group, write
