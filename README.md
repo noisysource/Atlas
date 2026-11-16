@@ -782,8 +782,19 @@ with Atlas's same prompts, tools, switches, EC precheck and OK cards;
 tap back to Claude any time. What a question needs (calendar events,
 emails, invoices) then goes to Google instead of Anthropic. Not with
 Google: web search (Anthropic's tool). Coding tasks stay on Claude Code.
-Its cost shows in 💲 Costs as the Gemini API. Gemini Live (speech to
-speech, for the microphone) is next.
+Its cost shows in 💲 Costs as the Gemini API.
+
+**Talking with Google (Gemini Live, `GEMINI_LIVE`, on with `GEMINI=on`).**
+With ✦ Google picked, the microphone talks to Gemini Live: a real voice
+conversation instead of Whisper → model → Kokoro. Each sentence is still
+cut by the page and checked on this Mac first (Whisper writes it down, the
+EC precheck runs), so EC work never reaches Google: it goes to Kiro's
+handoff as before. Then the sentence's audio goes to a Live session the Mac
+holds (the key never reaches the page), and Gemini answers in its own
+voice. For anything real (email, calendar, the house…) it asks Atlas,
+which answers with the Google brain's tools and OK cards; the steps and
+cards show as usual. Speaking over it stops it. Costs show in 💲 Costs as
+"voice". Optional: `GEMINI_LIVE_VOICE` (a Gemini voice name).
 
 ## What it costs
 

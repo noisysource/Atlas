@@ -24,6 +24,7 @@ import type { MemoryStore } from "./memory-store.js";
 import { makeTurnRegistry, type TurnRegistry } from "./turns.js";
 import type { TtsConfig, TurnConfig } from "./config.js";
 import { registerSttRoutes } from "./stt-routes.js";
+import { registerLiveRoutes } from "./live/routes.js";
 import type { SttProvider } from "./stt/types.js";
 import { registerTtsRoutes } from "./tts-routes.js";
 import type { TtsProviders } from "./tts/registry.js";
@@ -563,6 +564,19 @@ export const makeServer = (
 
   if (options.tts) registerTtsRoutes(app, { ...options.tts, language: "en", log: deps.log });
   if (options.stt) registerSttRoutes(app, { provider: options.stt, language: "en", log: deps.log });
+  // #250: Gemini Live for the microphone with ✦ Google; each sentence is checked here (Whisper, EC) first.
+  if (options.stt && deps.live) {
+    registerLiveRoutes(app, {
+      sessions: deps.live,
+      stt: options.stt,
+      precheck: deps.precheck,
+      ask: async (question, history, meta) => {
+        const request = parseAskRequest({ question, history, brain: "google" });
+        return request.ok ? handleAsk(deps, request.value, meta) : { type: "error", message: request.error };
+      },
+      log: deps.log,
+    });
+  }
   // #133: the brain view's node panels. Names, on/off and counts only.
   const reach = deps.reach;
   if (reach) {
@@ -596,6 +610,8 @@ export const makeServer = (
           { id: "claude", label: brains.labels.claude },
           ...(brains.labels.google ? [{ id: "google", label: brains.labels.google }] : []),
         ],
+        // #250: the microphone talks to Gemini Live when Google is picked.
+        live: deps.live !== undefined && options.stt !== undefined,
         calendar: brains.calendar === true,
       });
     });

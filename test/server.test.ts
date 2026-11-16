@@ -404,6 +404,7 @@ describe("GET /brains (#88)", () => {
         { id: "local", label: "Local · llama3.1:8b" },
         { id: "claude", label: "Claude · claude-sonnet-5-5" },
       ],
+      live: false,
       calendar: false,
     });
     // The calendar on (#100): the page notes once that, with Claude, event titles go to Anthropic.

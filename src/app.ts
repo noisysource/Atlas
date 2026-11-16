@@ -43,7 +43,15 @@ import { makeClassifier } from "./classify.js";
 import type { Config, Env } from "./config.js";
 import { loadContexts } from "./contexts.js";
 import type { ModelRef } from "./llm/model-ref.js";
-import { makeCostLog, meteredCodeAgent, meteredLlm, meteredTaskRunner, summarize, type CostLog } from "./costs.js";
+import { eventOf, makeCostLog, meteredCodeAgent, meteredLlm, meteredTaskRunner, summarize, type CostLog } from "./costs.js";
+import { liveInstruction, makeLiveSession } from "./live/live.js";
+import { makeLiveSessions, type LiveSessions } from "./live/routes.js";
+
+/** #250: idle Live sessions are closed even when no new turn comes. */
+const sweptEveryMinute = (s: LiveSessions & { readonly sweep: () => void }): LiveSessions => {
+  setInterval(s.sweep, 60_000).unref();
+  return s;
+};
 import { makeLlm, type ProviderKeys, type ProviderUrls } from "./llm/registry.js";
 import type { LlmCall } from "./llm/types.js";
 import { makeBackgroundTasks, type BackgroundTasks } from "./background.js";
@@ -643,6 +651,22 @@ export const buildDeps = async (inputs: AppInputs): Promise<Result<Deps, string>
     ...(calendarChanges ? { calendarChange: calendarChanges } : {}),
     ...(reminders ? { reminders } : {}),
     costs: { summary: async () => summarize(await costLog.all(), { now: new Date(), timeZone: config.timeZone, subscriptions: config.costs.subscriptions }) },
+    // #250: Gemini Live for the microphone, with the Google brain; its audio and text counted as voice.
+    ...(geminiKey && config.gemini.live.enabled
+      ? {
+          live: sweptEveryMinute(makeLiveSessions({
+            create: () =>
+              makeLiveSession({
+                apiKey: geminiKey.value.key,
+                model: config.gemini.live.model,
+                instruction: liveInstruction(config.userName),
+                ...(config.gemini.live.voice ? { voice: config.gemini.live.voice } : {}),
+                onUsage: (u) => costLog.record(eventOf({ provider: "google", model: config.gemini.live.model }, "voice", u, 0, new Date())),
+                log,
+              }),
+          })),
+        }
+      : {}),
     ...(inboxTidy ? { gmailTidy: inboxTidy } : {}),
     classify: makeClassifier({ contexts: contexts.value, llm: classifierLlm.value, log, thinking: config.turn.classifierThinking }),
     stickyContext: config.turn.stickyContext,

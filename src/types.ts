@@ -12,6 +12,7 @@ import type { Blinds } from "./house/blinds.js";
 import type { Gaps } from "./gaps/gaps.js";
 import type { Reminders } from "./reminders/reminders.js";
 import type { CostSummary } from "./costs.js";
+import type { LiveSessions } from "./live/routes.js";
 import type { CalendarChanges } from "./calendar/change.js";
 import type { InboxTidy } from "./gmail/tidy.js";
 import type { CodeMapView, Studies } from "./code/study.js";
@@ -359,6 +360,8 @@ export type Deps = {
   readonly calendarChange?: Pick<CalendarChanges, "decide">;
   /** #218: his reminders, for the page (GET /reminders, POST /reminders/done). */
   readonly reminders?: { readonly store: Reminders; readonly today: () => string };
+  /** #250: Gemini Live sessions, one per page, when ✦ Google may talk by voice. */
+  readonly live?: LiveSessions;
   /** #247: what Atlas costs, per service: GET /costs. */
   readonly costs?: { readonly summary: () => Promise<CostSummary> };
   /** #138: his answer to opening an issue for a gap (POST /gaps/issue). Only "yes" opens it. */

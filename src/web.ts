@@ -45,6 +45,8 @@ export const FILES: readonly { path: string; file: string; contentType: string }
   { path: "/reminders-lib.js", file: "reminders-lib.js", contentType: "text/javascript; charset=utf-8" },
   { path: "/costs.js", file: "costs.js", contentType: "text/javascript; charset=utf-8" },
   { path: "/costs-lib.js", file: "costs-lib.js", contentType: "text/javascript; charset=utf-8" },
+  { path: "/live.js", file: "live.js", contentType: "text/javascript; charset=utf-8" },
+  { path: "/live-lib.js", file: "live-lib.js", contentType: "text/javascript; charset=utf-8" },
   { path: "/silero.js", file: "silero.js", contentType: "text/javascript; charset=utf-8" },
   { path: "/vad.js", file: "vad.js", contentType: "text/javascript; charset=utf-8" },
 ];
