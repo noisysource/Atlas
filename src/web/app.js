@@ -10,7 +10,7 @@ import { makeBrainView } from "./brain.js";
 import { makeCodeMapView } from "./codemap.js";
 import { makeStudiesView } from "./studies.js";
 import { makeTraceView } from "./trace.js";
-import { atEnd, clock, conversationText } from "./terminal-lib.js";
+import { atEnd, clock, conversationText, inlineMarks } from "./terminal-lib.js";
 import { CARD_DONE } from "./turn-lib.js";
 import { cardAnswer } from "./card-lib.js";
 import {
@@ -417,6 +417,10 @@ const confirmCard = (proposal) => {
       // #224: the step that was waiting turns done, declined or failed, in the tree and in "How I got here".
       const outcome = decision === "no" ? "declined" : result.ok ? "done" : "failed";
       traceView.decided(proposal.id, outcome);
+      // #226: the node stops waiting once none of its cards is.
+      const node = NODE_OF_CARD[/** @type {keyof typeof NODE_OF_CARD} */ (kind)];
+      const stillWaiting = [...document.querySelectorAll('.confirm[data-pending="true"]')].some((c) => NODE_OF_CARD[/** @type {keyof typeof NODE_OF_CARD} */ (/** @type {HTMLElement} */ (c).dataset.kind ?? "")] === node);
+      if (node && !stillWaiting) brainView.decided(/** @type {import("./brain-lib.js").NodeId} */ (node), outcome);
       markDecided(card, outcome);
       addMessage(result.ok ? "answer" : "error", text);
       // #224: in a spoken conversation, what happened is said aloud too, then the mic listens again.
@@ -498,7 +502,21 @@ const appendToMessage = (item, sentence) => {
 /** @param {HTMLElement} item @param {string} text */
 const setMessageText = (item, text) => {
   const body = item.querySelector("p");
-  if (body) body.textContent = text;
+  if (!body) return;
+  // #226: **bold** and `code` in an answer show as such, set as text nodes, never HTML.
+  if (!/\*\*[^*\n]+\*\*|`[^`\n]+`/.test(text)) {
+    body.textContent = text;
+    return;
+  }
+  body.replaceChildren();
+  for (const seg of inlineMarks(text)) {
+    if (seg.kind === "text") body.append(seg.text);
+    else {
+      const mark = document.createElement(seg.kind === "bold" ? "strong" : "code");
+      mark.textContent = seg.text;
+      body.append(mark);
+    }
+  }
 };
 
 const renderControls = () => {

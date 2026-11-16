@@ -360,6 +360,15 @@ export const makeBrainView = (root, options = {}) => {
       state = applyReach(state, tool);
       draw();
     },
+    /**
+     * He answered the last card for a node (#226): it stops waiting.
+     * @param {import("./brain-lib.js").NodeId} node @param {"done" | "declined" | "failed"} outcome
+     */
+    decided: (node, outcome) => {
+      if (state[node] !== "waiting") return;
+      state = { ...state, [node]: outcome === "failed" ? "failed" : "used" };
+      draw();
+    },
     /** A step ended. @param {PathStep} step */
     step: (step) => {
       if (step.kind === "tools") offered = offeredNodes(step.offered);
