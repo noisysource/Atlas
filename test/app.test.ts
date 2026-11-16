@@ -75,6 +75,7 @@ const build = async (overrides: Partial<AppInputs> & { classifyAs?: string } = {
   const models = stubModels(overrides.classifyAs ?? "personal");
   const background = makeBackgroundTasks({ log: silentLog });
   const result = await buildDeps({
+    costLog: { record: () => undefined, all: async () => [] },
     background,
     config,
     env: { ANTHROPIC_API_KEY: "sk-ant-test" },
@@ -282,6 +283,7 @@ describe("memory, end to end", () => {
         );
       });
     const result = await buildDeps({
+      costLog: { record: () => undefined, all: async () => [] },
       config,
       env: { ANTHROPIC_API_KEY: "sk-ant-test" },
       log: silentLog,

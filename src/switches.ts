@@ -114,7 +114,7 @@ const withoutAccounts = (reader: GmailReader, off: ReadonlySet<string>): GmailRe
 };
 
 /** A copy without one key. */
-const omit = <T extends object, K extends keyof T>(o: T, k: K): Omit<T, K> => Object.fromEntries(Object.entries(o).filter(([key]) => key !== k)) as Omit<T, K>;
+export const omit = <T extends object, K extends keyof T>(o: T, k: K): Omit<T, K> => Object.fromEntries(Object.entries(o).filter(([key]) => key !== k)) as Omit<T, K>;
 
 /** A copy without some keys. */
 const omitAll = <T extends object, K extends keyof T>(o: T, keys: readonly K[]): Omit<T, K> => Object.fromEntries(Object.entries(o).filter(([key]) => !(keys as readonly string[]).includes(key))) as Omit<T, K>;

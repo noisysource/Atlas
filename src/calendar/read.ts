@@ -5,6 +5,7 @@
 // as data, with anything that looks like EC work reduced to "EC work,
 // handled by Kiro": never its title, place or people.
 
+import { accountsLine, GOOGLE_ACCOUNTS } from "../google-accounts.js";
 import { err, ok, type Result } from "../result.js";
 import type { JsonObjectSchema, LlmTool } from "../llm/types.js";
 import type { Precheck } from "../types.js";
@@ -74,13 +75,13 @@ export const CALENDAR_REQUEST_SCHEMA: JsonObjectSchema = {
 export const CALENDAR_READ_TOOL: LlmTool = {
   name: "calendar_read",
   description:
-    'Read their Google Calendars (read-only) for a range of days, inclusive. Use it whenever answering needs what\'s on their calendar: what\'s on, whether they\'re free or busy, their plans, meetings or appointments. At most 31 days per call; for longer, read it in parts. Without account it reads every connected calendar: "personal" (Renato\'s own) and "noisysource" (his company Noisy Source\'s); each event says which. Give account only when they ask about one.',
+    `Read their Google Calendars (read-only) for a range of days, inclusive. Use it whenever answering needs what's on their calendar: what's on, whether they're free or busy, their plans, meetings or appointments. At most 31 days per call; for longer, read it in parts. Without account it reads his own connected calendars; each event says which. ${accountsLine("calendar")}. Give account only when they ask about one (for someone else's, like Marisa's, call it for that account).`,
   inputSchema: {
     type: "object",
     properties: {
       from: { type: "string", description: "First day to read, YYYY-MM-DD, in their time zone" },
       to: { type: "string", description: "Last day to read (inclusive), YYYY-MM-DD" },
-      account: { type: "string", enum: ["personal", "noisysource"], description: "Only this calendar; leave it out to read all" },
+      account: { type: "string", enum: [...GOOGLE_ACCOUNTS], description: "Only this calendar; leave it out to read his own" },
     },
     required: ["from", "to"],
     additionalProperties: false,

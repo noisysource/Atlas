@@ -17,7 +17,7 @@ import { makeCalendarChanger, makeCalendarChanges } from "./calendar/change.js";
 import { makeReminders, reminderLine } from "./reminders/reminders.js";
 import { makeTalkStore } from "./talk.js";
 import { makeGmailTidier, makeInboxTidy } from "./gmail/tidy.js";
-import { availableSwitches, makeSettings, makeSwitchedAnswerer, type BareDeps } from "./switches.js";
+import { availableSwitches, makeSettings, makeSwitchedAnswerer, omit, type BareDeps } from "./switches.js";
 import { makeBlinds, makeCallable, readFirebaseUser } from "./house/blinds.js";
 import { makeVendusGet, type VendusGet } from "./vendus/vendus.js";
 import { makeCodeRefresh } from "./code/freshness.js";
@@ -44,6 +44,15 @@ import { makeClassifier } from "./classify.js";
 import type { Config, Env } from "./config.js";
 import { loadContexts } from "./contexts.js";
 import type { ModelRef } from "./llm/model-ref.js";
+import { eventOf, makeCostLog, meteredCodeAgent, meteredLlm, meteredTaskRunner, summarize, type CostLog } from "./costs.js";
+import { liveInstruction, makeLiveSession } from "./live/live.js";
+import { makeLiveSessions, type LiveSessions } from "./live/routes.js";
+
+/** #250: idle Live sessions are closed even when no new turn comes. */
+const sweptEveryMinute = (s: LiveSessions & { readonly sweep: () => void }): LiveSessions => {
+  setInterval(s.sweep, 60_000).unref();
+  return s;
+};
 import { makeLlm, type ProviderKeys, type ProviderUrls } from "./llm/registry.js";
 import type { LlmCall } from "./llm/types.js";
 import { makeBackgroundTasks, type BackgroundTasks } from "./background.js";
@@ -59,7 +68,7 @@ import { makeMemoryStoreInMemory, type MemoryStore } from "./memory-store.js";
 import { makePrecheck } from "./precheck.js";
 import { makeProfileSource, type ProfileFileSystem } from "./profile.js";
 import { err, ok, type Result } from "./result.js";
-import { makeGcpSecretAccess, makeSecretGetter, resolveAnthropicKey } from "./secrets.js";
+import { makeGcpSecretAccess, makeSecretGetter, resolveAnthropicKey, resolveGeminiKey } from "./secrets.js";
 import type { Context, Deps, Logger } from "./types.js";
 
 export type AppInputs = {
@@ -97,6 +106,8 @@ export type AppInputs = {
   readonly codeFixes?: Fixes;
   /** Tests: a code agent and repo copies instead of Claude Code and git (#126). */
   readonly codeAgent?: CodeAgent;
+  /** #247: where costs are counted (tests give their own). */
+  readonly costLog?: CostLog;
   readonly repoCopies?: RepoCopies;
   /** Tests: where code notes are kept (#127), instead of data/code/. */
   readonly noteFiles?: NoteFiles;
@@ -161,23 +172,32 @@ export const buildDeps = async (inputs: AppInputs): Promise<Result<Deps, string>
   if (!firstProfile.ok) return err(firstProfile.error.message);
 
   const project = config.secrets.gcpProject;
-  const key = await resolveAnthropicKey({
-    config,
-    env,
-    getSecret: project ? makeSecretGetter({ project, access: makeGcpSecretAccess() }) : undefined,
-  });
+  const getSecret = project ? makeSecretGetter({ project, access: makeGcpSecretAccess() }) : undefined;
+  const key = await resolveAnthropicKey({ config, env, getSecret });
   if (!key.ok) return key;
   log.info("anthropic key loaded", { source: key.value.source });
+  // #248: the Google brain's key, only when GEMINI=on.
+  const geminiKey = config.gemini.enabled ? await resolveGeminiKey({ config, env, getSecret }) : undefined;
+  if (geminiKey && !geminiKey.ok) return geminiKey;
+  if (geminiKey) log.info("gemini key loaded", { source: geminiKey.value.source });
 
   const buildLlm = inputs.makeLlm ?? makeLlm;
-  const keys: ProviderKeys = { anthropic: key.value.key };
-  const classifierLlm = buildLlm(config.models.classifier, keys, { log });
+  const keys: ProviderKeys = { anthropic: key.value.key, ...(geminiKey ? { google: geminiKey.value.key } : {}) };
+  // #247: every model call is counted for the costs panel (counts and amounts only).
+  const costLog = inputs.costLog ?? makeCostLog({ path: config.costs.path, onError: () => log.warn("cost log write failed") });
+  const metered = (r: Result<LlmCall, string>, ref: ModelRef, purpose: string): Result<LlmCall, string> => (r.ok ? ok(meteredLlm(r.value, ref, purpose, costLog)) : r);
+  const classifierLlm = metered(buildLlm(config.models.classifier, keys, { log }), config.models.classifier, "classify");
   if (!classifierLlm.ok) return err(`CLASSIFIER_MODEL: ${classifierLlm.error}`);
-  const answerLlm = buildLlm(config.models.answer, keys, { log });
+  const answerLlm = metered(buildLlm(config.models.answer, keys, { log }), config.models.answer, "answer");
   if (!answerLlm.ok) return err(`ANSWER_MODEL: ${answerLlm.error}`);
   // The "Local" brain (#88): Ollama on this machine.
-  const localLlm = buildLlm(config.models.local, keys, { ollama: config.ollamaUrl, ollamaThink: config.ollamaThink });
+  const localLlm = metered(buildLlm(config.models.local, keys, { ollama: config.ollamaUrl, ollamaThink: config.ollamaThink }), config.models.local, "local");
   if (!localLlm.ok) return err(`OLLAMA_MODEL: ${localLlm.error}`);
+  // #248: the Google brain: Gemini answers, Flash-Lite picks the tool groups.
+  const googleLlm = config.gemini.enabled ? metered(buildLlm(config.gemini.model, keys, { log }), config.gemini.model, "answer") : undefined;
+  if (googleLlm && !googleLlm.ok) return err(`GEMINI_MODEL: ${googleLlm.error}`);
+  const googleRouterLlm = config.gemini.enabled ? metered(buildLlm(config.gemini.router, keys, { log }), config.gemini.router, "route") : undefined;
+  if (googleRouterLlm && !googleRouterLlm.ok) return err(`GEMINI_ROUTER_MODEL: ${googleRouterLlm.error}`);
 
   if (!contexts.value.some((c) => c.id === "personal" && c.handling.kind === "answer")) {
     return err(`${config.contextsPath} needs an answered "personal" context`);
@@ -348,7 +368,9 @@ export const buildDeps = async (inputs: AppInputs): Promise<Result<Deps, string>
       list: () => readdir(config.codeAgent.study.notesPath),
     },
   );
-  const codeAgent = github && config.codeAgent.enabled ? (inputs.codeAgent ?? makeClaudeCodeAgent({ apiKey: key.value.key, auth: config.codeAgent.auth, model: config.codeAgent.model })) : undefined;
+  const rawCodeAgent = github && config.codeAgent.enabled ? (inputs.codeAgent ?? makeClaudeCodeAgent({ apiKey: key.value.key, auth: config.codeAgent.auth, model: config.codeAgent.model })) : undefined;
+  // #247: code questions and fixes cost what Claude Code reports, on the API or the plan.
+  const codeAgent = rawCodeAgent ? meteredCodeAgent(rawCodeAgent, costLog, config.codeAgent.model ?? "claude-code") : undefined;
   const repoCopies = inputs.repoCopies ?? makeRepoCopies({ root: config.codeAgent.reposPath, token: githubTokens.token, run: runCommand });
   const studies = codeAgent
     ? makeStudies({ agent: codeAgent, copies: repoCopies, store: noteStore, isEc: isEcText, maxUsd: config.codeAgent.study.maxUsd, maxTurns: config.codeAgent.study.maxTurns, now, log })
@@ -405,7 +427,7 @@ export const buildDeps = async (inputs: AppInputs): Promise<Result<Deps, string>
     codeAgent && config.codeAgent.tasks.enabled
       ? (inputs.codeTasks ??
         makeTasks({
-          runner: makeTaskRunner({ model: config.codeAgent.model }),
+          runner: meteredTaskRunner(makeTaskRunner({ model: config.codeAgent.model }), costLog, config.codeAgent.model ?? "claude-code"),
           store: {
             read: async () => {
               const text = await readFileFs(tasksFile, "utf8").catch(() => undefined);
@@ -632,6 +654,23 @@ export const buildDeps = async (inputs: AppInputs): Promise<Result<Deps, string>
     ...(calendarChanges ? { calendarChange: calendarChanges } : {}),
     ...(reminders ? { reminders } : {}),
     talk,
+    costs: { summary: async () => summarize(await costLog.all(), { now: new Date(), timeZone: config.timeZone, subscriptions: config.costs.subscriptions }) },
+    // #250: Gemini Live for the microphone, with the Google brain; its audio and text counted as voice.
+    ...(geminiKey && config.gemini.live.enabled
+      ? {
+          live: sweptEveryMinute(makeLiveSessions({
+            create: () =>
+              makeLiveSession({
+                apiKey: geminiKey.value.key,
+                model: config.gemini.live.model,
+                instruction: liveInstruction(config.userName),
+                ...(config.gemini.live.voice ? { voice: config.gemini.live.voice } : {}),
+                onUsage: (u) => costLog.record(eventOf({ provider: "google", model: config.gemini.live.model }, "voice", u, 0, new Date())),
+                log,
+              }),
+          })),
+        }
+      : {}),
     ...(inboxTidy ? { gmailTidy: inboxTidy } : {}),
     classify: makeClassifier({ contexts: contexts.value, llm: classifierLlm.value, log, thinking: config.turn.classifierThinking }),
     stickyContext: config.turn.stickyContext,
@@ -682,6 +721,21 @@ export const buildDeps = async (inputs: AppInputs): Promise<Result<Deps, string>
             }),
               settings,
             ),
+            // #248: the Google brain: Atlas's same tools, prompts and OK cards, Gemini answering.
+            // No web search (that's Anthropic's tool); the switches apply as with Claude.
+            ...(googleLlm?.ok && googleRouterLlm?.ok && claudeDeps
+              ? {
+                  google: makeSwitchedAnswerer(
+                    makeBareAnswerer,
+                    {
+                      ...omit(claudeDeps, "webSearch"),
+                      llm: googleLlm.value,
+                      route: { mode: config.toolRouter, ...(config.toolRouter === "model" ? { router: makeToolRouter({ llm: googleRouterLlm.value, log }) } : {}) },
+                    },
+                    settings,
+                  ),
+                }
+              : {}),
             local: makeBareAnswerer({
               llm: localLlm.value,
               // What only Claude reaches, so the local model says to switch instead of guessing.

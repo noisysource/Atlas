@@ -165,6 +165,7 @@ describe("Claude drafts, Renato sends", () => {
     const config = loadConfig({ BARE_MODE: "on", GMAIL: "on", GMAIL_WRITE: "on", TOOL_ROUTER: "rules" });
     if (!config.ok) throw new Error(config.error);
     const made = await buildDeps({
+      costLog: { record: () => undefined, all: async () => [] },
       config: config.value,
       env: { ANTHROPIC_API_KEY: "sk-ant-test" },
       log: silent,
@@ -241,6 +242,7 @@ describe("deleting a draft Atlas wrote (#124)", () => {
     const config = loadConfig({ BARE_MODE: "on", GMAIL: "on", GMAIL_WRITE: "on", TOOL_ROUTER: "rules" });
     if (!config.ok) throw new Error(config.error);
     const made = await buildDeps({
+      costLog: { record: () => undefined, all: async () => [] },
       config: config.value,
       env: { ANTHROPIC_API_KEY: "sk-ant-test" },
       log: silent,

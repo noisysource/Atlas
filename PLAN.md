@@ -1118,6 +1118,66 @@ Confirmed (2026-11-12):
   /talk` / `POST /talk` for the Profile panel's selects. The local model
   gets the lines too (no tool). Speech stays English: a pt-PT answer is
   read by the English voice until local speech (#54).
+- **The Google brain (#248, typed first):** `src/llm/gemini.ts`, a third
+  provider (`google:<model>`) on `generateContent`, streamed as SSE, plain
+  fetch (no SDK). Tools go as `functionDeclarations` with
+  `parametersJsonSchema`; `thinking: "off"` is `thinkingLevel: "minimal"`;
+  JSON output via `responseJsonSchema`. Gemini 3 requires its thought
+  signatures back exactly as received, so an assistant turn's payload is
+  the model's parts, unchanged, replayed on the next request; tool results
+  go back as `functionResponse` parts by name. Usage: cached tokens apart,
+  thinking billed as output. Two retries on 429/5xx. `GEMINI=on` builds a
+  `google` bare answerer from Claude's deps (minus web search) with the
+  Gemini model and a Flash-Lite tool router, behind the same switches;
+  `brain: "google"` in requests; `/brains` lists it; the page's button
+  cycles Local → Claude → Google. Key: `GEMINI_API_KEY` in `.env` locally,
+  Secret Manager (`GEMINI_SECRET_NAME`) in production. Next: Gemini Live
+  for the microphone.
+- **Gemini Live (#250):** `src/live/live.ts` holds one Live session per
+  page on the Mac (WebSocket to `BidiGenerateContent`, key in the URL,
+  server to server), opened on the first spoken turn, closed after 10
+  idle minutes, resumed with Google's handle after goAway. Manual activity
+  (`automaticActivityDetection.disabled`): the page's Silero detector cuts
+  each sentence; `POST /live/turn` runs Whisper and the EC precheck first
+  (he chose this over checking while Google listens: EC turns never reach
+  Google and come back as `ec`, which the page sends the normal way), then
+  sends activityStart, the PCM, activityEnd. One tool, `ask_atlas` (his
+  choice over exposing every tool), runs `handleAsk` with `brain: google`,
+  so tools, cards, EC and the honesty guard are the typed path's; at most
+  3 a turn. Audio (24 kHz PCM) and the output transcript stream back as
+  SSE; the page plays them through `live.js` behind the same `speaker`
+  handle, so barge-in works as with Kokoro. Usage per turn, split by
+  modality, goes to costs as `voice`.
+- **Costs (#247):** `src/costs.ts`. Every `LlmCall` built in `app.ts`
+  is wrapped (`meteredLlm`, purpose classify / answer / local) and the
+  code agent and task runner too (`meteredCodeAgent`,
+  `meteredTaskRunner`: on his login it's the plan, with the API-equivalent
+  `total_cost_usd` beside it; on the API key it's API spend). Each call is
+  priced from a dated list-price table (Anthropic, Gemini incl. Live audio
+  and the 2027 Flash rise, web search $0.01) and appended to
+  `data/costs.jsonl` (mode 600, gitignored, CI guard; counts and amounts
+  only). `GET /costs` sums per service for today, 7 days and the
+  calendar month in his time zone, plus `COST_SUBSCRIPTIONS` fees; the 💲
+  Costs dialog shows it. Estimates; the consoles have the bill.
+- **More Google accounts (#245):** `src/google-accounts.ts` is the one
+  list (personal, noisysource, kidclub, marisa) for Gmail and Calendar,
+  with whose each is, how drafts are signed and whether it's his own.
+  `MY_ACCOUNTS` (all but marisa) are what a calendar read without an
+  account, triage, follow-ups and the brief use; Marisa's is read only
+  when he names her or asks about them both. Tokens per name as before
+  (`data/google-gmail-<name>.json`, `data/google-calendar-<name>.json`);
+  addresses are never in the repo. Same rights as his: every write is
+  still a card he taps.
+- **Email attachments (#235):** `src/gmail/attachments.ts`. `gmail_read`
+  lists attachments (parts with a filename and an `attachmentId`: name,
+  type, size); `gmail_attachment` (account, id, attachment number) GETs
+  the message, then `messages/{id}/attachments/{attachmentId}`, and
+  extracts text: PDFs with `unpdf` (pinned 2.1.0, per page, at most 40
+  pages), text/CSV as UTF-8; images and scans are refused with why.
+  Caps: 10 MB (not downloaded beyond), 20,000 characters to the brain.
+  The EC check runs on the parent email's headers before any text is
+  returned. Read-only scope unchanged; router words: attachment, pdf,
+  anexo.
 - **Web search (#220):** Anthropic's server tool
   `web_search_20250305`, added by `buildParams` when the request carries
   `webSearch {maxUses, country, city, timezone}`; `mapResponse` returns

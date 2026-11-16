@@ -114,6 +114,7 @@ export const reachView = async (input: ReachInput): Promise<readonly ReachNode[]
       tools: [
         { name: "gmail_search", does: "search one account" },
         { name: "gmail_read", does: "read one email" },
+        { name: "gmail_attachment", does: "read a PDF or text attachment" },
         { name: "gmail_followups", does: "find email you sent that got no reply" },
         ...(config.gmail.write
           ? [

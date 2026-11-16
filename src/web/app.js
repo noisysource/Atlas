@@ -7,6 +7,8 @@ import { followFix } from "./fix.js";
 import { showMorningBrief } from "./morning.js";
 import { startTasksPanel } from "./tasks.js";
 import { startRemindersPanel } from "./reminders.js";
+import { makeCostsView } from "./costs.js";
+import { makeLivePlayer, runLiveTurn } from "./live.js";
 import { makeBrainView } from "./brain.js";
 import { makeCodeMapView } from "./codemap.js";
 import { makeStudiesView } from "./studies.js";
@@ -26,6 +28,9 @@ import {
   matchContextOption,
   newConversationId,
   parseBrain,
+  brainIcon,
+  brainName,
+  nextBrain,
   CALENDAR_CLAUDE_NOTE,
   calendarNoteDue,
   pathLines,
@@ -182,7 +187,7 @@ const randomBytes = (count) => crypto.getRandomValues(new Uint8Array(count));
  *   listening: boolean, transcribing: boolean, pending: PendingClarify | null,
  *   phase: import("./turn-lib.js").Phase, lastContext: string | undefined,
  *   conversation: boolean, voiceSession: boolean, autoBlocked: boolean,
- *   conversationId: string, remember: boolean, brain: "claude" | "local",
+ *   conversationId: string, remember: boolean, brain: "claude" | "local" | "google",
  * }}
  */
 const state = {
@@ -208,6 +213,15 @@ const state = {
 };
 /** The brains' labels from GET /brains, e.g. "Local · llama3.1:8b". @type {Record<string, string>} */
 let brainLabels = { local: "Local", claude: "Claude" };
+/** #248: the brains this Atlas has (Google only when GEMINI=on). @type {("claude" | "local" | "google")[]} */
+let brainsAvailable = ["local", "claude"];
+/** #250: the microphone talks to Gemini Live when ✦ Google is picked (GET /brains says it's there). */
+let liveOn = false;
+/** This page's Live session on the Mac. */
+const liveSession = crypto.randomUUID();
+window.addEventListener("pagehide", () => {
+  if (liveOn) navigator.sendBeacon("/live/end", new Blob([JSON.stringify({ session: liveSession })], { type: "application/json" }));
+});
 
 // The brain view (#131): lines to what Atlas reaches for in the current answer.
 // Each node opens a panel (#133); Memory and Skills link to their full views.
@@ -260,6 +274,10 @@ const brainView = makeBrainView(byId("brain-view"), {
 // #158: the maps of the code he's studied.
 const codeMapView = makeCodeMapView(/** @type {HTMLDialogElement} */ (byId("codemap")));
 byId("codemaps").addEventListener("click", () => void codeMapView.open());
+
+// #247: what each service costs, per use or fixed.
+const costsView = makeCostsView(/** @type {HTMLDialogElement} */ (byId("costs-panel")));
+byId("costs").addEventListener("click", () => costsView.open());
 
 // #143: how he got there, for the current answer, as a tree that grows while he works.
 const traceView = makeTraceView(brainView.traceSlot);
@@ -452,7 +470,11 @@ const confirmCard = (proposal) => {
       markDecided(card, outcome);
       addMessage(result.ok ? "answer" : "error", text);
       // #224: in a spoken conversation, what happened is said aloud too, then the mic listens again.
-      if (state.voiceSession) speakNote(text);
+      // #250: with Gemini Live, no second voice (the mic would take it for him): Gemini is told quietly.
+      if (state.voiceSession && state.brain === "google" && liveOn) {
+        void fetch("/live/note", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ session: liveSession, text }) }).catch(() => undefined);
+        if (session) reopenMicSoon();
+      } else if (state.voiceSession) speakNote(text);
       // What the app did on his OK is marked as such, so the model never takes its own "waiting for your OK" as the last word (#212).
       state.history = appendTurn(state.history, "assistant", text, typeof result.tool === "string" ? [`${result.tool} ${CARD_DONE}`] : []);
       void refreshReach();
@@ -550,7 +572,7 @@ const setMessageText = (item, text) => {
 
 const renderControls = () => {
   // The core shows the brain's short name; the model is on the Local/Claude button.
-  brainView.setBrain(state.brain === "claude" ? "Claude" : "Local");
+  brainView.setBrain(brainName(state.brain));
   sendButton.disabled = state.busy;
   // Context buttons can't be used while a request is in flight.
   for (const b of state.pending?.buttons ?? []) b.disabled = state.busy;
@@ -568,9 +590,9 @@ const renderControls = () => {
   micNote.textContent = micSupported
     ? "Listening works in English only for now (Whisper on this computer). Type in Portuguese."
     : "This browser can't record the microphone. Typing works; for voice use Chrome or Safari.";
-  brainButton.setAttribute("aria-pressed", String(state.brain === "claude"));
-  brainButton.textContent = state.brain === "claude" ? "☁️ Claude" : "🧠 Local";
-  brainButton.title = `Answering: ${brainLabels[state.brain] ?? state.brain}. Tap to switch between Local (Ollama on this computer) and Claude.`;
+  brainButton.setAttribute("aria-pressed", String(state.brain !== "local"));
+  brainButton.textContent = `${brainIcon(state.brain)} ${brainName(state.brain)}`;
+  brainButton.title = `Answering: ${brainLabels[state.brain] ?? state.brain}. Tap to switch: ${brainsAvailable.map(brainName).join(", ")}.`;
   conversationButton.setAttribute("aria-pressed", String(state.conversation));
   conversationButton.textContent = state.conversation ? "💬 Conversation on" : "💬 Conversation off";
   autoNote.hidden = !(state.conversation && state.autoBlocked);
@@ -1014,7 +1036,7 @@ const ask = async (question, context) => {
   state.busy = true;
   setPhase("thinking");
   brainView.begin();
-  traceView.begin(state.brain === "claude" ? "Claude" : "Local");
+  traceView.begin(brainName(state.brain));
   renderControls();
   const userItem = context ? undefined : addMessage("user", text);
   setStatus("");
@@ -1203,7 +1225,7 @@ const ask = async (question, context) => {
     }
     details.append(summary, steps);
     item.append(details);
-  } else if (view.kind === "answer" && (brain === "local" || brain === "claude")) {
+  } else if (view.kind === "answer" && (brain === "local" || brain === "claude" || brain === "google")) {
     const tag = document.createElement("span");
     tag.className = "brain-tag";
     tag.textContent = brainLabels[brain] ?? brain;
@@ -1448,6 +1470,11 @@ const voiceSettings = async () => {
  *   final: the conversation ended with it (Stop); the rest are for the timing line (#76)
  */
 const transcribeAndSend = async (samples, how = {}) => {
+  // #250: with ✦ Google, the sentence goes to Gemini Live (checked on the Mac first).
+  if (state.brain === "google" && liveOn) {
+    await liveTurn(samples, how);
+    return;
+  }
   /** @type {import("./turn-lib.js").TurnTiming} */
   const timing = { spoken: true, speechEndedAt: how.speechEndedAt ?? performance.now(), ...(how.endOfTurnMs !== undefined ? { endOfTurnMs: how.endOfTurnMs } : {}) };
   const whisperStarted = performance.now();
@@ -1494,6 +1521,149 @@ const transcribeAndSend = async (samples, how = {}) => {
   nextTiming = timing;
   submit(text, { spoken: true, keepVoice: how.final !== true });
   nextTiming = undefined; // used by ask(), or not needed (a stop phrase)
+};
+
+/**
+ * #250: one spoken sentence with ✦ Google, through Gemini Live. The Mac writes
+ * it down and checks it (EC work never reaches Google: it comes back here and
+ * goes the normal way, to Kiro's handoff); Gemini answers by voice, asking
+ * Atlas for anything real, whose steps and OK cards show as with /ask.
+ * @param {Float32Array} samples @param {{ final?: boolean }} how
+ */
+const liveTurn = async (samples, how) => {
+  const controller = new AbortController();
+  transcribing = controller;
+  state.transcribing = true;
+  stopSpeaking("new-question");
+  setPhase("thinking");
+  renderControls();
+  const player = makeLivePlayer(audio(), {
+    onFirstSound: (at) => {
+      bargeInGraceUntil = Math.max(bargeInGraceUntil, at + BARGE_IN_GRACE_MS);
+      setPhase("speaking");
+    },
+  });
+  // Speaking state and barge-in go through the same `speaker` as Kokoro's voice.
+  speaker = /** @type {ReturnType<typeof makeSpeaker>} */ (
+    /** @type {unknown} */ ({
+      active: () => player.active(),
+      stop: () => {
+        player.stop();
+        controller.abort();
+      },
+      say: () => {},
+      finish: () => {},
+    })
+  );
+  answering = controller;
+  let heard = "";
+  let said = "";
+  let ec = false;
+  let problem = "";
+  let interrupted = false;
+  /** @type {HTMLElement | undefined} */
+  let item;
+  /** @type {import("./chat.js").PathStep[]} */
+  const steps = [];
+  await runLiveTurn({
+    session: liveSession,
+    wav: encodeWav(samples),
+    history: state.history,
+    signal: controller.signal,
+    handlers: {
+      onHeard: (text) => {
+        heard = text;
+        if (transcribing === controller) transcribing = undefined;
+        state.transcribing = false;
+        state.busy = true;
+        renderControls();
+      },
+      onEc: () => (ec = true),
+      onEmpty: () => {},
+      onAudio: (b64) => player.push(b64),
+      onSaid: (text) => {
+        said += text;
+        if (!item) {
+          addMessage("user", heard);
+          brainView.begin();
+          traceView.begin(brainName("google"));
+          item = addMessage("answer", said.trim());
+        } else setMessageText(item, said.trim());
+      },
+      onReach: (tool) => {
+        brainView.reach(tool);
+        traceView.reach(tool);
+      },
+      onStep: (data) => {
+        const [step] = pathOf({ path: [data] });
+        if (!step) return;
+        steps.push(step);
+        brainView.step(step);
+        traceView.step(step);
+      },
+      onDone: (r) => (interrupted = r.interrupted),
+      onError: (message) => (problem = message),
+    },
+  });
+  player.finish();
+  if (transcribing === controller) transcribing = undefined;
+  if (answering === controller) answering = undefined;
+  state.transcribing = false;
+  state.busy = false;
+  if (controller.signal.aborted) {
+    // You spoke over him: what he said so far stays in the history.
+    if (heard !== "" && said !== "") state.history = appendTurn(appendTurn(state.history, "user", heard), "assistant", said.trim() || "—", toolsRan(steps));
+    item?.classList.add("interrupted");
+    brainView.finish(steps);
+    traceView.finish(steps);
+    renderControls();
+    return;
+  }
+  if (ec) {
+    // EC work: nothing went to Google. Kiro's handoff, the normal way.
+    speaker = undefined;
+    input.value = heard;
+    submit(heard, { spoken: true, keepVoice: how.final !== true });
+    return;
+  }
+  if (heard === "" && problem === "") {
+    speaker = undefined;
+    state.phase = session ? "listening" : "idle";
+    renderControls();
+    if (session) session.detector.listen();
+    return;
+  }
+  if (problem !== "") {
+    speaker = undefined;
+    if (!item) {
+      if (heard !== "") addMessage("user", heard);
+      addMessage("error", problem);
+    }
+    setStatus(problem);
+    endVoice("reset");
+    return;
+  }
+  if (!item) {
+    addMessage("user", heard);
+    item = addMessage("answer", said.trim() || "…");
+  }
+  brainView.finish(steps);
+  traceView.finish(steps);
+  for (const proposal of confirmsOf(steps)) item.append(confirmCard(proposal));
+  refreshPending();
+  const tag = document.createElement("span");
+  tag.className = "brain-tag";
+  tag.textContent = "Google · Gemini Live"; // the typed brain's label names Flash, not the Live model
+  item.append(tag);
+  state.history = appendTurn(appendTurn(state.history, "user", heard), "assistant", said.trim() || "—", toolsRan(steps));
+  if (interrupted) item.classList.add("interrupted");
+  renderControls();
+  await player.done;
+  if (speaker && !speaker.active()) speaker = undefined;
+  if (controller.signal.aborted) return;
+  if (state.phase === "speaking" || state.phase === "thinking") setPhase("idle");
+  if (session && how.final !== true) reopenMicSoon();
+  else if (session) endVoice("done");
 };
 
 /**
@@ -2005,7 +2175,7 @@ const showCalendarNote = () => {
 };
 
 brainButton.addEventListener("click", () => {
-  state.brain = state.brain === "claude" ? "local" : "claude";
+  state.brain = nextBrain(state.brain, brainsAvailable);
   save("atlas.brain", state.brain);
   renderControls();
   showCalendarNote();
@@ -2014,9 +2184,15 @@ brainButton.addEventListener("click", () => {
 void fetch("/brains")
   .then((res) => (res.ok ? res.json() : null))
   .then((body) => {
-    for (const b of Array.isArray(body?.brains) ? body.brains : []) {
-      if ((b.id === "local" || b.id === "claude") && typeof b.label === "string") brainLabels[b.id] = b.label;
+    const listed = Array.isArray(body?.brains) ? body.brains : [];
+    for (const b of listed) {
+      if ((b.id === "local" || b.id === "claude" || b.id === "google") && typeof b.label === "string") brainLabels[b.id] = b.label;
     }
+    liveOn = body?.live === true;
+    brainsAvailable = listed.map((/** @type {{ id: string }} */ b) => b.id).filter((/** @type {string} */ id) => id === "local" || id === "claude" || id === "google");
+    if (brainsAvailable.length === 0) brainsAvailable = ["local", "claude"];
+    // A saved Google choice with Google switched off falls back to Claude.
+    if (!brainsAvailable.includes(state.brain)) state.brain = "claude";
     calendarOn = body?.calendar === true;
     renderControls();
     showCalendarNote();

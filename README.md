@@ -303,7 +303,9 @@ Requires Node 22.13 or later (the memory store uses `node:sqlite`, which needs a
         add it as a test user). Add `CALENDAR_WRITE=on` before the command
         for adding events there too. Its token goes to
         `data/google-calendar-noisysource.json`.
-     4. Put `CALENDAR=on` in `.env` and restart.
+     4. The same for `kidclub` (KidClub's public mailbox) and `marisa`
+        (Marisa's), each signed in by that account (#245).
+     5. Put `CALENDAR=on` in `.env` and restart.
 
      How it works:
      - **With ☁️ Claude, Claude decides (#104).** Claude gets a
@@ -420,6 +422,16 @@ Requires Node 22.13 or later (the memory store uses `node:sqlite`, which needs a
        `WEB_SEARCH_COUNTRY` (PT) and `WEB_SEARCH_CITY` make results local.
        Pages are data, never instructions. The brain has a Web node and
        a switch.
+     - **Attachments.** "How much is the accountant's invoice?", "what does
+       the PDF say?": when he reads an email he sees its attachments, and
+       reads a PDF's or a text/CSV file's text when the answer is there.
+       Read-only; not scans or images (no text to read); files over 10 MB
+       aren't downloaded, and at most 40 pages and 20,000 characters reach
+       Claude. EC email's attachments are left to Kiro, unread. Attachment
+       text is data, never instructions.
+       It needs the `unpdf` package: after pulling, run `npm install`.
+       When an attachment can't be read, Atlas says why (password-protected,
+       a scan, too big, the reader not installed).
      - **Follow-ups.** "Who hasn't answered me?" (and every triage and
        morning brief) finds email you sent 3 to 14 days ago whose thread
        got no reply since, leaving out automated recipients and EC
@@ -441,8 +453,13 @@ Requires Node 22.13 or later (the memory store uses `node:sqlite`, which needs a
        the card or use the ✨ Skills panel, and from then on he follows the
        steps when a request matches. A skill only uses tools he already has;
        actions still need your OK.
-     - **Gmail (`GMAIL=on`, ☁️ Claude), read-only.** Two accounts:
-       `personal` and `noisysource`. In Google Cloud, enable the **Gmail
+     - **Gmail (`GMAIL=on`, ☁️ Claude), read-only.** Four accounts:
+       `personal`, `noisysource`, `kidclub` (KidClub's public mailbox) and
+       `marisa` (Marisa's). His own three are read by default (triage, the
+       brief, follow-ups, a calendar read); Marisa's only when you name her
+       or ask about the two of you. Drafts are signed as the account's
+       owner would (Renato, KidClub, Marisa). Which address each name is
+       is decided when it's connected, never in the repo. In Google Cloud, enable the **Gmail
        API** on the same project (and, with an "External" consent screen,
        add each address as a test user). Then connect each once:
        `npm run gmail:connect -- personal` and
@@ -763,6 +780,44 @@ Requires Node 22.13 or later (the memory store uses `node:sqlite`, which needs a
    `"context"`), `handoff` (EC/HRT → Kiro), `unavailable` (not connected
    yet) or `error`. `GET /healthz` returns `{"status":"ok"}`. Logs are JSON
    lines and never include your questions or answers.
+
+## The Google brain
+
+`GEMINI=on` and `GEMINI_API_KEY` (from Google AI Studio, in `.env`) add a
+third choice to the brain button: **✦ Google**. The button then goes
+Local → Claude → Google. With Google, typed and spoken questions are
+answered by Gemini (`gemini-3.8-flash`; Flash-Lite picks the tool groups)
+with Atlas's same prompts, tools, switches, EC precheck and OK cards;
+tap back to Claude any time. What a question needs (calendar events,
+emails, invoices) then goes to Google instead of Anthropic. Not with
+Google: web search (Anthropic's tool). Coding tasks stay on Claude Code.
+Its cost shows in 💲 Costs as the Gemini API.
+
+**Talking with Google (Gemini Live, `GEMINI_LIVE`, on with `GEMINI=on`).**
+With ✦ Google picked, the microphone talks to Gemini Live: a real voice
+conversation instead of Whisper → model → Kokoro. Each sentence is still
+cut by the page and checked on this Mac first (Whisper writes it down, the
+EC precheck runs), so EC work never reaches Google: it goes to Kiro's
+handoff as before. Then the sentence's audio goes to a Live session the Mac
+holds (the key never reaches the page), and Gemini answers in its own
+voice. For anything real (email, calendar, the house…) it asks Atlas,
+which answers with the Google brain's tools and OK cards; the steps and
+cards show as usual. Speaking over it stops it. Costs show in 💲 Costs as
+"voice". Optional: `GEMINI_LIVE_VOICE` (a Gemini voice name).
+
+## What it costs
+
+**💲 Costs** on the page shows what each service costs today, in the last
+7 days and this month: the Claude API (answers, the classifier, web
+searches, code questions on the API key), the Gemini API once it's used,
+your Claude subscription (the fee you set, plus how many coding runs it
+covered and what they'd have cost on the API) and the local model (free).
+Every call's tokens are counted where it's made and priced at the
+providers' list prices, kept in `data/costs.jsonl` (gitignored; counts and
+amounts only, never questions or answers). Estimates, in USD, before tax
+and credits: the real bill is in each console. Set your plan's fee with
+`COST_SUBSCRIPTIONS="Claude Pro=20"` in `.env`; prices are in
+`src/costs.ts`, with the date they were checked.
 
 ## Checks
 

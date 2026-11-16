@@ -36,6 +36,7 @@ data/settings.json
 data/reminders.json
 # #68: how Atlas talks (his settings)
 data/talk.json
+data/costs.jsonl
 # #138: what Atlas couldn't do (general words)
 data/gaps.json
 # #186: his decisions log

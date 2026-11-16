@@ -19,6 +19,7 @@ import type { LlmTool } from "../llm/types.js";
 import { err, ok, type Result } from "../result.js";
 import type { Logger } from "../types.js";
 import { GMAIL_ACCOUNTS, isGmailAccount, type GmailAccount } from "./gmail.js";
+import { accountNames } from "../google-accounts.js";
 
 export const GMAIL_MODIFY_SCOPE = "https://www.googleapis.com/auth/gmail.modify";
 
@@ -65,7 +66,7 @@ export const MAX_TIDY = 100;
 
 /** The plan as he gave it, checked by shape: real ids, sensible labels, nothing twice. */
 export const checkTidy = (v: Record<string, unknown>): Result<TidyPlan, string> => {
-  if (!isGmailAccount(v.account)) return err("account is personal or noisysource");
+  if (!isGmailAccount(v.account)) return err(`account is ${accountNames()}`);
   const ids = (x: unknown): string[] => (Array.isArray(x) ? x.filter((i): i is string => typeof i === "string" && MSG_ID.test(i)) : []);
   const archive = [...new Set(ids(v.archive))];
   const labels = (Array.isArray(v.labels) ? v.labels : []).flatMap((l) => {

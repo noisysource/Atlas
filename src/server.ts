@@ -25,6 +25,7 @@ import type { MemoryStore } from "./memory-store.js";
 import { makeTurnRegistry, type TurnRegistry } from "./turns.js";
 import type { TtsConfig, TurnConfig } from "./config.js";
 import { registerSttRoutes } from "./stt-routes.js";
+import { registerLiveRoutes } from "./live/routes.js";
 import type { SttProvider } from "./stt/types.js";
 import { registerTtsRoutes } from "./tts-routes.js";
 import type { TtsProviders } from "./tts/registry.js";
@@ -85,7 +86,7 @@ const LatencyReport = z
     spoken: z.boolean(),
     voice: z.enum(["kokoro", "piper", "browser", "none"]),
     route: z.enum(["precheck", "picked", "sticky", "classifier"]).optional(),
-    brain: z.enum(["claude", "local"]).optional(),
+    brain: z.enum(["claude", "local", "google"]).optional(),
     speculative: z.enum(["used", "discarded"]).optional(),
     endOfTurnMs: ms,
     whisperMs: ms,
@@ -131,10 +132,10 @@ export const makeServer = (
     readonly reactionFirst?: boolean;
     /** Warms the model connection (#76): POST /warm, when a spoken conversation starts. */
     readonly warm?: () => void;
-    /** The two brains the page can pick (#88): GET /brains. Ids and labels only. */
+    /** The brains the page can pick (#88; #248: Google when GEMINI=on): GET /brains. Ids and labels only. */
     readonly brains?: {
       readonly default: "claude" | "local";
-      readonly labels: { readonly claude: string; readonly local: string };
+      readonly labels: { readonly claude: string; readonly local: string; readonly google?: string };
       /** CALENDAR=on (#100): the page notes once that, with Claude, event titles go to Anthropic. */
       readonly calendar?: boolean;
     };
@@ -410,6 +411,15 @@ export const makeServer = (
     });
   }
 
+  // #247: what Atlas costs, per service, for the costs panel.
+  const costs = deps.costs;
+  if (costs) {
+    app.get("/costs", async (c) => {
+      c.header("Cache-Control", "no-store");
+      return c.json(await costs.summary());
+    });
+  }
+
   // #138: his answer to opening an issue for a gap. Only "yes" opens it.
   const gapIssue = deps.gapIssue;
   if (gapIssue) {
@@ -572,6 +582,19 @@ export const makeServer = (
 
   if (options.tts) registerTtsRoutes(app, { ...options.tts, language: "en", log: deps.log });
   if (options.stt) registerSttRoutes(app, { provider: options.stt, language: "en", log: deps.log });
+  // #250: Gemini Live for the microphone with ✦ Google; each sentence is checked here (Whisper, EC) first.
+  if (options.stt && deps.live) {
+    registerLiveRoutes(app, {
+      sessions: deps.live,
+      stt: options.stt,
+      precheck: deps.precheck,
+      ask: async (question, history, meta) => {
+        const request = parseAskRequest({ question, history, brain: "google" });
+        return request.ok ? handleAsk(deps, request.value, meta) : { type: "error", message: request.error };
+      },
+      log: deps.log,
+    });
+  }
   // #133: the brain view's node panels. Names, on/off and counts only.
   const reach = deps.reach;
   if (reach) {
@@ -603,7 +626,10 @@ export const makeServer = (
         brains: [
           { id: "local", label: brains.labels.local },
           { id: "claude", label: brains.labels.claude },
+          ...(brains.labels.google ? [{ id: "google", label: brains.labels.google }] : []),
         ],
+        // #250: the microphone talks to Gemini Live when Google is picked.
+        live: deps.live !== undefined && options.stt !== undefined,
         calendar: brains.calendar === true,
       });
     });

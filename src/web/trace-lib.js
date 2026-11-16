@@ -26,7 +26,7 @@ const SERVICES = { profile: "Profile", web: "Web", calendar: "Calendar", gmail: 
 /** The service a tool reaches: "Gmail" for gmail_search. @param {string} tool */
 export const serviceOf = (tool) => (tool === "tools_more" ? "More tools" : tool === "web_search" ? "Web" : (SERVICES[nodeOfTool(tool) ?? ""] ?? "Unknown"));
 
-const ACCOUNT = /^(personal|noisysource)(?: · (.*))?$/;
+const ACCOUNT = /^(personal|noisysource|kidclub|marisa)(?: · (.*))?$/;
 
 /**
  * Splits a step's checked arguments into the account and the rest:

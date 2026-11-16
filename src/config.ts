@@ -1,9 +1,11 @@
 // Configuration from environment variables. Pure: loadConfig takes the
 // environment as an argument and returns every problem at once.
 //
-// No secret values are read here. ANTHROPIC_API_KEY (local dev only) is
-// handled by the secrets module (#6); this module only knows secret *names*.
+// No secret values are read here. ANTHROPIC_API_KEY and GEMINI_API_KEY (local
+// dev only) are handled by the secrets module (#6, #248); this module only
+// knows secret *names*.
 
+import { parseSubscriptions, type Subscription } from "./costs.js";
 import { z } from "zod";
 import { parseModelRef, type ModelRef } from "./llm/model-ref.js";
 import { parseLocalUrl } from "./local-url.js";
@@ -108,7 +110,21 @@ export type Config = {
    */
   /** `write` (GMAIL_WRITE=on, #120): drafts, and sending after "Send it". Needs gmail:connect with write access. */
   /** #220 (WEB_SEARCH=on): Claude searches the web, capped per answer and per day in code. */
+  /** #247: what Atlas costs, counted per call; fixed fees from COST_SUBSCRIPTIONS. */
+  readonly costs: { readonly subscriptions: readonly Subscription[]; readonly path: string };
   readonly webSearch: { readonly enabled: boolean; readonly perQuestion: number; readonly perDay: number; readonly country: string; readonly city: string };
+  /**
+   * #248 (GEMINI=on): the Google brain, a third choice on the page. `model` answers (Gemini Flash),
+   * `router` picks the tool groups (Flash-Lite). The key: GEMINI_API_KEY in .env locally, Secret Manager in production.
+   */
+  readonly gemini: {
+    readonly enabled: boolean;
+    readonly model: ModelRef;
+    readonly router: ModelRef;
+    readonly secretName: string;
+    /** #250 (GEMINI_LIVE, on with GEMINI=on): the microphone talks to Gemini Live when ✦ Google is picked. */
+    readonly live: { readonly enabled: boolean; readonly model: string; readonly voice?: string };
+  };
   readonly gmail: {
     readonly enabled: boolean;
     readonly write: boolean;
@@ -445,6 +461,12 @@ const EnvSchema = z.object({
   WEB_SEARCH_PER_DAY: z.coerce.number().int().min(1).max(500).default(40),
   WEB_SEARCH_COUNTRY: z.string().regex(/^[A-Z]{2}$/).default("PT"),
   WEB_SEARCH_CITY: z.string().max(60).default(""),
+  // #247: fixed monthly fees for the costs panel, in USD: "Claude Pro=20".
+  COST_SUBSCRIPTIONS: z
+    .string()
+    .max(300)
+    .default("")
+    .refine((v) => parseSubscriptions(v) !== undefined, { error: 'must be "Name=amount" pairs, comma-separated, like "Claude Pro=20"' }),
   GMAIL_ARCHIVE_CLEARS: z.string().max(400).default(""),
   MEMORY: onOff,
   INTROSPECTION: onOff,
@@ -493,6 +515,13 @@ const EnvSchema = z.object({
   BARGE_IN_OTHER: bargeInMode,
   GOOGLE_CLOUD_PROJECT: optionalString,
   ANTHROPIC_SECRET_NAME: optionalString,
+  GEMINI: z.enum(["on", "off"]).default("off"),
+  GEMINI_MODEL: z.string().regex(/^[a-z0-9][a-z0-9.-]{1,60}$/, { error: "must be a Gemini model id, like gemini-3.8-flash" }).default("gemini-3.8-flash"),
+  GEMINI_ROUTER_MODEL: z.string().regex(/^[a-z0-9][a-z0-9.-]{1,60}$/, { error: "must be a Gemini model id, like gemini-3.5-flash-lite" }).default("gemini-3.5-flash-lite"),
+  GEMINI_SECRET_NAME: z.string().regex(/^[A-Za-z0-9_-]{1,255}$/).default("gemini-api-key"),
+  GEMINI_LIVE: z.enum(["on", "off"]).default("on"),
+  GEMINI_LIVE_MODEL: z.string().regex(/^[a-z0-9][a-z0-9.-]{1,60}$/, { error: "must be a Gemini Live model id, like gemini-3.8-live" }).default("gemini-3.8-live"),
+  GEMINI_LIVE_VOICE: z.string().regex(/^[A-Za-z]{2,30}$/, { error: "must be a Gemini voice name, like Charon" }).optional(),
   VENDUS_SECRET_NAME: optionalString,
 });
 
@@ -626,6 +655,8 @@ export const loadConfig = (given: Env): Result<Config, string> => {
       minute: Number(e.BRIEF_AT.split(":")[1]),
       path: "data/brief",
     },
+    costs: { subscriptions: parseSubscriptions(e.COST_SUBSCRIPTIONS) ?? [], path: "data/costs.jsonl" },
+    gemini: { enabled: e.GEMINI === "on", model: { provider: "google", model: e.GEMINI_MODEL }, router: { provider: "google", model: e.GEMINI_ROUTER_MODEL }, secretName: e.GEMINI_SECRET_NAME, live: { enabled: e.GEMINI === "on" && e.GEMINI_LIVE === "on", model: e.GEMINI_LIVE_MODEL, ...(e.GEMINI_LIVE_VOICE ? { voice: e.GEMINI_LIVE_VOICE } : {}) } },
     webSearch: { enabled: e.WEB_SEARCH === "on", perQuestion: e.WEB_SEARCH_PER_QUESTION, perDay: e.WEB_SEARCH_PER_DAY, country: e.WEB_SEARCH_COUNTRY, city: e.WEB_SEARCH_CITY.trim() },
     gmail: { enabled: e.GMAIL === "on", write: e.GMAIL === "on" && e.GMAIL_WRITE === "on", tidy: e.GMAIL === "on" && e.GMAIL_TIDY === "on",
       archiveClears: e.GMAIL_ARCHIVE_CLEARS.split(",").map((l) => l.trim()).filter((l) => l !== "" && l.length <= 40).slice(0, 10),
