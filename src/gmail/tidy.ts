@@ -23,12 +23,13 @@ export const GMAIL_MODIFY_SCOPE = "https://www.googleapis.com/auth/gmail.modify"
 export const GMAIL_TIDY_TOOL: LlmTool = {
   name: "gmail_tidy",
   description:
-    "Propose tidying one account's inbox after you've sorted it: archive messages (out of the inbox, kept in All Mail) and put labels on others. Nothing changes by this call: a card shows him what will happen, and only his OK applies it. Never deletes. Use the ids from gmail_search.",
+    "Propose tidying one account's inbox after you've sorted it: archive messages (out of the inbox, kept in All Mail), put labels on others, or put archived ones back in the inbox. Nothing changes by this call: a card shows him each message's subject, and only his OK applies it. Never deletes. Use the ids from gmail_search.",
   inputSchema: {
     type: "object",
     properties: {
       account: { type: "string", enum: [...GMAIL_ACCOUNTS] },
       archive: { type: "array", items: { type: "string" }, description: "Message ids to archive (newsletters, notifications, things already dealt with)" },
+      inbox: { type: "array", items: { type: "string" }, description: "Message ids to put back in the inbox (to undo an archive he didn't mean)" },
       labels: {
         type: "array",
         description: "Labels to add",
@@ -45,7 +46,13 @@ export const GMAIL_TIDY_TOOL: LlmTool = {
   },
 };
 
-export type TidyPlan = { readonly account: GmailAccount; readonly archive: readonly string[]; readonly labels: readonly { readonly name: string; readonly ids: readonly string[] }[] };
+export type TidyPlan = {
+  readonly account: GmailAccount;
+  readonly archive: readonly string[];
+  readonly labels: readonly { readonly name: string; readonly ids: readonly string[] }[];
+  /** #228: back in the inbox (undoing an archive). */
+  readonly inbox?: readonly string[];
+};
 type Seen = { readonly id: string; readonly from: string; readonly subject: string };
 
 const MSG_ID = /^[A-Za-z0-9_-]{6,40}$/;
@@ -65,16 +72,17 @@ export const checkTidy = (v: Record<string, unknown>): Result<TidyPlan, string> 
     const list = [...new Set(ids(o.ids))];
     return LABEL.test(name) && !SYSTEM_LABELS.has(name.toUpperCase()) && list.length > 0 ? [{ name, ids: list }] : [];
   });
-  const total = new Set([...archive, ...labels.flatMap((l) => l.ids)]).size;
+  const inbox = [...new Set(ids(v.inbox))].filter((i) => !archive.includes(i));
+  const total = new Set([...archive, ...labels.flatMap((l) => l.ids), ...inbox]).size;
   if (total === 0) return err("nothing to tidy: give message ids to archive or label");
   if (total > MAX_TIDY) return err(`at most ${MAX_TIDY} messages at a time`);
-  return ok({ account: v.account, archive, labels });
+  return ok({ account: v.account, archive, labels, ...(inbox.length > 0 ? { inbox } : {}) });
 };
 
 export type GmailTidier = {
   /** Sender and subject of a message (for the card and the EC check), never the body. */
   readonly peek: (account: GmailAccount, id: string) => Promise<Result<Seen, CalendarError>>;
-  readonly apply: (plan: TidyPlan) => Promise<Result<{ readonly archived: number; readonly labelled: number }, CalendarError>>;
+  readonly apply: (plan: TidyPlan) => Promise<Result<{ readonly archived: number; readonly labelled: number; readonly restored?: number }, CalendarError>>;
 };
 
 const API = "https://gmail.googleapis.com/gmail/v1/users/me";
@@ -133,7 +141,12 @@ export const makeGmailTidier = (deps: { readonly accessToken: (account: GmailAcc
         const done = await call(plan.account, "/messages/batchModify", { method: "POST", body: { ids: plan.archive, removeLabelIds: ["INBOX"] } });
         if (!done.ok) return done;
       }
-      return ok({ archived: plan.archive.length, labelled });
+      const back = plan.inbox ?? [];
+      if (back.length > 0) {
+        const done = await call(plan.account, "/messages/batchModify", { method: "POST", body: { ids: back, addLabelIds: ["INBOX"] } });
+        if (!done.ok) return done;
+      }
+      return ok({ archived: plan.archive.length, labelled, ...(back.length > 0 ? { restored: back.length } : {}) });
     },
   };
 };
@@ -154,7 +167,7 @@ export const makeInboxTidy = (deps: { readonly tidier: GmailTidier; readonly isE
       const checked = checkTidy(v);
       if (!checked.ok) return checked;
       const plan = checked.value;
-      const all = [...new Set([...plan.archive, ...plan.labels.flatMap((l) => l.ids)])];
+      const all = [...new Set([...plan.archive, ...plan.labels.flatMap((l) => l.ids), ...(plan.inbox ?? [])])];
       const seen = new Map<string, Seen>();
       let leftOut = 0;
       for (const id of all) {
@@ -171,15 +184,23 @@ export const makeInboxTidy = (deps: { readonly tidier: GmailTidier; readonly isE
         seen.set(id, got.value);
       }
       const keep = (ids: readonly string[]) => ids.filter((i) => seen.has(i));
-      const safe: TidyPlan = { account: plan.account, archive: keep(plan.archive), labels: plan.labels.map((l) => ({ name: l.name, ids: keep(l.ids) })).filter((l) => l.ids.length > 0) };
-      if (safe.archive.length === 0 && safe.labels.length === 0) return err("none of those messages can be tidied (not found in that account, or EC email, which Kiro handles)");
-      const senders = (ids: readonly string[]) => {
-        const names = [...new Set(ids.map((i) => sender(seen.get(i)?.from ?? "")).filter(Boolean))];
-        return names.length === 0 ? "" : ` (${names.slice(0, 4).join(", ")}${names.length > 4 ? `, +${names.length - 4}` : ""})`;
+      const back = keep(plan.inbox ?? []);
+      const safe: TidyPlan = { account: plan.account, archive: keep(plan.archive), labels: plan.labels.map((l) => ({ name: l.name, ids: keep(l.ids) })).filter((l) => l.ids.length > 0), ...(back.length > 0 ? { inbox: back } : {}) };
+      if (safe.archive.length === 0 && safe.labels.length === 0 && back.length === 0) return err("none of those messages can be tidied (not found in that account, or EC email, which Kiro handles)");
+      // #228: each message by its subject (and sender), so he sees exactly which ones.
+      const which = (ids: readonly string[]) => {
+        const shown = ids.slice(0, 5).map((i) => {
+          const m = seen.get(i);
+          const subject = short((m?.subject ?? "").trim(), 48);
+          const from = sender(m?.from ?? "");
+          return subject ? `"${subject}"${from ? ` (${from})` : ""}` : from || i;
+        });
+        return `: ${shown.join(", ")}${ids.length > 5 ? `, +${ids.length - 5} more` : ""}`;
       };
       const parts = [
-        ...(safe.archive.length > 0 ? [`archive ${safe.archive.length}${senders(safe.archive)}`] : []),
-        ...safe.labels.map((l) => `label ${l.ids.length} as "${l.name}"${senders(l.ids)}`),
+        ...(safe.archive.length > 0 ? [`archive ${safe.archive.length}${which(safe.archive)}`] : []),
+        ...safe.labels.map((l) => `label ${l.ids.length} as "${l.name}"${which(l.ids)}`),
+        ...(back.length > 0 ? [`back to the inbox ${back.length}${which(back)}`] : []),
       ];
       for (const [k, p] of pending) if (p.until <= now()) pending.delete(k);
       const id = randomBytes(12).toString("hex");
@@ -197,8 +218,12 @@ export const makeInboxTidy = (deps: { readonly tidier: GmailTidier; readonly isE
         return { ok: false, text: `The inbox wasn't tidied: ${done.error.message}.` };
       }
       deps.log?.info("inbox tidied", { account: p.plan.account, archived: done.value.archived, labelled: done.value.labelled });
-      const said = [...(done.value.archived > 0 ? [`archived ${done.value.archived}`] : []), ...(done.value.labelled > 0 ? [`labelled ${done.value.labelled}`] : [])].join(" and ");
-      return { ok: true, text: `Done in ${p.plan.account}: ${said}. Archived email is still in All Mail.`, tool: `gmail_tidy ${p.plan.account} ${said}` };
+      const said = [
+        ...(done.value.archived > 0 ? [`archived ${done.value.archived}`] : []),
+        ...(done.value.labelled > 0 ? [`labelled ${done.value.labelled}`] : []),
+        ...(done.value.restored ? [`put ${done.value.restored} back in the inbox`] : []),
+      ].join(" and ");
+      return { ok: true, text: `Done in ${p.plan.account}: ${said}.${done.value.archived > 0 ? " Archived email is still in All Mail." : ""}`, tool: `gmail_tidy ${p.plan.account} ${said}` };
     },
   };
 };

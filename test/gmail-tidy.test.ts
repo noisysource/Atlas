@@ -45,7 +45,7 @@ describe("tidying the inbox", () => {
     const f = fakeTidier();
     const tidy = makeInboxTidy({ tidier: f.tidier, isEc });
     const p = await tidy.propose({ account: "noisysource", archive: ["m1aaaaaa", "m3aaaaaa", "m4aaaaaa", "zzzzzzzz"], labels: [{ name: "Bills", ids: ["m2aaaaaa"] }] });
-    expect(p).toMatchObject({ ok: true, value: { label: 'noisysource: archive 2 (Medium Daily Digest, LinkedIn); label 1 as "Bills" (Via Verde)', leftOut: 2 } });
+    expect(p).toMatchObject({ ok: true, value: { label: 'noisysource: archive 2: "Top stories" (Medium Daily Digest), "You appeared in 5 searches" (LinkedIn); label 1 as "Bills": "Fatura de novembro" (Via Verde)', leftOut: 2 } });
     expect(f.applied).toEqual([]);
     if (!p.ok) throw new Error("no card");
     expect((await tidy.decide(p.value.id, "yes")).text).toBe("Done in noisysource: archived 2 and labelled 1. Archived email is still in All Mail.");
@@ -53,6 +53,19 @@ describe("tidying the inbox", () => {
     // Single use.
     expect((await tidy.decide(p.value.id, "yes")).ok).toBe(false);
     expect(await tidy.propose({ account: "noisysource", archive: ["m3aaaaaa"] })).toMatchObject({ ok: false });
+  });
+
+  it("archiving the wrong ones can be undone: back to the inbox, after an OK (#228)", async () => {
+    const f = fakeTidier();
+    const tidy = makeInboxTidy({ tidier: f.tidier, isEc });
+    const p = await tidy.propose({ account: "noisysource", inbox: ["m2aaaaaa"] });
+    expect(p).toMatchObject({ ok: true, value: { label: 'noisysource: back to the inbox 1: "Fatura de novembro" (Via Verde)' } });
+    if (!p.ok) throw new Error("no card");
+    expect(f.applied).toEqual([]);
+    expect(await tidy.decide(p.value.id, "yes")).toMatchObject({ ok: true });
+    expect(f.applied[0]).toMatchObject({ archive: [], inbox: ["m2aaaaaa"] });
+    // The same message can't be archived and put back at once.
+    expect(checkTidy({ account: "personal", archive: ["m1aaaaaa"], inbox: ["m1aaaaaa"] })).toEqual(ok({ account: "personal", archive: ["m1aaaaaa"], labels: [] }));
   });
 
   it("Gmail calls: archive takes INBOX off, labels are created once, nothing is deleted", async () => {
@@ -64,13 +77,14 @@ describe("tidying the inbox", () => {
       return new Response(null, { status: 204 });
     }) as typeof fetch;
     const tidier = makeGmailTidier({ accessToken: async () => ok("t"), fetch: fetcher });
-    expect(await tidier.apply({ account: "personal", archive: ["m1aaaaaa"], labels: [{ name: "receipts", ids: ["m5aaaaaa"] }, { name: "Bills", ids: ["m2aaaaaa"] }] })).toEqual(ok({ archived: 1, labelled: 2 }));
+    expect(await tidier.apply({ account: "personal", archive: ["m1aaaaaa"], labels: [{ name: "receipts", ids: ["m5aaaaaa"] }, { name: "Bills", ids: ["m2aaaaaa"] }], inbox: ["m6aaaaaa"] })).toEqual(ok({ archived: 1, labelled: 2, restored: 1 }));
     expect(calls).toEqual([
       { method: "GET", url: "/labels" },
       { method: "POST", url: "/messages/batchModify", body: { ids: ["m5aaaaaa"], addLabelIds: ["Label_1"] } },
       { method: "POST", url: "/labels", body: { name: "Bills", labelListVisibility: "labelShow", messageListVisibility: "show" } },
       { method: "POST", url: "/messages/batchModify", body: { ids: ["m2aaaaaa"], addLabelIds: ["Label_2"] } },
       { method: "POST", url: "/messages/batchModify", body: { ids: ["m1aaaaaa"], removeLabelIds: ["INBOX"] } },
+      { method: "POST", url: "/messages/batchModify", body: { ids: ["m6aaaaaa"], addLabelIds: ["INBOX"] } },
     ]);
     expect(calls.some((c) => c.method === "DELETE" || /trash|delete/.test(c.url))).toBe(false);
   });
@@ -116,7 +130,8 @@ describe("asking Atlas", () => {
     });
     expect(requests[0]?.tools?.map((t) => t.name)).toContain("gmail_tidy");
     expect(requests[0]?.system).toContain("You manage his inbox.");
-    expect(steps.find((s) => s.kind === "tool" && s.name === "gmail_tidy")).toMatchObject({ ok: true, confirm: { kind: "gmail-tidy", label: 'personal: archive 2 (Medium Daily Digest, LinkedIn); label 1 as "Bills" (Via Verde)' } });
+    expect(requests[0]?.system).toContain("ask in one line which he means (name them) before proposing");
+    expect(steps.find((s) => s.kind === "tool" && s.name === "gmail_tidy")).toMatchObject({ ok: true, confirm: { kind: "gmail-tidy", label: 'personal: archive 2: "Top stories" (Medium Daily Digest), "You appeared in 5 searches" (LinkedIn); label 1 as "Bills": "Fatura de novembro" (Via Verde)' } });
     expect(f.applied).toEqual([]);
   });
 });
