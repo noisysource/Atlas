@@ -15,7 +15,7 @@ export type WebAssets = Readonly<Record<string, WebAsset>>;
 
 export const WEB_DIR = "src/web";
 
-const FILES: readonly { path: string; file: string; contentType: string }[] = [
+export const FILES: readonly { path: string; file: string; contentType: string }[] = [
   { path: "/", file: "index.html", contentType: "text/html; charset=utf-8" },
   { path: "/app.js", file: "app.js", contentType: "text/javascript; charset=utf-8" },
   { path: "/chat.js", file: "chat.js", contentType: "text/javascript; charset=utf-8" },
@@ -43,6 +43,8 @@ const FILES: readonly { path: string; file: string; contentType: string }[] = [
   { path: "/card-lib.js", file: "card-lib.js", contentType: "text/javascript; charset=utf-8" },
   { path: "/reminders.js", file: "reminders.js", contentType: "text/javascript; charset=utf-8" },
   { path: "/reminders-lib.js", file: "reminders-lib.js", contentType: "text/javascript; charset=utf-8" },
+  { path: "/costs.js", file: "costs.js", contentType: "text/javascript; charset=utf-8" },
+  { path: "/costs-lib.js", file: "costs-lib.js", contentType: "text/javascript; charset=utf-8" },
   { path: "/silero.js", file: "silero.js", contentType: "text/javascript; charset=utf-8" },
   { path: "/vad.js", file: "vad.js", contentType: "text/javascript; charset=utf-8" },
 ];
@@ -64,7 +66,7 @@ export const VENDOR_FILES: readonly { path: string; file: string; contentType: s
 ];
 
 /** Dev-only pages (#73): never served in production. */
-const DEV_FILES: readonly { path: string; file: string; contentType: string }[] = [
+export const DEV_FILES: readonly { path: string; file: string; contentType: string }[] = [
   { path: "/voices", file: "voices.html", contentType: "text/html; charset=utf-8" },
   { path: "/voices.js", file: "voices.js", contentType: "text/javascript; charset=utf-8" },
   { path: "/voices-lib.js", file: "voices-lib.js", contentType: "text/javascript; charset=utf-8" },
