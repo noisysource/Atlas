@@ -348,6 +348,18 @@ export const makeServer = (
     );
   }
 
+  // #214: his answer to tidying the inbox. Only "yes" archives or labels.
+  const gmailTidy = deps.gmailTidy;
+  if (gmailTidy) {
+    const TidyBody = z.object({ id: z.string().regex(/^[a-f0-9]{8,64}$/), decision: z.enum(["yes", "no"]) }).strict();
+    app.post("/gmail/tidy", bodyLimit({ maxSize: 1024, onError: (c) => c.json(errorBody("The request is too large."), 413) }), async (c) => {
+      if (!isJson(c.req.header("content-type"))) return c.json(errorBody("POST /gmail/tidy needs Content-Type: application/json."), 415);
+      const body = TidyBody.safeParse(await c.req.json().catch(() => undefined));
+      if (!body.success) return c.json(errorBody('Send { id, decision: "yes" | "no" }.'), 400);
+      return c.json(await gmailTidy.decide(body.data.id, body.data.decision));
+    });
+  }
+
   // #138: his answer to opening an issue for a gap. Only "yes" opens it.
   const gapIssue = deps.gapIssue;
   if (gapIssue) {

@@ -1107,6 +1107,16 @@ Confirmed (2026-11-12):
   himself aren't picked up yet: the handoff between them is the branch,
   the PR and STATUS.md.
 
+- **Email management (#214–#217):** triage first. `src/gmail/tidy.ts`:
+  Claude sorts with `gmail_search`, then `gmail_tidy` proposes archive /
+  label ids for one account; code checks shape (ids, no system labels,
+  at most 100), peeks each message's sender and subject (never the
+  body) for the card and drops EC email and unknown ids, and only "Tidy
+  it" calls `batchModify` (archive = remove INBOX; labels created if
+  missing). Never delete, trash or spam. Scope `gmail.modify`
+  (GMAIL_TIDY=on, reconnect). Next: reply drafts (#215), the brief's
+  inbox part (#216), follow-ups (#217); then reminders (#218), calendar
+  move/cancel (#219), web search (#220).
 - **Gaps (#138):** `src/gaps/gaps.ts`. `gap_note` (what was asked and
   what's missing, in general words; emails masked; EC refused; the same
   gap, by most words of what was asked, is counted instead of repeated),

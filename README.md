@@ -376,6 +376,15 @@ Requires Node 22.13 or later (the memory store uses `node:sqlite`, which needs a
        once with write access:
        `GMAIL_WRITE=on npm run gmail:connect -- personal` (and
        `noisysource`), then add `GMAIL_WRITE=on` to `.env`.
+     - **Inbox triage (`GMAIL_TIDY=on`).** "Go through my email": Atlas
+       reads what's new in each inbox, sorts it (needs you, FYI,
+       newsletters and notifications, bills and receipts), tells you what
+       needs you first, and proposes tidying in one card: archive these,
+       label those ("Bills", "Receipts"). Only **Tidy it** changes anything;
+       archived email stays in All Mail; nothing is ever deleted or marked
+       as spam; EC email is left alone. Reconnect each account once with
+       tidying allowed: `GMAIL_WRITE=on GMAIL_TIDY=on npm run gmail:connect
+       -- personal` (and `noisysource`), then add `GMAIL_TIDY=on` to `.env`.
      - **Introspection (`INTROSPECTION=on`, with `MEMORY=on`).** Every
        night at 03:30, while Atlas runs, he reviews his short-term memory:
        drops what's done, makes lasting things long-term, merges updates,

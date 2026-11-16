@@ -35,6 +35,7 @@ export const SWITCHES: readonly SwitchDef[] = [
   { id: "gmail", node: "gmail", label: "Email", what: "Reading your email" },
   ...GMAIL_ACCOUNTS.map((a) => ({ id: `gmail:${a}`, node: "gmail" as const, label: `${a.charAt(0).toUpperCase()}${a.slice(1)} account`, what: `Reading the ${a} mailbox` })),
   { id: "gmail.write", node: "gmail", label: "Drafts and sending", what: "Writing drafts, and sending after your OK" },
+  { id: "gmail.tidy", node: "gmail", label: "Tidying", what: "Archiving and labelling after your OK (never deleting)" },
   { id: "github", node: "github", label: "GitHub", what: "Reading your repos, and everything built on them (plans, code, fixes)" },
   { id: "plans", node: "github", label: "Plans", what: "Following plans like the restructure" },
   { id: "code", node: "code", label: "Code agent", what: "Asking about and studying code" },
@@ -64,6 +65,8 @@ export const availableSwitches = (deps: BareDeps, accounts: readonly GmailAccoun
         return deps.gmail !== undefined;
       case "gmail.write":
         return deps.gmail?.writer !== undefined;
+      case "gmail.tidy":
+        return deps.gmail?.tidy !== undefined;
       case "github":
         return deps.github !== undefined;
       case "plans":
@@ -107,6 +110,9 @@ const withoutAccounts = (reader: GmailReader, off: ReadonlySet<string>): GmailRe
 /** A copy without one key. */
 const omit = <T extends object, K extends keyof T>(o: T, k: K): Omit<T, K> => Object.fromEntries(Object.entries(o).filter(([key]) => key !== k)) as Omit<T, K>;
 
+/** A copy without some keys. */
+const omitAll = <T extends object, K extends keyof T>(o: T, keys: readonly K[]): Omit<T, K> => Object.fromEntries(Object.entries(o).filter(([key]) => !(keys as readonly string[]).includes(key))) as Omit<T, K>;
+
 /** The deps with what's switched off taken away. Never adds anything. */
 export const withSwitches = (deps: BareDeps, off: ReadonlySet<string>): BareDeps => {
   if (off.size === 0) return deps;
@@ -119,7 +125,7 @@ export const withSwitches = (deps: BareDeps, off: ReadonlySet<string>): BareDeps
     ...rest,
     ...(calendar && !off.has("calendar") ? { calendar: off.has("calendar.write") ? omit(calendar, "create") : calendar } : {}),
     ...(gmail && !off.has("gmail")
-      ? { gmail: { ...(off.has("gmail.write") ? omit(gmail, "writer") : gmail), ...(gmailOff ? { reader: withoutAccounts(gmail.reader, off) } : {}) } }
+      ? { gmail: { ...omitAll(gmail, [...(off.has("gmail.write") ? (["writer"] as const) : []), ...(off.has("gmail.tidy") ? (["tidy"] as const) : [])]), ...(gmailOff ? { reader: withoutAccounts(gmail.reader, off) } : {}) } }
       : {}),
     ...(githubOn ? { github: off.has("plans") ? omit(github, "plans") : github } : {}),
     ...(codeOn ? { code: (({ fix, tasks, ...c }) => ({ ...c, ...(fix && !off.has("code.fix") ? { fix } : {}), ...(tasks && !off.has("code.tasks") ? { tasks } : {}) }))(code) } : {}),

@@ -22,6 +22,7 @@ import { authorizationUrl, exchangeCode, makeAccessTokens, makePkce, nodeTokenFi
 import { loadConfig } from "../src/config.js";
 import { GMAIL_ACCOUNTS, GMAIL_SCOPE, isGmailAccount } from "../src/gmail/gmail.js";
 import { GMAIL_COMPOSE_SCOPE } from "../src/gmail/send.js";
+import { GMAIL_MODIFY_SCOPE } from "../src/gmail/tidy.js";
 
 const fail = (message: string): never => {
   console.error(`✗ ${message}`);
@@ -34,7 +35,9 @@ const which = isGmailAccount(account) ? account : fail("");
 
 // #120: GMAIL_WRITE=on also asks to write drafts and send them (sending always after your OK).
 const write = process.env.GMAIL_WRITE === "on";
-const configResult = loadConfig({ ...process.env, CALENDAR: "off", CALENDAR_WRITE: "off", GMAIL: "off", GMAIL_WRITE: "off" });
+// #214: GMAIL_TIDY=on also asks to archive and label (always after your OK; never delete).
+const tidy = process.env.GMAIL_TIDY === "on";
+const configResult = loadConfig({ ...process.env, CALENDAR: "off", CALENDAR_WRITE: "off", GMAIL: "off", GMAIL_WRITE: "off", GMAIL_TIDY: "off" });
 const config = configResult.ok ? configResult.value : fail(configResult.ok ? "" : configResult.error);
 if (config.env === "production") fail("Gmail is local only: run this on your Mac, not in production.");
 const clientPath = config.calendar.clientPath;
@@ -53,10 +56,10 @@ const state = randomBytes(16).toString("hex");
 const server = createServer();
 await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
 const redirectUri = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
-const url = authorizationUrl({ clientId: oauthClient.clientId, redirectUri, challenge, state, scope: write ? `${GMAIL_SCOPE} ${GMAIL_COMPOSE_SCOPE}` : GMAIL_SCOPE });
+const url = authorizationUrl({ clientId: oauthClient.clientId, redirectUri, challenge, state, scope: [GMAIL_SCOPE, ...(write ? [GMAIL_COMPOSE_SCOPE] : []), ...(tidy ? [GMAIL_MODIFY_SCOPE] : [])].join(" ") });
 console.log(
-  write
-    ? `Connecting the "${which}" Gmail to read email and write drafts (Atlas sends only after your "Send it"). On Google's screen, pick that account and tick both boxes.\n`
+  write || tidy
+    ? `Connecting the "${which}" Gmail to read email${write ? ", write drafts (sent only after your \"Send it\")" : ""}${tidy ? ", and archive and label (only after your \"Tidy it\"; never delete)" : ""}. On Google's screen, pick that account and tick every box.\n`
     : `Connecting the "${which}" Gmail, read-only. On Google's screen, pick that account and allow reading email.\n`,
 );
 console.log("Opening Google's sign-in in your browser. If it doesn't open, visit:\n");
