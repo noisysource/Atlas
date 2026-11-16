@@ -528,6 +528,13 @@ Requires Node 22.13 or later (the memory store uses `node:sqlite`, which needs a
        `CODE_TASK_MAX_USD` (3) and `CODE_TASK_MAX_TURNS` (80) cap each turn.
        Note: tests and installs run your repo's own scripts and its
        dependencies' install scripts on your Mac, as when you run them.
+     - **Cards by voice.** Anything waiting for your OK (an event, a
+       draft, tidying, blinds, an issue…) can be answered by saying or
+       typing "yes" / "no" ("sim", "ok, send it", "not now", or the
+       button's words); in a spoken conversation the outcome is said
+       aloud and the mic listens again. After you answer, the step in
+       the tree and in "How I got here" turns from waiting to done (or
+       "you said no").
      - **Switches on the page.** Each node's panel in the brain view
        (click Gmail, GitHub, House…) has switches for what `.env` turned
        on: the calendar and adding events; email, each mailbox, and

@@ -11,7 +11,7 @@ import { nodeOfTool } from "./brain-lib.js";
 /** @typedef {"reaching" | "used" | "waiting" | "failed"} CallStatus */
 /**
  * One tool or skill call. `target`: the account or skill it reached; `detail`: the rest of its arguments.
- * @typedef {{ tool: string, service: string, target: string, detail: string, result: string, status: CallStatus }} Call
+ * @typedef {{ tool: string, service: string, target: string, detail: string, result: string, status: CallStatus, confirm?: string }} Call
  */
 /**
  * @typedef {{ offered: readonly string[] | undefined, calls: readonly Call[], handoff: boolean }} Trace
@@ -76,6 +76,7 @@ export const traceStep = (trace, step) => {
     detail,
     result: step.ok ? (step.result ?? "ok") : `failed: ${step.error ?? "error"}`,
     status: !step.ok ? "failed" : step.confirm ? "waiting" : "used",
+    ...(step.kind === "tool" && step.ok && step.confirm ? { confirm: step.confirm.id } : {}),
   };
   const i = trace.calls.findIndex((c) => c.status === "reaching" && c.tool === tool);
   const calls = i === -1 ? [...trace.calls, done] : trace.calls.map((c, j) => (j === i ? done : c));
@@ -122,3 +123,16 @@ export const traceTree = (trace) => {
           : `Tools · ${offered}`;
   return { hub, status: branches.length === 0 ? "idle" : worst(trace.calls), branches, handoff: trace.handoff };
 };
+
+/**
+ * He answered a card (#224): the call that was waiting turns done, declined or failed.
+ * @param {Trace} trace @param {string} id the card's id @param {"done" | "declined" | "failed"} outcome @returns {Trace}
+ */
+export const traceDecided = (trace, id, outcome) => ({
+  ...trace,
+  calls: trace.calls.map((c) =>
+    c.confirm === id && c.status === "waiting"
+      ? { ...c, status: outcome === "failed" ? "failed" : "used", result: outcome === "done" ? "done after your OK" : outcome === "declined" ? "you said no" : "failed after your OK" }
+      : c,
+  ),
+});

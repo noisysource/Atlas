@@ -47,6 +47,8 @@ export type Task = {
   readonly turns: number;
   readonly prUrl?: string;
   readonly prNumber?: number;
+  /** #224: how it ended on GitHub, when its pull request was merged or closed there. */
+  readonly ended?: "merged" | "closed";
   /** The issue its pull request closes (the repos ask every pull request to close one). */
   readonly issue?: number;
   /** Why it failed, safe to show. */
@@ -347,8 +349,34 @@ export const makeTasks = (deps: {
     return lines.length === 0 ? "no commits yet" : `${lines.length} ${lines.length === 1 ? "commit" : "commits"}: ${lines.slice(0, 3).map((l) => l.slice(8, 80)).join("; ")}${lines.length > 3 ? "…" : ""}`;
   };
 
+  // #224: a task whose pull request was merged or closed on GitHub is over: close it and delete its copy.
+  // Checked when the tasks are listed, at most every two minutes.
+  let swept = 0;
+  const sweep = async (): Promise<void> => {
+    if (now().getTime() - swept < 2 * 60_000) return;
+    swept = now().getTime();
+    for (const t of await all()) {
+      const number = t.prNumber ?? Number(/\/pull\/(\d+)/.exec(t.prUrl ?? "")?.[1] ?? 0);
+      if (t.status === "closed" || !number || t.status === "working" || t.status === "queued") continue;
+      const [owner, name] = t.repo.split("/");
+      const token = await deps.readToken(owner ?? "");
+      if (!owner || !name || !token) continue;
+      const res = await doFetch(`https://api.github.com/repos/${owner}/${name}/pulls/${number}`, { headers: gh(token) }).catch(() => undefined);
+      const pr = res?.ok ? ((await res.json().catch(() => ({}))) as { state?: unknown; merged_at?: unknown }) : undefined;
+      if (pr?.state !== "closed") continue;
+      const ended = typeof pr.merged_at === "string" ? "merged" : "closed";
+      running.get(t.id)?.abort();
+      await update(t.id, { status: "closed", step: undefined, ended });
+      await deps.remove(path.join(deps.root, t.id)).catch(() => undefined);
+      deps.log?.info("task closed by its pull request", { id: t.id, ended });
+    }
+  };
+
   return {
-    list: async (everything) => (await all()).filter((t) => everything === true || t.status !== "closed"),
+    list: async (everything) => {
+      await sweep().catch(() => undefined);
+      return (await all()).filter((t) => everything === true || t.status !== "closed");
+    },
     canStart: async (owner) => (await deps.readToken(owner)) !== undefined,
     proposeStart: (r) => card({ kind: "start", r, until: now().getTime() + 30 * 60_000 }),
     proposePublish: async (id, issue) => {

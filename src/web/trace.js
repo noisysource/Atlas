@@ -2,7 +2,7 @@
 // Atlas works (brain → Tools → tool → service → account · result) and
 // stays until the next question. States come from trace-lib.js.
 
-import { EMPTY_TRACE, settleTrace, traceOfPath, traceReach, traceStep, traceTree } from "./trace-lib.js";
+import { EMPTY_TRACE, settleTrace, traceOfPath, traceReach, traceStep, traceTree, traceDecided } from "./trace-lib.js";
 
 /** @typedef {import("./chat.js").PathStep} PathStep */
 /** @typedef {import("./trace-lib.js").Trace} Trace */
@@ -103,6 +103,14 @@ export const makeTraceView = (root) => {
     reach: (tool) => {
       trace = traceReach(trace, tool);
       draw();
+    },
+    /** He answered a card: its call stops waiting (#224). @param {string} id @param {"done" | "declined" | "failed"} outcome */
+    decided: (id, outcome) => {
+      const next = traceDecided(trace, id, outcome);
+      if (next.calls.some((c, i) => c !== trace.calls[i])) {
+        trace = next;
+        draw();
+      }
     },
     /** @param {PathStep} step */
     step: (step) => {

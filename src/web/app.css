@@ -2103,3 +2103,14 @@ footer,
   accent-color: var(--accent);
   margin: 0;
 }
+
+/* #224: a card can be answered by voice too. */
+.confirm-say {
+  margin: 0.25rem 0 0;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.confirm[data-pending="false"] .confirm-say {
+  display: none;
+}

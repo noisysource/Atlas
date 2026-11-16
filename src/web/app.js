@@ -12,6 +12,7 @@ import { makeStudiesView } from "./studies.js";
 import { makeTraceView } from "./trace.js";
 import { atEnd, clock, conversationText } from "./terminal-lib.js";
 import { CARD_DONE } from "./turn-lib.js";
+import { cardAnswer } from "./card-lib.js";
 import {
   CONVERSATION,
   LANGUAGES,
@@ -308,6 +309,48 @@ const copyText = async (text) => {
   }
 };
 
+/**
+ * "waiting for your OK" in the message's "How I got here" becomes what happened (#224).
+ * @param {HTMLElement} card @param {"done" | "declined" | "failed"} outcome
+ */
+const markDecided = (card, outcome) => {
+  const path = card.closest("li")?.querySelector(".path");
+  if (!path) return;
+  const walker = document.createTreeWalker(path, NodeFilter.SHOW_TEXT);
+  for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+    if (n.nodeValue?.includes("waiting for your OK")) {
+      n.nodeValue = n.nodeValue.replace("waiting for your OK", outcome === "done" ? "done after your OK" : outcome === "declined" ? "you said no" : "failed after your OK");
+      return;
+    }
+  }
+};
+
+/**
+ * Says one short line in a spoken conversation (a card's outcome, #224), then listens again.
+ * @param {string} text
+ */
+const speakNote = (text) => {
+  /** @type {import("./turn-lib.js").TurnTiming} */
+  const timing = { spoken: true };
+  const sp = startSpeaker(
+    (result) => {
+      if (result.interrupted) return;
+      if (state.phase === "speaking") setPhase("idle");
+      if (session) reopenMicSoon();
+    },
+    timing,
+    () => undefined,
+  );
+  sp.say(text);
+  sp.finish();
+};
+
+/** The newest card still waiting for an OK, if any (#224). */
+const latestPendingCard = () => {
+  const all = transcript.querySelectorAll('.confirm[data-pending="true"]');
+  return /** @type {HTMLElement | undefined} */ (all[all.length - 1]);
+};
+
 /** What each kind of card says and where its answer goes. */
 const CARDS = {
   calendar: { ask: (/** @type {string} */ l) => `Add to your calendar: ${l}?`, yes: "Add it", no: "Don't add", endpoint: "/calendar/confirm", failed: "nothing was added" },
@@ -337,8 +380,14 @@ const confirmCard = (proposal) => {
   card.className = "confirm";
   card.dataset.kind = kind;
   card.dataset.pending = "true";
+  // #224: so "yes" / "sim" / the button's own words, spoken or typed, can answer it.
+  card.dataset.yes = c.yes;
+  card.dataset.no = c.no;
   const what = document.createElement("p");
   what.textContent = c.ask(proposal.label);
+  const sayIt = document.createElement("p");
+  sayIt.className = "confirm-say";
+  sayIt.textContent = `Or say "yes" or "no".`;
   const choices = document.createElement("div");
   choices.className = "choices";
   /** @param {"yes" | "no"} decision @param {string} label */
@@ -365,7 +414,13 @@ const confirmCard = (proposal) => {
         result = { ok: false, text: `I can't reach Atlas, so ${c.failed}.` };
       }
       const text = typeof result.text === "string" ? result.text : `Something went wrong, so ${c.failed}.`;
+      // #224: the step that was waiting turns done, declined or failed, in the tree and in "How I got here".
+      const outcome = decision === "no" ? "declined" : result.ok ? "done" : "failed";
+      traceView.decided(proposal.id, outcome);
+      markDecided(card, outcome);
       addMessage(result.ok ? "answer" : "error", text);
+      // #224: in a spoken conversation, what happened is said aloud too, then the mic listens again.
+      if (state.voiceSession) speakNote(text);
       // What the app did on his OK is marked as such, so the model never takes its own "waiting for your OK" as the last word (#212).
       state.history = appendTurn(state.history, "assistant", text, typeof result.tool === "string" ? [`${result.tool} ${CARD_DONE}`] : []);
       void refreshReach();
@@ -394,7 +449,7 @@ const confirmCard = (proposal) => {
     return b;
   };
   choices.append(button("yes", c.yes), button("no", c.no));
-  card.append(what, choices);
+  card.append(what, choices, sayIt);
   return card;
 };
 
@@ -1187,6 +1242,16 @@ const submit = (raw, how = {}) => {
     return;
   }
   input.value = "";
+  // #224: "yes" / "no" (spoken or typed) answers the card waiting for an OK, as if its button was pressed.
+  const card = latestPendingCard();
+  const said = card ? cardAnswer(text, { yes: card.dataset.yes, no: card.dataset.no }) : undefined;
+  if (card && said) {
+    addMessage("user", text);
+    state.history = appendTurn(state.history, "user", text, []);
+    const buttons = card.querySelectorAll(".choices button");
+    /** @type {HTMLButtonElement | undefined} */ (buttons[said === "yes" ? 0 : 1])?.click();
+    return;
+  }
   const chosen = state.pending ? matchContextOption(text, state.pending.options) : undefined;
   if (chosen) {
     addMessage("user", text);
