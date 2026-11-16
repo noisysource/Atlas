@@ -143,7 +143,8 @@ const app = makeServer(deps.ok ? deps.value : refuse("unreachable"), {
     labels: { local: `Local · ${cfg.models.local.model}`, claude: `Claude · ${cfg.models.answer.model}` },
     calendar: cfg.calendar.enabled,
   },
-  ...(cfg.env === "production" ? {} : { allowedHosts: localHosts(cfg.port) }),
+  // #53: ALLOWED_HOSTS adds exact names, like the Mac's Tailscale name for the phone (tailscale serve).
+  ...(cfg.env === "production" ? {} : { allowedHosts: [...localHosts(cfg.port), ...cfg.allowedHosts] }),
   web: web.ok && vendor.ok ? { ...web.value, ...vendor.value } : refuse("unreachable"),
   memories: memoryStore,
 });

@@ -67,6 +67,11 @@ export type Config = {
   readonly env: RuntimeEnv;
   readonly host: string;
   readonly port: number;
+  /**
+   * #53/#19 (ALLOWED_HOSTS="mac.tail1234.ts.net"): more names the Host guard accepts besides
+   * 127.0.0.1 and localhost, like the Mac's Tailscale name for the phone. Exact names, no wildcards.
+   */
+  readonly allowedHosts: readonly string[];
   readonly models: {
     readonly classifier: ModelRef;
     /** The "Claude" brain. */
@@ -291,12 +296,20 @@ const optionalString = z.preprocess(
   z.string().trim().optional(),
 );
 
+/** A full host name with at least one dot, optionally with a port: no wildcards, schemes or paths. */
+const HOST_NAME = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+(?::\d{1,5})?$/i;
+
 const EnvSchema = z.object({
   NODE_ENV: z.preprocess(
     (v) => (typeof v === "string" && v.trim() === "" ? undefined : v),
     z.enum(["production", "development", "test"]).default("development"),
   ),
   HOST: optionalString,
+  ALLOWED_HOSTS: z
+    .string()
+    .max(400)
+    .default("")
+    .refine((v) => v.split(",").map((h) => h.trim()).filter((h) => h !== "").every((h) => HOST_NAME.test(h)), { error: "must be exact host names, comma-separated, like mac.tail1234.ts.net (no wildcards, no https://)" }),
   PORT: z.preprocess(
     (v) => (typeof v === "string" && v.trim() === "" ? undefined : v),
     z.coerce
@@ -597,6 +610,7 @@ export const loadConfig = (given: Env): Result<Config, string> => {
     // Locally the server has no auth, so it only listens on loopback unless told otherwise.
     host: e.HOST ?? (production ? "0.0.0.0" : "127.0.0.1"),
     port: e.PORT,
+    allowedHosts: [...new Set(e.ALLOWED_HOSTS.split(",").map((h) => h.trim().toLowerCase()).filter((h) => h !== ""))],
     models: { classifier, answer, local: { provider: "ollama", model: e.OLLAMA_MODEL ?? DEFAULTS.ollamaModel } },
     contextsPath: e.CONTEXTS_PATH ?? DEFAULTS.contextsPath,
     profileSource,

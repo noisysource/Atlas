@@ -1107,6 +1107,16 @@ Confirmed (2026-11-12):
   himself aren't picked up yet: the handoff between them is the branch,
   the PR and STATUS.md.
 
+- **Phone access (#53, #19), on the Mac:** he chose the Mac over the Pi
+  and Cloud Run for now. Atlas runs as it does today; `tailscale serve
+  --bg http://127.0.0.1:8080` gives it HTTPS at the Mac's tailnet name,
+  reachable only from his tailnet (Funnel off, nothing on the router,
+  server still on loopback). Serve keeps the Host header, so
+  `ALLOWED_HOSTS` (comma-separated exact names, validated: no wildcards,
+  schemes or paths) adds them to the Host guard next to 127.0.0.1 and
+  localhost. Same `.env` on the same Mac, so the secrets rule doesn't
+  change. Guide: `docs/phone.md`. Not covered: the Mac asleep (Pi or
+  Cloud Run later), and Siri or messaging bots (#19's per-client auth).
 - **Web search (#220):** Anthropic's server tool
   `web_search_20250305`, added by `buildParams` when the request carries
   `webSearch {maxUses, country, city, timezone}`; `mapResponse` returns

@@ -231,6 +231,15 @@ describe("Host allowlist (DNS-rebinding guard)", () => {
     expect((await get(app, host)).status).toBe(200);
   });
 
+  it("with ALLOWED_HOSTS (#53), the Mac's Tailscale name too, and only that name", async () => {
+    const { app } = setup({ allowedHosts: [...localHosts(PORT), "renatos-mac.tail1234.ts.net"] });
+    expect((await get(app, "renatos-mac.tail1234.ts.net")).status).toBe(200);
+    expect((await get(app, "Renatos-Mac.tail1234.ts.net")).status).toBe(200);
+    expect((await get(app, "other-mac.tail1234.ts.net")).status).toBe(403);
+    expect((await get(app, "renatos-mac.tail1234.ts.net.evil.example")).status).toBe(403);
+    expect((await get(app, "localhost:8080")).status).toBe(200);
+  });
+
   it.each([
     ["a rebinding hostname", "evil.example:8080"],
     ["the right name on another port", "localhost:9999"],

@@ -20,6 +20,7 @@ describe("loadConfig", () => {
       env: "development",
       host: "127.0.0.1",
       port: 8080,
+      allowedHosts: [],
       models: {
         classifier: { provider: "anthropic", model: "claude-haiku-5-5" },
         answer: { provider: "anthropic", model: "claude-sonnet-5-5" },
@@ -207,6 +208,11 @@ describe("loadConfig", () => {
 
   it("accepts another IANA time zone", () => {
     expect(loadOk({ TIMEZONE: "Europe/Madrid" }).timeZone).toBe("Europe/Madrid");
+  });
+
+  it("adds exact host names for the phone (#53), and refuses wildcards, schemes and paths", () => {
+    expect(loadOk({ ALLOWED_HOSTS: "Renatos-Mac.tail1234.ts.net, renatos-mac.tail1234.ts.net ,localhost.test:8443" }).allowedHosts).toEqual(["renatos-mac.tail1234.ts.net", "localhost.test:8443"]);
+    for (const bad of ["*.ts.net", "https://mac.tail1234.ts.net", "mac.tail1234.ts.net/x", "mac", "mac.ts.net,evil host"]) expect(loadErr({ ALLOWED_HOSTS: bad }), bad).toContain("ALLOWED_HOSTS");
   });
 
   it("treats empty values as unset", () => {

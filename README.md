@@ -755,6 +755,14 @@ Requires Node 22.13 or later (the memory store uses `node:sqlite`, which needs a
    yet) or `error`. `GET /healthz` returns `{"status":"ok"}`. Logs are JSON
    lines and never include your questions or answers.
 
+## On your iPhone
+
+Atlas stays on your Mac; Tailscale gives it a private HTTPS address only
+your own devices can open (`tailscale serve`, never Funnel), and
+`ALLOWED_HOSTS=<mac>.<tailnet>.ts.net` in `.env` lets the Host guard
+accept that name. Voice works too (the microphone needs HTTPS). Steps and
+checks: [docs/phone.md](docs/phone.md).
+
 ## Checks
 
 ```bash
