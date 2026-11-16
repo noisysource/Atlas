@@ -41,7 +41,7 @@ describe("the switches", () => {
   it("only what .env allows gets a switch", () => {
     const llm: LlmCall = async () => ok({ ...common, kind: "text", text: "" });
     const ids = availableSwitches(deps(llm)).map((s) => s.id);
-    expect(ids).toEqual(["gmail", "gmail:personal", "gmail:noisysource", "github", "decisions"]);
+    expect(ids).toEqual(["gmail", "gmail:personal", "gmail:noisysource", "gmail:kidclub", "gmail:marisa", "github", "decisions"]);
     // Drafts, the calendar, the house… aren't on in .env here, so there's nothing to switch.
     expect(ids).not.toContain("gmail.write");
     expect(ids).not.toContain("calendar");

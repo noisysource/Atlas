@@ -303,7 +303,9 @@ Requires Node 22.13 or later (the memory store uses `node:sqlite`, which needs a
         add it as a test user). Add `CALENDAR_WRITE=on` before the command
         for adding events there too. Its token goes to
         `data/google-calendar-noisysource.json`.
-     4. Put `CALENDAR=on` in `.env` and restart.
+     4. The same for `kidclub` (KidClub's public mailbox) and `marisa`
+        (Marisa's), each signed in by that account (#245).
+     5. Put `CALENDAR=on` in `.env` and restart.
 
      How it works:
      - **With ☁️ Claude, Claude decides (#104).** Claude gets a
@@ -442,8 +444,13 @@ Requires Node 22.13 or later (the memory store uses `node:sqlite`, which needs a
        the card or use the ✨ Skills panel, and from then on he follows the
        steps when a request matches. A skill only uses tools he already has;
        actions still need your OK.
-     - **Gmail (`GMAIL=on`, ☁️ Claude), read-only.** Two accounts:
-       `personal` and `noisysource`. In Google Cloud, enable the **Gmail
+     - **Gmail (`GMAIL=on`, ☁️ Claude), read-only.** Four accounts:
+       `personal`, `noisysource`, `kidclub` (KidClub's public mailbox) and
+       `marisa` (Marisa's). His own three are read by default (triage, the
+       brief, follow-ups, a calendar read); Marisa's only when you name her
+       or ask about the two of you. Drafts are signed as the account's
+       owner would (Renato, KidClub, Marisa). Which address each name is
+       is decided when it's connected, never in the repo. In Google Cloud, enable the **Gmail
        API** on the same project (and, with an "External" consent screen,
        add each address as a test user). Then connect each once:
        `npm run gmail:connect -- personal` and

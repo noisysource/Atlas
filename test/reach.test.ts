@@ -23,10 +23,14 @@ describe("GET /reach content (#133)", () => {
     expect(byId.calendar?.accounts).toEqual([
       { name: "personal", connected: true },
       { name: "noisysource", connected: false },
+      { name: "kidclub", connected: false },
+      { name: "marisa", connected: false },
     ]);
     expect(byId.gmail?.accounts).toEqual([
       { name: "personal", connected: true },
       { name: "noisysource", connected: false },
+      { name: "kidclub", connected: false },
+      { name: "marisa", connected: false },
     ]);
     expect(byId.gmail?.tools.map((t) => t.name)).toEqual(["gmail_search", "gmail_read", "gmail_attachment", "gmail_followups"]);
     // #214: without GMAIL_TIDY, the panel says how to switch triage on.

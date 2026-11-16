@@ -24,7 +24,7 @@ const LIMITS = { recipients: 10, subject: 200, body: 10_000 } as const;
 export const GMAIL_DRAFT_TOOL: LlmTool = {
   name: "gmail_draft",
   description:
-    'Write an email as a draft in one of their Gmail accounts. Nothing is sent: the app shows them the draft and only their "Send it" sends it. To reply, give the id of the email you\'re answering (from gmail_search) and it goes in the same thread. account: "personal" or "noisysource".',
+    'Write an email as a draft in one of their Gmail accounts. Nothing is sent: the app shows them the draft and only their "Send it" sends it. To reply, give the id of the email you\'re answering (from gmail_search) and it goes in the same thread. Sign it as the account\'s owner would: Renato, or KidClub for kidclub, or Marisa for marisa.',
   inputSchema: {
     type: "object",
     properties: {

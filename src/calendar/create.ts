@@ -17,11 +17,12 @@ import type { LlmTool } from "../llm/types.js";
 import { dayLabel, shortRangeLabel } from "./dates.js";
 import { addDays, localDate, MAX_DAYS_AHEAD, type CalendarError } from "./read.js";
 import { isCalendarAccount, type CalendarAccount } from "./accounts.js";
+import { accountsLine, GOOGLE_ACCOUNTS } from "../google-accounts.js";
 
 export const CALENDAR_CREATE_TOOL: LlmTool = {
   name: "calendar_create",
   description:
-    'Propose adding one event to one of their Google Calendars: "personal" (Renato\'s own, the default) or "noisysource" (his company\'s). Nothing is added by this call: the app shows them the event and only their explicit yes adds it. Give a date and either a start and end time, or all_day.',
+    `Propose adding one event to one of their Google Calendars (${accountsLine("calendar")}; personal by default). Nothing is added by this call: the app shows them the event and only their explicit yes adds it. Give a date and either a start and end time, or all_day.`,
   inputSchema: {
     type: "object",
     properties: {
@@ -30,7 +31,7 @@ export const CALENDAR_CREATE_TOOL: LlmTool = {
       start: { type: "string", description: "Start time, HH:MM (24-hour). Leave empty for an all-day event." },
       end: { type: "string", description: "End time, HH:MM (24-hour). Leave empty for one hour after the start." },
       all_day: { type: "boolean", description: "True for an all-day event" },
-      account: { type: "string", enum: ["personal", "noisysource"], description: "Which calendar; personal if they don't say" },
+      account: { type: "string", enum: [...GOOGLE_ACCOUNTS], description: "Which calendar; personal if they don't say" },
     },
     required: ["title", "date"],
     additionalProperties: false,
@@ -64,7 +65,7 @@ export const checkCreateRequest = (value: unknown, today: string, isEc: (text: s
   if (typeof value !== "object" || value === null) return err("not an object");
   const { title, date, start, end, all_day: allDay, account } = value as Record<string, unknown>;
   if (account !== undefined && !isCalendarAccount(account)) return err("unknown calendar");
-  const which = account === "noisysource" ? { account } : {};
+  const which = account !== undefined && account !== "personal" ? { account } : {};
   if (typeof title !== "string") return err("no title");
   const cleanTitle = [...title]
     .map((c) => (c.charCodeAt(0) < 32 ? " " : c))
