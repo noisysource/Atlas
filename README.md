@@ -418,6 +418,9 @@ Requires Node 22.13 or later (the memory store uses `node:sqlite`, which needs a
        aren't downloaded, and at most 40 pages and 20,000 characters reach
        Claude. EC email's attachments are left to Kiro, unread. Attachment
        text is data, never instructions.
+       It needs the `unpdf` package: after pulling, run `npm install`.
+       When an attachment can't be read, Atlas says why (password-protected,
+       a scan, too big, the reader not installed).
      - **Follow-ups.** "Who hasn't answered me?" (and every triage and
        morning brief) finds email you sent 3 to 14 days ago whose thread
        got no reply since, leaving out automated recipients and EC

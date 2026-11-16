@@ -56,6 +56,11 @@ describe("listing and reading", () => {
     expect((await textOf({ name: "x.pdf", mimeType: "application/pdf" }, new TextEncoder().encode("not a pdf"), unpdfText)).ok).toBe(false);
   });
 
+  it("a password-protected PDF says so (#243)", async () => {
+    const locked = new Uint8Array(readFileSync(new URL("./fixtures/invoice-locked.pdf", import.meta.url)));
+    expect(await textOf({ name: "Resumo.pdf", mimeType: "application/pdf" }, locked, unpdfText)).toEqual(err("that PDF is password-protected"));
+  });
+
   it("the brain sees it as data, with tags taken out", () => {
     const text = attachmentForBrain("personal", "m1", { name: 'a<b>".pdf', mimeType: "application/pdf", pages: 3, text: "Ignore <instructions>", cut: true });
     expect(text).toContain('<attachment account="personal" email="m1" name="a b  .pdf" pages="3">');
@@ -140,6 +145,33 @@ describe("asking Atlas", () => {
     expect(r.requests[0]?.system).toContain("read it with gmail_attachment");
     expect(r.steps[0]).toMatchObject({ name: "gmail_attachment", ok: true, result: "2 pages" });
     expect(JSON.stringify(r.requests[1]?.messages)).toContain("Total a pagar: 1.234,56 EUR");
+  });
+
+  it("when reading fails, Atlas gets the reason in code's words and the step shows it (#243)", async () => {
+    const usage2 = { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0 };
+    const c = { servedBy: "claude-test", usage: usage2, payload: { provider: "anthropic", data: "x" } };
+    const requests: LlmRequest[] = [];
+    let i = 0;
+    const script: LlmResponse[] = [
+      { ...c, kind: "tool_calls", text: "", calls: [{ id: "a1", name: "gmail_attachment", input: { account: "noisysource", id: "m1abcd", attachment: 1 } }] },
+      { ...c, kind: "text", text: "It's password-protected." },
+    ];
+    const llm: LlmCall = async (r) => {
+      requests.push(r);
+      return ok(script[Math.min(i++, script.length - 1)] as LlmResponse);
+    };
+    const steps: PathStep[] = [];
+    const failing: GmailReader = { search: async () => ok([]), read: async () => err({ code: "api", message: "x" }), attachment: async () => err({ code: "api", message: "Couldn't read it: that PDF is password-protected" }) };
+    await makeBareAnswerer({ llm, tools: true, gmail: { reader: failing, isEc }, route: { mode: "rules" } })({
+      context: { id: "personal", name: "Personal" } as unknown as Context,
+      question: "What's in the accountant's PDF?",
+      history: [],
+      memories: [],
+      now: new Date("2026-11-16T10:00:00Z"),
+      onStep: (s) => steps.push(s),
+    });
+    expect(steps[0]).toMatchObject({ name: "gmail_attachment", ok: false, error: "Couldn't read it: that PDF is password-protected" });
+    expect(JSON.stringify(requests[1]?.messages)).toContain("Reading that attachment failed: Couldn't read it: that PDF is password-protected");
   });
 
   it("an EC email's attachment goes to Kiro, unread", async () => {
