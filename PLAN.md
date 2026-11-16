@@ -1107,6 +1107,12 @@ Confirmed (2026-11-12):
   himself aren't picked up yet: the handoff between them is the branch,
   the PR and STATUS.md.
 
+- **Reply drafts (#215):** in triage, with GMAIL_WRITE, Claude reads
+  each needs-him email where a person waits on his reply and drafts a
+  reply (`gmail_draft` with `reply_to_id`), most urgent first; at most
+  three `gmail_draft` calls per answer (code, `MAX_DRAFTS_PER_ANSWER`);
+  `isNoReply` refuses automated senders; what only he knows isn't
+  invented but listed as needing his input. Each draft has its Send it card.
 - **Email management (#214–#217):** triage first. `src/gmail/tidy.ts`:
   Claude sorts with `gmail_search`, then `gmail_tidy` proposes archive /
   label ids for one account; code checks shape (ids, no system labels,

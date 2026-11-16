@@ -60,7 +60,7 @@ import { checkLogsRequest, errorsForBrain, errorsSummary, GCLOUD_ERRORS_TOOL, GC
 import { answerForBrain, answerSummary, checkAskRequest, CODE_ASK_TOOL, type CodeAgent } from "../code/agent.js";
 import type { RepoCopies } from "../code/repos.js";
 import { checkStudyRequest, CODE_NOTES_TOOL, CODE_STUDY_TOOL, noteForBrain, noteKey, notesLine, type NoteStore, type Studies } from "../code/study.js";
-import { checkDraftRequest, draftLabel, GMAIL_DRAFT_DELETE_TOOL, GMAIL_DRAFT_TOOL, isDraftRef, type DraftBook, type GmailWriter, type PendingDrafts } from "../gmail/send.js";
+import { checkDraftRequest, MAX_DRAFTS_PER_ANSWER, draftLabel, GMAIL_DRAFT_DELETE_TOOL, GMAIL_DRAFT_TOOL, isDraftRef, type DraftBook, type GmailWriter, type PendingDrafts } from "../gmail/send.js";
 import { makeSkillTurn, SKILL_FOLLOW_TOOL, SKILL_PROPOSE_TOOL, skillsForPrompt, type SkillStore } from "../skills.js";
 import type { EcMatchers } from "../memory-rules.js";
 import { makeMemoryTurn, MEMORY_FORGET_TOOL, MEMORY_RECALL_TOOL, MEMORY_REMEMBER_TOOL, MEMORY_TOOLS, type MemoryToolDeps } from "../memory-tools.js";
@@ -297,7 +297,7 @@ export const barePrompt = (
         "You can also search and read their email, read-only, with gmail_search and gmail_read, in two accounts: \"personal\" (their personal Gmail) and \"noisysource\" (their company Noisy Source). Pick the account that fits; if unclear, search both. Search first, then read an email only when its snippet isn't enough. Answer about their email only from what the tools returned, and never invent senders, subjects or contents.",
         ...(options.emailTidy === true
           ? [
-              "You manage his inbox. For \"go through my email\", \"triage my inbox\" or \"what needs me?\": gmail_search each account for what's new in the inbox (like in:inbox newer_than:2d, or is:unread), and sort it into needs him (a person waiting on him, a decision, a deadline), FYI, newsletters and notifications, and bills and receipts. Tell him the needs-him ones first, one line each (who, what, by when), then the rest as counts. Then propose tidying with gmail_tidy: archive newsletters, notifications and what's been dealt with, and label bills and receipts (\"Bills\", \"Receipts\"). Never archive anything that needs him. When he says which ones in a way that could mean different emails (\"those 2\", \"the rest\", \"them\"), and the conversation doesn't make it certain, ask in one line which he means (name them) before proposing. If he says you tidied the wrong ones, propose putting them back with inbox. Nothing changes until he taps \"Tidy it\" or says yes; never say it's done. You can't delete email or mark it as spam.",
+              `You manage his inbox. For "go through my email", "triage my inbox" or "what needs me?": gmail_search each account for what's new in the inbox (like in:inbox newer_than:2d, or is:unread), and sort it into needs him (a person waiting on him, a decision, a deadline), FYI, newsletters and notifications, and bills and receipts. Tell him the needs-him ones first, one line each (who, what, by when), then the rest as counts. Then propose tidying with gmail_tidy: archive newsletters, notifications and what's been dealt with, and label bills and receipts ("Bills", "Receipts"). Never archive anything that needs him.${options.emailDrafts === true ? " For each needs-him email where a person is waiting on his reply (a question or request to him, not a notification or an automated sender), read it with gmail_read and prepare a short reply with gmail_draft (reply_to_id), at most three per answer, most urgent first: in his voice, short and direct, in the email's language, signed Renato. Don't invent what only he knows (a date, a price, a yes or no): if the reply needs that, don't draft it, and list it as needing his input. Then say which replies you drafted; each has its own Send it card." : ""} When he says which ones in a way that could mean different emails ("those 2", "the rest", "them"), and the conversation doesn't make it certain, ask in one line which he means (name them) before proposing. If he says you tidied the wrong ones, propose putting them back with inbox. Nothing changes until he taps "Tidy it" or says yes; never say it's done. You can't delete email or mark it as spam.`,
             ]
           : []),
         options.emailDrafts === true
@@ -1549,6 +1549,7 @@ export const makeBareAnswerer = (deps: {
     };
 
     /** Reach 3: Gmail, read-only. Code checks each call; EC email is never shown or opened. */
+    let draftsThisAnswer = 0;
     const runGmail = async (gmail: NonNullable<typeof deps.gmail>, call: LlmToolCall): Promise<LlmToolResult> => {
       const refuse = (why: string, content: string): LlmToolResult => {
         deps.log?.info("gmail request refused", { tool: call.name, why });
@@ -1566,6 +1567,9 @@ export const makeBareAnswerer = (deps: {
       };
       const started = performance.now();
       if (call.name === GMAIL_DRAFT_TOOL.name && gmail.writer) {
+        // #215: he reviews each draft, so only a few per answer.
+        if (draftsThisAnswer >= MAX_DRAFTS_PER_ANSWER) return refuse("too many drafts", `Refused: at most ${MAX_DRAFTS_PER_ANSWER} drafts in one answer. List the others and ask which he wants next.`);
+        draftsThisAnswer += 1;
         // #120: saved as a draft, never sent here. Not "an action succeeded": "I've sent it" stays dropped.
         const checked = checkDraftRequest(call.input, gmail.isEc);
         if (!checked.ok)

@@ -8,7 +8,7 @@ import { handleAsk } from "../src/ask.js";
 import { loadConfig } from "../src/config.js";
 import { parseContexts } from "../src/contexts.js";
 import type { GmailMessage, GmailReader } from "../src/gmail/gmail.js";
-import { checkDraftRequest, makeGmailWriter, makePendingDrafts, rawMessage, type DraftRequest, type GmailWriter } from "../src/gmail/send.js";
+import { checkDraftRequest, isNoReply, makeGmailWriter, makePendingDrafts, rawMessage, type DraftRequest, type GmailWriter } from "../src/gmail/send.js";
 import type { LlmCall, LlmRequest, LlmResponse } from "../src/llm/types.js";
 import { makePrecheck } from "../src/precheck.js";
 import { err, ok } from "../src/result.js";
@@ -285,5 +285,36 @@ describe("deleting a draft Atlas wrote (#124)", () => {
     script = [{ ...common, kind: "tool_calls", text: "", calls: [{ id: "t5", name: "gmail_draft_delete", input: { ref: "zz" } }] }];
     expect((await ask("Delete draft zz")).find((s) => s.kind === "tool")).toMatchObject({ ok: false, error: "refused: not a draft ref" });
     expect(discarded).toEqual(["d1"]);
+  });
+});
+
+describe("reply drafts during triage (#215)", () => {
+  it("never to automated senders", () => {
+    for (const a of ["noreply@medium.com", "no-reply@accounts.google.com", "donotreply@cgd.pt", "notifications@github.com", "mailer-daemon@googlemail.com", "news@tesla.com"]) expect(isNoReply(a), a).toBe(true);
+    for (const a of ["e@escola.pt", "marisa@example.com", "info@viaverde.pt", "renato.lopes@noisysource.pt"]) expect(isNoReply(a), a).toBe(false);
+    expect(checkDraftRequest({ ...late, to: ["noreply@medium.com"] }, isEc)).toMatchObject({ ok: false, error: "that address doesn't take replies (an automated sender)" });
+  });
+
+  it("at most three drafts in one answer; the prompt says when to draft and not to invent", async () => {
+    const w = fakeWriter();
+    const draft = (n: number) => ({ id: `t${n}`, name: "gmail_draft", input: { ...late, to: [`p${n}@example.com`], subject: `Re: ${n}` } });
+    const { llm, requests } = scripted([
+      { ...common, kind: "tool_calls", text: "", calls: [draft(1), draft(2), draft(3), draft(4)] },
+      { ...common, kind: "text", text: "Three drafts ready." },
+    ]);
+    const steps: PathStep[] = [];
+    await makeBareAnswerer({ llm, tools: true, gmail: { reader, isEc, writer: { write: w.write, pending: makePendingDrafts() }, tidy: { propose: async () => err("x"), decide: async () => ({ ok: true, text: "" }) } }, route: { mode: "rules" } })({
+      context: { id: "personal", name: "Personal" } as unknown as Context,
+      question: "Go through my email",
+      history: [],
+      memories: [],
+      now: NOW,
+      onStep: (s) => steps.push(s),
+    });
+    expect(w.drafts).toHaveLength(3);
+    expect(steps.filter((s) => s.kind === "tool" && s.name === "gmail_draft" && !s.ok)).toHaveLength(1);
+    expect(requests[0]?.system).toContain("prepare a short reply with gmail_draft (reply_to_id), at most three per answer");
+    expect(requests[0]?.system).toContain("Don't invent what only he knows");
+    expect(w.sent).toEqual([]);
   });
 });
