@@ -64,11 +64,19 @@ export const toGeminiContents = (messages: readonly LlmMessage[]): Content[] => 
   return out;
 };
 
-const thinkingLevel = (r: LlmRequest): string | undefined => (r.thinking === "off" ? "minimal" : r.effort === "high" ? "high" : r.effort === "low" ? "low" : undefined);
+/**
+ * Which models take thinkingLevel "minimal" (the docs, 2026-11-16): the
+ * Flash-Lites, 3.6 Flash and 3 Flash preview. Gemini 3.8 Flash and the Pros
+ * don't (400), so "off" is "low" there.
+ */
+export const takesMinimal = (model: string): boolean => /flash-lite|^gemini-3\.6-flash|^gemini-3-flash-preview/.test(model);
+
+const thinkingLevel = (r: LlmRequest, model: string): string | undefined =>
+  r.thinking === "off" ? (takesMinimal(model) ? "minimal" : "low") : r.effort === "high" ? "high" : r.effort === "low" ? "low" : undefined;
 
 /** The request body for generateContent. */
-export const geminiBody = (request: LlmRequest) => {
-  const level = thinkingLevel(request);
+export const geminiBody = (request: LlmRequest, model = "") => {
+  const level = thinkingLevel(request, model);
   return {
     systemInstruction: { parts: [{ text: request.systemSuffix ? `${request.system}\n\n${request.systemSuffix}` : request.system }] },
     contents: toGeminiContents(request.messages),
@@ -199,7 +207,22 @@ const sleep = (ms: number, signal?: AbortSignal) =>
     });
   });
 
-export const makeGeminiLlm = (deps: { readonly model: string; readonly apiKey: string; readonly fetch?: typeof fetch; readonly retryDelays?: readonly number[] }): LlmCall => {
+/** Google's own reason for a refused request: its error message, which names fields, never the prompt. */
+const googleReason = async (res: Response): Promise<string> => {
+  const body = (await res.json().catch(() => undefined)) as { error?: { message?: unknown; status?: unknown } } | undefined;
+  const message = typeof body?.error?.message === "string" ? body.error.message : "";
+  const status = typeof body?.error?.status === "string" ? body.error.status : "";
+  return `${status} ${message}`.trim().replace(/\s+/g, " ").slice(0, 300);
+};
+
+export const makeGeminiLlm = (deps: {
+  readonly model: string;
+  readonly apiKey: string;
+  readonly fetch?: typeof fetch;
+  readonly retryDelays?: readonly number[];
+  /** Google's reason when it refuses a request (#248), so a failure says why. */
+  readonly log?: { readonly warn: (msg: string, fields?: Record<string, unknown>) => void };
+}): LlmCall => {
   const doFetch = deps.fetch ?? fetch;
   const delays = deps.retryDelays ?? RETRIES;
 
@@ -207,7 +230,7 @@ export const makeGeminiLlm = (deps: { readonly model: string; readonly apiKey: s
     const queue = textQueue();
     const result = (async (): Promise<Result<LlmResponse, LlmError>> => {
       try {
-        const body = JSON.stringify(geminiBody(request));
+        const body = JSON.stringify(geminiBody(request, deps.model));
         let res: Response | undefined;
         for (let attempt = 0; ; attempt++) {
           if (signal?.aborted) return err(ABORTED);
@@ -230,6 +253,7 @@ export const makeGeminiLlm = (deps: { readonly model: string; readonly apiKey: s
           }
           if (res.ok) break;
           const e = httpError(res.status);
+          deps.log?.warn("gemini refused", { model: deps.model, status: res.status, reason: await googleReason(res) });
           if (e.retryable && attempt < delays.length) {
             await sleep(delays[attempt] ?? 1000, signal);
             continue;

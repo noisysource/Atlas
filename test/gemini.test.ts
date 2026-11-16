@@ -18,7 +18,7 @@ const SIGNED: GeminiPart[] = [{ functionCall: { name: "calendar_read", args: { f
 
 describe("the request", () => {
   it("system prompt with its suffix, tools as JSON schema, thinking and JSON output mapped", () => {
-    const body = geminiBody({ ...base, tools: [TOOL], thinking: "off" });
+    const body = geminiBody({ ...base, tools: [TOOL], thinking: "off" }, "gemini-3.5-flash-lite");
     expect(body.systemInstruction).toEqual({ parts: [{ text: "You are Atlas.\n\nNow: Monday." }] });
     expect(body.contents).toEqual([{ role: "user", parts: [{ text: "What's on today?" }] }]);
     expect(body.tools).toEqual([{ functionDeclarations: [{ name: "calendar_read", description: "Read the calendar", parametersJsonSchema: TOOL.inputSchema }] }]);
@@ -26,6 +26,8 @@ describe("the request", () => {
     const json = geminiBody({ ...base, outputSchema: { type: "object", properties: {} } });
     expect(json.generationConfig).toMatchObject({ responseMimeType: "application/json", responseJsonSchema: { type: "object", properties: {} } });
     expect("tools" in geminiBody(base)).toBe(false);
+    // 3.8 Flash refuses "minimal" (400): thinking off is "low" there.
+    expect(geminiBody({ ...base, thinking: "off" }, "gemini-3.8-flash").generationConfig.thinkingConfig).toEqual({ thinkingLevel: "low" });
   });
 
   it("the model's own turn goes back exactly as received (thought signature included), then the results by name", () => {
@@ -127,6 +129,10 @@ describe("the calls", () => {
     }) as typeof fetch;
     expect(await makeGeminiLlm({ model: "m", apiKey: "k", fetch: refused, retryDelays: [1, 1] })(base)).toMatchObject({ ok: false, error: { kind: "auth", userMessage: expect.stringContaining("GEMINI_API_KEY") } });
     expect(n).toBe(1);
+    const warned: unknown[] = [];
+    const bad = (async () => new Response(JSON.stringify({ error: { status: "INVALID_ARGUMENT", message: "Invalid value at 'generation_config.thinking_config.thinking_level'" } }), { status: 400 })) as typeof fetch;
+    await makeGeminiLlm({ model: "gemini-3.8-flash", apiKey: "k", fetch: bad, log: { warn: (_m, f) => warned.push(f) } })(base);
+    expect(warned).toEqual([{ model: "gemini-3.8-flash", status: 400, reason: "INVALID_ARGUMENT Invalid value at 'generation_config.thinking_config.thinking_level'" }]);
   });
 });
 

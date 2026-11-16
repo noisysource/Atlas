@@ -31,7 +31,7 @@ export const makeLlm = (
     }
     case "google": {
       const apiKey = keys.google;
-      return apiKey ? ok(makeGeminiLlm({ model: ref.model, apiKey })) : err("No API key for provider google");
+      return apiKey ? ok(makeGeminiLlm({ model: ref.model, apiKey, ...(options.log ? { log: options.log } : {}) })) : err("No API key for provider google");
     }
     case "ollama":
       return ok(
