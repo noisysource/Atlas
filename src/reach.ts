@@ -64,7 +64,7 @@ export const reachView = async (input: ReachInput): Promise<readonly ReachNode[]
       id: "profile",
       status: config.bareMode && config.bareProfile ? "on" : "off",
       about: "Who you are, from data/profile.md on this Mac. It goes into every answer and is never committed or logged.",
-      tools: [],
+      tools: config.toolCalling ? [{ name: "talk_set", does: "change how Atlas talks: language, length, tone" }] : [],
       ...(config.bareProfile ? {} : { hint: "PROFILE=on in .env" }),
     },
     {

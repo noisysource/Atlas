@@ -11,6 +11,7 @@ import type { PrCloser } from "./github/pr-close.js";
 import type { Blinds } from "./house/blinds.js";
 import type { Gaps } from "./gaps/gaps.js";
 import type { Reminders } from "./reminders/reminders.js";
+import type { TalkStore } from "./talk.js";
 import type { CostSummary } from "./costs.js";
 import type { LiveSessions } from "./live/routes.js";
 import type { CalendarChanges } from "./calendar/change.js";
@@ -360,6 +361,8 @@ export type Deps = {
   readonly calendarChange?: Pick<CalendarChanges, "decide">;
   /** #218: his reminders, for the page (GET /reminders, POST /reminders/done). */
   readonly reminders?: { readonly store: Reminders; readonly today: () => string };
+  /** #68: how he wants Atlas to talk: GET /talk, POST /talk. */
+  readonly talk?: TalkStore;
   /** #250: Gemini Live sessions, one per page, when ✦ Google may talk by voice. */
   readonly live?: LiveSessions;
   /** #247: what Atlas costs, per service: GET /costs. */

@@ -54,7 +54,8 @@ const el = (tag, className) => {
  * Clicking a node opens its panel (#133); `open` adds a button there for
  * nodes with a fuller view of their own (Memory, Skills).
  * @param {HTMLElement} root
- * @param {{ open?: Partial<Record<string, { label: string, run: () => void }>>, onMap?: (key: string) => void, onSwitch?: (id: string, on: boolean) => Promise<boolean> }} [options] onMap: open a studied repo's code map (#158); onSwitch: turn a tool on or off (#151), true when it worked
+ * @typedef {{ talk: Record<string, string>, options: Record<string, string[]>, labels: Record<string, Record<string, string>> }} TalkView
+ * @param {{ open?: Partial<Record<string, { label: string, run: () => void }>>, onMap?: (key: string) => void, onSwitch?: (id: string, on: boolean) => Promise<boolean>, talk?: { get: () => Promise<TalkView | undefined>, set: (key: string, value: string) => Promise<boolean> } }} [options] onMap: open a studied repo's code map (#158); onSwitch: turn a tool on or off (#151), true when it worked; talk: how Atlas talks (#68), in the Profile panel
  */
 export const makeBrainView = (root, options = {}) => {
   root.replaceChildren();
@@ -181,6 +182,41 @@ export const makeBrainView = (root, options = {}) => {
     }
     panel.append(text("p", "brain-panel-about", info.about));
     if (info.waiting) panel.append(text("p", "brain-panel-waiting", `${info.waiting} waiting for your review.`));
+
+    // #68: how Atlas talks, in the Profile panel; the next question goes by it.
+    const talk = options.talk;
+    if (id === "profile" && talk) {
+      panel.append(text("h3", "", "How Atlas talks"));
+      const ul = el("ul", "brain-panel-list brain-talk");
+      panel.append(ul, text("p", "brain-panel-hint", "Every conversation, from the next question. Or just tell him: \"keep it short\". Spoken answers keep their own length."));
+      void talk.get().then((view) => {
+        if (!view || shown !== "profile") return;
+        for (const key of ["language", "length", "tone"]) {
+          const li = el("li", "");
+          const label = document.createElement("label");
+          const select = document.createElement("select");
+          for (const value of view.options[key] ?? []) {
+            const option = document.createElement("option");
+            option.value = value;
+            option.textContent = view.labels[key]?.[value] ?? value;
+            select.append(option);
+          }
+          select.value = view.talk[key] ?? "";
+          let was = select.value;
+          select.addEventListener("change", () => {
+            select.disabled = true;
+            void talk.set(key, select.value).then((done) => {
+              if (done) was = select.value;
+              else select.value = was;
+              select.disabled = false;
+            });
+          });
+          label.append(text("span", "", key[0]?.toUpperCase() + key.slice(1)), select);
+          li.append(label);
+          ul.append(li);
+        }
+      });
+    }
 
     // #151: switches for what .env allows here; the next question goes by them.
     if (info.switches && info.switches.length > 0 && options.onSwitch) {
