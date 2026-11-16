@@ -57,3 +57,20 @@ describe("reasoning trace (#143)", () => {
     expect(t.calls[0]).toMatchObject({ status: "failed", result: "didn't finish" });
   });
 });
+
+describe("a refused call that was retried (#230)", () => {
+  it("stays red on its leaf, not on the branch or Tools", () => {
+    const tree = traceTree(
+      traceOfPath([
+        { kind: "tool", name: "calendar_read", args: "", by: "model", ok: false, error: "refused: too many days" },
+        { kind: "tool", name: "calendar_read", args: "Mon 16 – Sun 22 Nov", by: "model", ok: true, result: "4 events" },
+      ]),
+    );
+    expect(tree.branches[0]?.status).toBe("used");
+    expect(tree.branches[0]?.leaves.map((l) => l.status)).toEqual(["failed", "used"]);
+    expect(tree.status).toBe("used");
+    // A failure that wasn't followed by a success still shows on the branch.
+    const failed = traceTree(traceOfPath([{ kind: "tool", name: "calendar_read", args: "", by: "model", ok: false, error: "refused: too many days" }]));
+    expect(failed.branches[0]?.status).toBe("failed");
+  });
+});
