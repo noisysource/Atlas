@@ -1879,7 +1879,8 @@ export const makeBareAnswerer = (deps: {
       return ok({ kind: "answer", text: withLead(cap.text()) });
     }
     if (!result.ok) {
-      deps.log?.warn("bare answer failed", { kind: result.error.kind });
+      // The message is the provider module's own words (status, model), never the question.
+      deps.log?.warn("bare answer failed", { kind: result.error.kind, reason: result.error.message.slice(0, 200) });
       return err(toAppError(result.error));
     }
     if (result.value.kind === "json") return err({ code: "llm_failed", message: "Sorry, something went wrong answering that. Please try again." });
