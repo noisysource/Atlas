@@ -84,7 +84,7 @@ const LatencyReport = z
     spoken: z.boolean(),
     voice: z.enum(["kokoro", "piper", "browser", "none"]),
     route: z.enum(["precheck", "picked", "sticky", "classifier"]).optional(),
-    brain: z.enum(["claude", "local"]).optional(),
+    brain: z.enum(["claude", "local", "google"]).optional(),
     speculative: z.enum(["used", "discarded"]).optional(),
     endOfTurnMs: ms,
     whisperMs: ms,
@@ -130,10 +130,10 @@ export const makeServer = (
     readonly reactionFirst?: boolean;
     /** Warms the model connection (#76): POST /warm, when a spoken conversation starts. */
     readonly warm?: () => void;
-    /** The two brains the page can pick (#88): GET /brains. Ids and labels only. */
+    /** The brains the page can pick (#88; #248: Google when GEMINI=on): GET /brains. Ids and labels only. */
     readonly brains?: {
       readonly default: "claude" | "local";
-      readonly labels: { readonly claude: string; readonly local: string };
+      readonly labels: { readonly claude: string; readonly local: string; readonly google?: string };
       /** CALENDAR=on (#100): the page notes once that, with Claude, event titles go to Anthropic. */
       readonly calendar?: boolean;
     };
@@ -594,6 +594,7 @@ export const makeServer = (
         brains: [
           { id: "local", label: brains.labels.local },
           { id: "claude", label: brains.labels.claude },
+          ...(brains.labels.google ? [{ id: "google", label: brains.labels.google }] : []),
         ],
         calendar: brains.calendar === true,
       });

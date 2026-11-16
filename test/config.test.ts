@@ -37,6 +37,7 @@ describe("loadConfig", () => {
       gcloud: { enabled: false, keysPath: "data/gcloud" },
       vendus: { enabled: false, keyPath: "data/vendus.json" },
       costs: { subscriptions: [], path: "data/costs.jsonl" },
+      gemini: { enabled: false, model: { provider: "google", model: "gemini-3.8-flash" }, router: { provider: "google", model: "gemini-3.5-flash-lite" }, secretName: "gemini-api-key" },
       webSearch: { enabled: false, perQuestion: 3, perDay: 40, country: "PT", city: "" },
       house: { enabled: false, env: "dev", control: { enabled: false, userPath: "data/house/firebase.json" } },
       codeAgent: { enabled: false, maxUsd: 0.5, maxTurns: 25, reposPath: "data/repos", auth: "auto", model: "claude-sonnet-5-5", study: { maxUsd: 5, maxTurns: 150, notesPath: "data/code" }, refresh: { mode: "check", maxStudies: 2 }, tasks: { enabled: false, maxUsd: 3, maxTurns: 80, path: "data/tasks" }, fix: { enabled: false, maxUsd: 2, maxTurns: 60, writeTokensPath: "data/github-write-tokens.json", fixesPath: "data/fixes" } },

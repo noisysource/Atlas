@@ -14,8 +14,9 @@
 - One small issue per PR where possible.
 - Before opening a PR: `npm run lint && npm run typecheck && npm test`.
 - Never log or commit secrets. In the cloud, secrets come only from Google
-  Secret Manager. For local dev only, `ANTHROPIC_API_KEY` may be read from a
-  gitignored `.env` file; never use that path in production.
+  Secret Manager. For local dev only, `ANTHROPIC_API_KEY` (and, for the
+  Google brain, `GEMINI_API_KEY`) may be read from a gitignored `.env` file;
+  never use that path in production.
 - `data/profile.md` is personal data: never commit it, log it, or put it in
   error messages. Only `data/profile.example.md` is committed.
 - The `ec-hrt` context (European Commission / HRT) is a handoff to Kiro, the

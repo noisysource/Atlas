@@ -77,7 +77,8 @@ export type Turn = {
 };
 
 /** Which model answers (#88): only these two, from config; the page never names a model. */
-export type Brain = "claude" | "local";
+/** #248: "google", Gemini, when GEMINI=on. */
+export type Brain = "claude" | "local" | "google";
 
 export type AskRequest = {
   readonly question: string;
