@@ -7,6 +7,7 @@ import { followFix } from "./fix.js";
 import { showMorningBrief } from "./morning.js";
 import { startTasksPanel } from "./tasks.js";
 import { startRemindersPanel } from "./reminders.js";
+import { makeCostsView } from "./costs.js";
 import { makeBrainView } from "./brain.js";
 import { makeCodeMapView } from "./codemap.js";
 import { makeStudiesView } from "./studies.js";
@@ -239,6 +240,10 @@ const brainView = makeBrainView(byId("brain-view"), {
 // #158: the maps of the code he's studied.
 const codeMapView = makeCodeMapView(/** @type {HTMLDialogElement} */ (byId("codemap")));
 byId("codemaps").addEventListener("click", () => void codeMapView.open());
+
+// #247: what each service costs, per use or fixed.
+const costsView = makeCostsView(/** @type {HTMLDialogElement} */ (byId("costs-panel")));
+byId("costs").addEventListener("click", () => costsView.open());
 
 // #143: how he got there, for the current answer, as a tree that grows while he works.
 const traceView = makeTraceView(brainView.traceSlot);

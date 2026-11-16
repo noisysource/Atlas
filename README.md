@@ -772,6 +772,20 @@ Requires Node 22.13 or later (the memory store uses `node:sqlite`, which needs a
    yet) or `error`. `GET /healthz` returns `{"status":"ok"}`. Logs are JSON
    lines and never include your questions or answers.
 
+## What it costs
+
+**💲 Costs** on the page shows what each service costs today, in the last
+7 days and this month: the Claude API (answers, the classifier, web
+searches, code questions on the API key), the Gemini API once it's used,
+your Claude subscription (the fee you set, plus how many coding runs it
+covered and what they'd have cost on the API) and the local model (free).
+Every call's tokens are counted where it's made and priced at the
+providers' list prices, kept in `data/costs.jsonl` (gitignored; counts and
+amounts only, never questions or answers). Estimates, in USD, before tax
+and credits: the real bill is in each console. Set your plan's fee with
+`COST_SUBSCRIPTIONS="Claude Pro=20"` in `.env`; prices are in
+`src/costs.ts`, with the date they were checked.
+
 ## Checks
 
 ```bash

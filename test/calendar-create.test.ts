@@ -218,6 +218,7 @@ describe("Renato's answer", () => {
   };
   const build = async (creator: Parameters<typeof buildDeps>[0]["eventCreator"]) => {
     const made = await buildDeps({
+      costLog: { record: () => undefined, all: async () => [] },
       config: configWith({ BARE_MODE: "on", CALENDAR: "on", CALENDAR_WRITE: "on" }),
       env: { ANTHROPIC_API_KEY: "sk-ant-test" },
       log: silent,
@@ -233,6 +234,7 @@ describe("Renato's answer", () => {
 
   it("is only offered with CALENDAR_WRITE=on", async () => {
     const made = await buildDeps({
+      costLog: { record: () => undefined, all: async () => [] },
       config: configWith({ BARE_MODE: "on", CALENDAR: "on" }),
       env: { ANTHROPIC_API_KEY: "sk-ant-test" },
       log: silent,
@@ -275,6 +277,7 @@ describe("Renato's answer", () => {
     };
     const created: Proposal[] = [];
     const made = await buildDeps({
+      costLog: { record: () => undefined, all: async () => [] },
       config: configWith({ BARE_MODE: "on", CALENDAR: "on", CALENDAR_WRITE: "on", TOOL_ROUTER: "rules" }),
       env: { ANTHROPIC_API_KEY: "sk-ant-test" },
       log: silent,

@@ -34,6 +34,7 @@ data/brief/
 data/settings.json
 # #218: his reminders
 data/reminders.json
+data/costs.jsonl
 # #138: what Atlas couldn't do (general words)
 data/gaps.json
 # #186: his decisions log
