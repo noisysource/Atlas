@@ -302,6 +302,8 @@ export const makeBrainView = (root, options = {}) => {
     shown = shown === id ? undefined : id;
     for (const [nid, node] of nodes) node.box.setAttribute("aria-expanded", String(nid === shown));
     drawPanel();
+    // #253: the panel opens under the ring, often below the fold: bring it into view.
+    if (shown) requestAnimationFrame(() => panel.scrollIntoView({ block: "nearest", behavior: "smooth" }));
   };
 
   /** @type {BrainState} */
