@@ -6,6 +6,7 @@
 import { followFix } from "./fix.js";
 import { showMorningBrief } from "./morning.js";
 import { startTasksPanel } from "./tasks.js";
+import { startRemindersPanel } from "./reminders.js";
 import { makeBrainView } from "./brain.js";
 import { makeCodeMapView } from "./codemap.js";
 import { makeStudiesView } from "./studies.js";
@@ -100,6 +101,11 @@ window.addEventListener("resize", () => toEnd());
 void showMorningBrief(transcript);
 // #191: coding tasks, above the conversation, while any are open.
 const tasksPanel = startTasksPanel(transcript);
+// #218: today's reminders, above the conversation.
+const remindersPanel = startRemindersPanel(transcript, (text) => {
+  addMessage("answer", text);
+  if (state.voiceSession) speakNote(text);
+});
 const form = /** @type {HTMLFormElement} */ (byId("ask-form"));
 const input = /** @type {HTMLTextAreaElement} */ (byId("question"));
 const sendButton = /** @type {HTMLButtonElement} */ (byId("send"));
@@ -429,6 +435,7 @@ const confirmCard = (proposal) => {
       state.history = appendTurn(state.history, "assistant", text, typeof result.tool === "string" ? [`${result.tool} ${CARD_DONE}`] : []);
       void refreshReach();
       if (kind.startsWith("task-")) void tasksPanel.refresh();
+      void remindersPanel.refresh();
       // #162: a fix being prepared: the card follows it, then asks again before anything is pushed.
       if (kind === "fix" && result.ok && typeof result.job === "string")
         followFix(card, result.job, {

@@ -12,6 +12,7 @@ import { makePrCloser } from "./github/pr-close.js";
 import { makePlans } from "./plans/plans.js";
 import { makeDecisions } from "./decisions/decisions.js";
 import { makeGaps } from "./gaps/gaps.js";
+import { makeReminders, reminderLine } from "./reminders/reminders.js";
 import { makeGmailTidier, makeInboxTidy } from "./gmail/tidy.js";
 import { availableSwitches, makeSettings, makeSwitchedAnswerer, type BareDeps } from "./switches.js";
 import { makeBlinds, makeCallable, readFirebaseUser } from "./house/blinds.js";
@@ -380,6 +381,9 @@ export const buildDeps = async (inputs: AppInputs): Promise<Result<Deps, string>
       : undefined;
   // #162: fixes as pull requests, with a separate write token per owner; every step after his OK.
   const writeTokens = makeGithubTokens({ readFile: () => readFileFs(config.codeAgent.fix.writeTokensPath, "utf8") });
+  // #218: his reminders, in data/reminders.json.
+  const todayHere = () => new Intl.DateTimeFormat("en-CA", { timeZone: config.timeZone }).format(new Date());
+  const reminders = config.toolCalling ? { store: makeReminders({ path: "data/reminders.json", isEc: isEcText, today: todayHere }), today: todayHere } : undefined;
   // #138: what Atlas couldn't do, and issues for it in his own repo after Renato's OK (with the write token).
   const gaps = config.toolCalling ? makeGaps({ path: "data/gaps.json", repo: "noisysource/Atlas", isEc: isEcText, writeToken: writeTokens.token, today: () => new Intl.DateTimeFormat("en-CA", { timeZone: config.timeZone }).format(new Date()), log }) : undefined;
   const fixesRoot = path.resolve(config.codeAgent.fix.fixesPath);
@@ -546,6 +550,7 @@ export const buildDeps = async (inputs: AppInputs): Promise<Result<Deps, string>
               ...(code?.study ? { studiedRepos: async () => (await noteStore.all()).map((n) => n.repo) } : {}),
               ...(tasks ? { tasks: () => tasks.list() } : {}),
               ...(plans ? { plans: () => plans.lines() } : {}),
+              ...(reminders ? { reminders: async () => (await reminders.store.due(reminders.today())).map((r) => reminderLine(r, reminders.today())) } : {}),
             }),
           llm: answerLlm.value,
           store: briefStore,
@@ -613,6 +618,7 @@ export const buildDeps = async (inputs: AppInputs): Promise<Result<Deps, string>
     ...(prs ? { prClose: prs } : {}),
     ...(blinds && config.house.enabled ? { houseBlinds: blinds } : {}),
     ...(gaps ? { gapIssue: gaps } : {}),
+    ...(reminders ? { reminders } : {}),
     ...(inboxTidy ? { gmailTidy: inboxTidy } : {}),
     classify: makeClassifier({ contexts: contexts.value, llm: classifierLlm.value, log, thinking: config.turn.classifierThinking }),
     stickyContext: config.turn.stickyContext,
@@ -643,6 +649,7 @@ export const buildDeps = async (inputs: AppInputs): Promise<Result<Deps, string>
               ...(github && config.toolCalling ? { github: { ...github, ...(prs ? { prs } : {}), ...(plans ? { plans } : {}) } } : {}),
               ...(decisions ? { decisions } : {}),
               ...(gaps ? { gaps } : {}),
+              ...(reminders ? { reminders } : {}),
               ...(code && config.toolCalling ? { code } : {}),
               // #161: errors and logs in his Google Cloud environments, read-only, with tools (Claude).
               ...(gcloud && config.toolCalling ? { gcloud } : {}),

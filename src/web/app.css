@@ -2114,3 +2114,50 @@ footer,
 .confirm[data-pending="false"] .confirm-say {
   display: none;
 }
+
+/* #218: reminders above the conversation. */
+.reminders {
+  margin: 0.5rem 0;
+  padding: 0.35rem 0.6rem;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  font-size: 12px;
+}
+
+.reminders h2 {
+  font-size: 12px;
+  font-weight: 600;
+  margin: 0 0 0.25rem;
+}
+
+.reminders ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.2rem;
+}
+
+.reminders li {
+  display: grid;
+  grid-template-columns: 16ch 1fr auto;
+  gap: 0.6rem;
+  align-items: center;
+}
+
+.reminders .reminder-when {
+  color: var(--muted);
+}
+
+.reminders li[data-state="now"] .reminder-when,
+.reminders li[data-state="overdue"] .reminder-when {
+  color: var(--wait);
+  font-weight: 600;
+}
+
+.reminders summary {
+  cursor: pointer;
+  color: var(--muted);
+  margin-top: 0.25rem;
+}

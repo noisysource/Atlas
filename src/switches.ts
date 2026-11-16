@@ -32,6 +32,7 @@ export type SwitchDef = { readonly id: string; readonly node: ReachNode["id"]; r
 export const SWITCHES: readonly SwitchDef[] = [
   { id: "calendar", node: "calendar", label: "Calendar", what: "Reading your calendars" },
   { id: "calendar.write", node: "calendar", label: "Add events", what: "Proposing new events (each still needs your OK)" },
+  { id: "reminders", node: "calendar", label: "Reminders", what: "Keeping reminders for you" },
   { id: "gmail", node: "gmail", label: "Email", what: "Reading your email" },
   ...GMAIL_ACCOUNTS.map((a) => ({ id: `gmail:${a}`, node: "gmail" as const, label: `${a.charAt(0).toUpperCase()}${a.slice(1)} account`, what: `Reading the ${a} mailbox` })),
   { id: "gmail.write", node: "gmail", label: "Drafts and sending", what: "Writing drafts, and sending after your OK" },
@@ -83,6 +84,8 @@ export const availableSwitches = (deps: BareDeps, accounts: readonly GmailAccoun
         return deps.decisions !== undefined;
       case "gaps":
         return deps.gaps !== undefined;
+      case "reminders":
+        return deps.reminders !== undefined;
       case "skills":
         return deps.skills !== undefined;
       case "cloud":
@@ -116,7 +119,7 @@ const omitAll = <T extends object, K extends keyof T>(o: T, keys: readonly K[]):
 /** The deps with what's switched off taken away. Never adds anything. */
 export const withSwitches = (deps: BareDeps, off: ReadonlySet<string>): BareDeps => {
   if (off.size === 0) return deps;
-  const { calendar, gmail, github, code, memory, skills, decisions, gaps, gcloud, house, vendus, ...rest } = deps;
+  const { calendar, gmail, github, code, memory, skills, decisions, gaps, reminders, gcloud, house, vendus, ...rest } = deps;
   const githubOn = github && !off.has("github");
   const codeOn = code && githubOn && !off.has("code");
   const memoryOn = memory && !off.has("memory");
@@ -133,6 +136,7 @@ export const withSwitches = (deps: BareDeps, off: ReadonlySet<string>): BareDeps
     ...(skills && memoryOn && !off.has("skills") ? { skills } : {}),
     ...(decisions && !off.has("decisions") ? { decisions } : {}),
     ...(gaps && !off.has("gaps") ? { gaps } : {}),
+    ...(reminders && !off.has("reminders") ? { reminders } : {}),
     ...(gcloud && !off.has("cloud") ? { gcloud } : {}),
     ...(house && !off.has("house") ? { house: off.has("house.control") ? omit(house, "blinds") : house } : {}),
     ...(vendus && !off.has("invoices") ? { vendus } : {}),

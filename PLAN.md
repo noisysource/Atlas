@@ -1107,6 +1107,16 @@ Confirmed (2026-11-12):
   himself aren't picked up yet: the handoff between them is the branch,
   the PR and STATUS.md.
 
+- **Reminders (#218):** `src/reminders/reminders.ts`: `reminder_add`
+  (text, date worked out from today, optional HH:MM; no past days, at
+  most a year ahead, EC refused, duplicates on the same day kept once),
+  `reminder_list`, `reminder_done`; always offered with tools; the
+  path shows the day, never the text. Due today or overdue go into the
+  per-turn prompt and the brief (first, with the calendar). Page:
+  `GET /reminders` (open ones up to a week ahead), `POST
+  /reminders/done`; `reminders.js` strip polls every minute and says a
+  reminder in the chat when its time comes (once; not for ones already
+  past when the page opened). Brain node: calendar. `data/reminders.json`.
 - **Follow-ups (#217):** `GmailReader.unanswered`: `in:sent
   newer_than:14d older_than:3d`, one `threads.get` (metadata) per
   thread, at most 20; kept when the thread's last non-draft message is

@@ -32,6 +32,8 @@ data/fixes/
 data/brief/
 # #151: the page's switches (what's off)
 data/settings.json
+# #218: his reminders
+data/reminders.json
 # #138: what Atlas couldn't do (general words)
 data/gaps.json
 # #186: his decisions log
