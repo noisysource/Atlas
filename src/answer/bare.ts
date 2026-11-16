@@ -1649,10 +1649,16 @@ export const makeBareAnswerer = (deps: {
       };
       const failed = (account: string, code: string, message: string): LlmToolResult => {
         deps.log?.warn("gmail failed", { tool: call.name, account, code, reason: message });
-        onStep?.({ kind: "tool", name: call.name, args: account, by: "model", ok: false, error: code });
+        onStep?.({ kind: "tool", name: call.name, args: account, by: "model", ok: false, error: call.name === GMAIL_ATTACHMENT_TOOL.name && code === "api" ? message.slice(0, 90) : code });
         return {
           callId: call.id,
-          content: code === "not_connected" ? `The ${account} Gmail isn't connected yet (npm run gmail:connect -- ${account}). Say so plainly.` : "Reading their email failed just now. Say so plainly; don't guess.",
+          // #243: an attachment's reason is code's own words (never the email's content), so he can say why.
+          content:
+            code === "not_connected"
+              ? `The ${account} Gmail isn't connected yet (npm run gmail:connect -- ${account}). Say so plainly.`
+              : call.name === GMAIL_ATTACHMENT_TOOL.name && code === "api"
+                ? `Reading that attachment failed: ${message}. Tell him why in plain words; don't try the same attachment again.`
+                : "Reading their email failed just now. Say so plainly; don't guess.",
           isError: true,
         };
       };

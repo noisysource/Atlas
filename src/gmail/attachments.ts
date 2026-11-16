@@ -6,6 +6,7 @@
 
 import { err, ok, type Result } from "../result.js";
 import type { GmailAccount } from "./gmail.js";
+import type * as Unpdf from "unpdf";
 
 export const MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024;
 export const MAX_ATTACHMENT_TEXT = 20_000;
@@ -58,14 +59,23 @@ export const kindOf = (a: Pick<Attachment, "name" | "mimeType">): Kind | undefin
 export type PdfText = (bytes: Uint8Array, maxPages: number) => Promise<Result<{ readonly pages: number; readonly text: readonly string[] }, string>>;
 
 export const unpdfText: PdfText = async (bytes, maxPages) => {
+  let lib: typeof Unpdf;
   try {
-    const { extractText, getDocumentProxy } = await import("unpdf");
+    lib = await import("unpdf");
+  } catch {
+    // A new dependency (#235): pulling main doesn't install it.
+    return err("the PDF reader isn't installed on this Mac yet: run npm install, then restart Atlas");
+  }
+  try {
+    const { extractText, getDocumentProxy } = lib;
     // A copy: pdf.js takes over (detaches) the buffer it is given.
     const pdf = await getDocumentProxy(bytes.slice());
     const { totalPages, text } = await extractText(pdf, { mergePages: false });
     return ok({ pages: totalPages, text: text.slice(0, maxPages) });
-  } catch {
-    return err("that PDF couldn't be read (damaged or password-protected?)");
+  } catch (e) {
+    // Only the error's kind, never the file.
+    if (typeof e === "object" && e !== null && (e as { name?: unknown }).name === "PasswordException") return err("that PDF is password-protected");
+    return err("that PDF couldn't be read (it may be damaged)");
   }
 };
 
