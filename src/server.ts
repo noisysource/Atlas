@@ -360,6 +360,26 @@ export const makeServer = (
     });
   }
 
+  // #218: his reminders on the page: today's, overdue and the next week's; ticking one off.
+  const reminders = deps.reminders;
+  if (reminders) {
+    app.get("/reminders", async (c) => {
+      c.header("Cache-Control", "no-store");
+      const today = reminders.today();
+      const week = new Date(Date.parse(`${today}T00:00:00Z`) + 7 * 86_400_000).toISOString().slice(0, 10);
+      const open = (await reminders.store.open()).filter((r) => r.date <= week);
+      return c.json({ today, reminders: open.map((r) => ({ id: r.id, text: r.text, date: r.date, time: r.time ?? "" })) });
+    });
+    const DoneBody = z.object({ id: z.string().regex(/^[a-f0-9]{8}$/) }).strict();
+    app.post("/reminders/done", bodyLimit({ maxSize: 512, onError: (c) => c.json(errorBody("The request is too large."), 413) }), async (c) => {
+      if (!isJson(c.req.header("content-type"))) return c.json(errorBody("POST /reminders/done needs Content-Type: application/json."), 415);
+      const body = DoneBody.safeParse(await c.req.json().catch(() => undefined));
+      if (!body.success) return c.json(errorBody("Send { id }."), 400);
+      const got = await reminders.store.done(body.data.id);
+      return got.ok ? c.json({ ok: true }) : c.json(errorBody(got.error), 404);
+    });
+  }
+
   // #138: his answer to opening an issue for a gap. Only "yes" opens it.
   const gapIssue = deps.gapIssue;
   if (gapIssue) {

@@ -392,6 +392,15 @@ Requires Node 22.13 or later (the memory store uses `node:sqlite`, which needs a
        never inventing what only you know: those are listed as needing
        your input. The morning brief lists drafts still waiting for your
        Send it, and how much Atlas tidied the day before.
+     - **Reminders.** "Remind me Thursday at 3 to call the accountant",
+       "lembra-me amanhã de…": Atlas keeps it (what, the day, a time if
+       you gave one) and confirms. Today's and overdue reminders show in
+       a strip above the conversation with a ✓ to tick them off (the
+       coming week's folded under them); when a reminder's time comes
+       while the page is open, Atlas says it in the chat (aloud in a
+       spoken conversation). They're in the morning brief and in "what's
+       on today?". "Put it in my calendar too" adds an event with its own
+       card. Kept in `data/reminders.json`; the Calendar panel has a switch.
      - **Follow-ups.** "Who hasn't answered me?" (and every triage and
        morning brief) finds email you sent 3 to 14 days ago whose thread
        got no reply since, leaving out automated recipients and EC

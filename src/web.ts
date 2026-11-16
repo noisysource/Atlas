@@ -41,6 +41,8 @@ const FILES: readonly { path: string; file: string; contentType: string }[] = [
   { path: "/spoken-numbers.js", file: "spoken-numbers.js", contentType: "text/javascript; charset=utf-8" },
   { path: "/turn-lib.js", file: "turn-lib.js", contentType: "text/javascript; charset=utf-8" },
   { path: "/card-lib.js", file: "card-lib.js", contentType: "text/javascript; charset=utf-8" },
+  { path: "/reminders.js", file: "reminders.js", contentType: "text/javascript; charset=utf-8" },
+  { path: "/reminders-lib.js", file: "reminders-lib.js", contentType: "text/javascript; charset=utf-8" },
   { path: "/silero.js", file: "silero.js", contentType: "text/javascript; charset=utf-8" },
   { path: "/vad.js", file: "vad.js", contentType: "text/javascript; charset=utf-8" },
 ];
