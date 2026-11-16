@@ -130,6 +130,28 @@ describe("a session", () => {
     expect(await turn).toMatchObject({ ok: true, value: { asks: 3 } });
   });
 
+  it("Google marks the turn complete when it asks Atlas: the turn goes on until it has spoken the answer", async () => {
+    const g = fakeSocket();
+    const session = makeLiveSession({ apiKey: "k", model: "m", instruction: "x", connect: g.connect });
+    let release: (a: string) => void = () => {};
+    const said: string[] = [];
+    const turn = session.turn(new Uint8Array(100), { onAudio: () => {}, onSaid: (s) => said.push(s), ask: () => new Promise((r) => (release = r)) });
+    await tick();
+    await g.reply({ setupComplete: {} });
+    await g.reply({ toolCall: { functionCalls: [{ id: "t1", name: "ask_atlas", args: { question: "What's on tomorrow?" } }] } });
+    await g.reply({ serverContent: { turnComplete: true } }); // before Atlas has answered
+    let finished = false;
+    void turn.then(() => (finished = true));
+    await tick();
+    expect(finished).toBe(false);
+    release("Dentist at 15:00.");
+    await tick();
+    await tick();
+    expect(g.sent.some((m) => "toolResponse" in m)).toBe(true);
+    await g.reply({ serverContent: { outputTranscription: { text: "You've got the dentist at three." }, turnComplete: true } });
+    expect(await turn).toEqual(ok({ said: "You've got the dentist at three.", asks: 1, interrupted: false }));
+  });
+
   it("a new sentence ends the last turn; goAway reconnects next time, resuming with the handle", async () => {
     const g = fakeSocket();
     const session = makeLiveSession({ apiKey: "k", model: "m", instruction: "x", connect: g.connect });

@@ -269,6 +269,14 @@ export const makeLiveSession = (deps: {
     return new Promise((resolve) => {
       let said = "";
       let asks = 0;
+      /**
+       * Tool calls still being answered, and whether the turn may end. Google
+       * marks the turn complete as soon as it asks for a tool; that one is
+       * ignored, and the turn ends at the "turn complete" after the answer
+       * went back.
+       */
+      let toolsPending = 0;
+      let heardSinceTools = true;
       let done = false;
       const asking = new AbortController();
       const finish = (r: Result<TurnOutcome, LiveError>) => {
@@ -285,13 +293,20 @@ export const makeLiveSession = (deps: {
       signal?.addEventListener("abort", () => finish(err({ kind: "cancelled", message: "Cancelled" })));
       const onEvent = (ev: LiveEvent) => {
         if (done) return;
-        if (ev.kind === "audio") h.onAudio(ev.data);
-        else if (ev.kind === "said") {
+        if (ev.kind === "audio") {
+          heardSinceTools = true;
+          h.onAudio(ev.data);
+        } else if (ev.kind === "said") {
+          heardSinceTools = true;
           said += ev.text;
           h.onSaid(ev.text);
         } else if (ev.kind === "interrupted") finish(ok({ said, asks, interrupted: true }));
-        else if (ev.kind === "turn-complete") finish(ok({ said, asks, interrupted: false }));
+        else if (ev.kind === "turn-complete") {
+          if (toolsPending === 0 && heardSinceTools) finish(ok({ said, asks, interrupted: false }));
+        }
         else if (ev.kind === "tool-call") {
+          toolsPending += 1;
+          heardSinceTools = false;
           void Promise.all(
             ev.calls.map(async (c) => {
               const question = typeof (c.args as { question?: unknown }).question === "string" ? (c.args as { question: string }).question : "";
@@ -306,7 +321,11 @@ export const makeLiveSession = (deps: {
               return { id: c.id, name: c.name, response: { answer } };
             }),
           ).then((functionResponses) => {
-            if (!done) ws.send(JSON.stringify({ toolResponse: { functionResponses } }));
+            toolsPending -= 1;
+            // Always answered while this socket is open, or Gemini waits on it for the rest of the session.
+            if (socket === ws) ws.send(JSON.stringify({ toolResponse: { functionResponses } }));
+            // From here, Google's next "turn complete" is the real end (spoken or not).
+            heardSinceTools = true;
           });
         }
       };
