@@ -13,6 +13,7 @@ import { randomBytes } from "node:crypto";
 import type { LlmTool } from "../llm/types.js";
 import { err, ok, type Result } from "../result.js";
 import type { Logger } from "../types.js";
+import { accountNames, GOOGLE_ACCOUNTS } from "../google-accounts.js";
 import { isCalendarAccount, type CalendarAccount } from "./accounts.js";
 import { dayLabel } from "./dates.js";
 import { addDays, localDate, MAX_DAYS_AHEAD, type CalendarError } from "./read.js";
@@ -24,7 +25,7 @@ export const CALENDAR_CHANGE_TOOL: LlmTool = {
   inputSchema: {
     type: "object",
     properties: {
-      account: { type: "string", enum: ["personal", "noisysource"], description: "The calendar it's in (personal if calendar_read didn't say)" },
+      account: { type: "string", enum: [...GOOGLE_ACCOUNTS], description: "The calendar it's in (personal if calendar_read didn't say)" },
       event_id: { type: "string", description: "The event's id, from calendar_read" },
       action: { type: "string", enum: ["move", "cancel"] },
       date: { type: "string", description: "For a move: the new day, YYYY-MM-DD" },
@@ -142,7 +143,7 @@ export const makeCalendarChanges = (deps: {
   const today = () => localDate(now(), deps.timeZone);
   return {
     propose: async (v) => {
-      if (!isCalendarAccount(v.account)) return err("account is personal or noisysource");
+      if (!isCalendarAccount(v.account)) return err(`account is ${accountNames()}`);
       const account = v.account;
       const eventId = typeof v.event_id === "string" ? v.event_id.trim() : "";
       if (!ID.test(eventId)) return err("event_id is the id calendar_read gave");

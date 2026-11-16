@@ -5,12 +5,14 @@
 // never silently skipped, so Atlas can say so.
 
 import { err, ok, type Result } from "../result.js";
+import { GOOGLE_ACCOUNTS, isGoogleAccount, MY_ACCOUNTS, type GoogleAccount } from "../google-accounts.js";
 import type { CalendarReader } from "./google.js";
 import type { CalendarError, CalendarEvent, DayRange } from "./read.js";
 
-export const CALENDAR_ACCOUNTS = ["personal", "noisysource"] as const;
-export type CalendarAccount = (typeof CALENDAR_ACCOUNTS)[number];
-export const isCalendarAccount = (v: unknown): v is CalendarAccount => typeof v === "string" && (CALENDAR_ACCOUNTS as readonly string[]).includes(v);
+// #245: the same accounts as Gmail (google-accounts.ts).
+export const CALENDAR_ACCOUNTS = GOOGLE_ACCOUNTS;
+export type CalendarAccount = GoogleAccount;
+export const isCalendarAccount = isGoogleAccount;
 
 /** Where an account's refresh token lives. "personal" keeps the original file, so the first connection still works. */
 export const calendarTokensPath = (personalPath: string, account: CalendarAccount): string =>
@@ -32,7 +34,8 @@ export type AccountsRead = {
  * with the most useful error (a real failure over "not connected").
  */
 export const readAccounts = async (readers: CalendarReaders, range: DayRange, which: CalendarAccount | undefined, signal?: AbortSignal): Promise<Result<AccountsRead, CalendarError>> => {
-  const accounts = CALENDAR_ACCOUNTS.filter((a) => (which === undefined || a === which) && readers[a] !== undefined);
+  // Without an account: his own calendars only (#245); someone else's only when asked by name.
+  const accounts = CALENDAR_ACCOUNTS.filter((a) => (which === undefined ? MY_ACCOUNTS.includes(a) : a === which) && readers[a] !== undefined);
   if (accounts.length === 0)
     return err({ code: "not_connected", message: which ? `The ${which} calendar isn't connected: run npm run calendar:connect -- ${which}` : "No calendar is connected" });
   const results = await Promise.all(

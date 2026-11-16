@@ -70,7 +70,7 @@ describe("asking, and the brief", () => {
       onStep: (s) => steps.push(s),
     });
     expect(requests[0]?.tools?.map((t) => t.name)).toContain("gmail_followups");
-    expect(requests[0]?.system).toContain("call gmail_followups for each account");
+    expect(requests[0]?.system).toContain("call gmail_followups for each of his own accounts");
     expect(steps[0]).toMatchObject({ name: "gmail_followups", ok: true, result: "2 waiting" });
     const content = JSON.stringify(requests[1]?.messages);
     expect(content).toContain("Faturas de outubro");

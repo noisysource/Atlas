@@ -9,13 +9,14 @@
 // only as EC). Claude words it; the tool returns facts, never instructions
 // from the data.
 
+import { MY_ACCOUNTS } from "./google-accounts.js";
 import { readAccounts } from "./calendar/accounts.js";
 import { calendarForBrain, localDate, type CalendarError } from "./calendar/read.js";
 import type { CalendarReaders } from "./calendar/accounts.js";
 import type { GcloudReader, LogEntry } from "./gcloud/gcloud.js";
 import { errorsForBrain, errorsSummary, groupErrors, GCLOUD_LIMITS } from "./gcloud/gcloud.js";
 import type { GithubReader, RepoRef } from "./github/github.js";
-import { GMAIL_ACCOUNTS, isEcEmail, searchForBrain, type GmailAccount, type GmailMessage, type GmailReader } from "./gmail/gmail.js";
+import { isEcEmail, searchForBrain, type GmailAccount, type GmailMessage, type GmailReader } from "./gmail/gmail.js";
 import type { CalendarReader } from "./calendar/google.js";
 import type { LlmTool } from "./llm/types.js";
 
@@ -77,7 +78,7 @@ export const briefSources = async (d: {
   return {
     calendar: { readers: d.calendar.accounts ?? { personal: d.calendar.read }, timeZone: d.calendar.timeZone },
     ...(d.gmail
-      ? { gmail: { reader: d.gmail.reader, accounts: GMAIL_ACCOUNTS, isEc: d.gmail.isEc, ...(d.gmail.writer ? { drafts: true } : {}), ...(d.gmail.tidy?.tidied ? { tidied: d.gmail.tidy.tidied } : {}) } }
+      ? { gmail: { reader: d.gmail.reader, accounts: MY_ACCOUNTS, isEc: d.gmail.isEc, ...(d.gmail.writer ? { drafts: true } : {}), ...(d.gmail.tidy?.tidied ? { tidied: d.gmail.tidy.tidied } : {}) } }
       : {}),
     ...(d.cloud ? { cloud: { reader: d.cloud } } : {}),
     ...(d.github && repos.length > 0 ? { github: { reader: d.github, repos: async () => repos } } : {}),

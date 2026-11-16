@@ -1107,6 +1107,15 @@ Confirmed (2026-11-12):
   himself aren't picked up yet: the handoff between them is the branch,
   the PR and STATUS.md.
 
+- **More Google accounts (#245):** `src/google-accounts.ts` is the one
+  list (personal, noisysource, kidclub, marisa) for Gmail and Calendar,
+  with whose each is, how drafts are signed and whether it's his own.
+  `MY_ACCOUNTS` (all but marisa) are what a calendar read without an
+  account, triage, follow-ups and the brief use; Marisa's is read only
+  when he names her or asks about them both. Tokens per name as before
+  (`data/google-gmail-<name>.json`, `data/google-calendar-<name>.json`);
+  addresses are never in the repo. Same rights as his: every write is
+  still a card he taps.
 - **Email attachments (#235):** `src/gmail/attachments.ts`. `gmail_read`
   lists attachments (parts with a filename and an `attachmentId`: name,
   type, size); `gmail_attachment` (account, id, attachment number) GETs

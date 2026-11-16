@@ -6,6 +6,7 @@
 // The name comes from ATLAS_USER_NAME in the gitignored .env, never from
 // the code (it's personal data).
 
+import { accountNames, accountsForPrompt } from "../google-accounts.js";
 import { err, ok, type Result } from "../result.js";
 import type { AnswerInput, AnswerOutcome, AppError, Logger, PathStep } from "../types.js";
 import type { LlmCall, LlmError, LlmMessage, LlmRequest, LlmResponse, LlmTool, LlmToolCall, LlmToolResult } from "../llm/types.js";
@@ -307,15 +308,15 @@ export const barePrompt = (
   const email = options.email === true && options.tools === true;
   const emailLines = email
     ? [
-        "You can also search and read their email, read-only, with gmail_search and gmail_read, in two accounts: \"personal\" (their personal Gmail) and \"noisysource\" (their company Noisy Source). Pick the account that fits; if unclear, search both. Search first, then read an email only when its snippet isn't enough. When the answer is in an attachment (an invoice, a statement, a quote), read it with gmail_attachment: PDFs and text files, not scans or images. Answer about their email only from what the tools returned, and never invent senders, subjects or contents.",
+        `You can also search and read their email, read-only, with gmail_search and gmail_read. ${accountsForPrompt("Gmail")} Pick the account that fits; if unclear, search his own. An account that isn't connected says so: mention it only if he asked about it. Search first, then read an email only when its snippet isn't enough. When the answer is in an attachment (an invoice, a statement, a quote), read it with gmail_attachment: PDFs and text files, not scans or images. Answer about their email only from what the tools returned, and never invent senders, subjects or contents.`,
         ...(options.emailFollowups === true
           ? [
-              `For "who hasn't answered me?", "anything to follow up?", and in a triage, call gmail_followups for each account: emails he sent that got no reply. Mention them as waiting on others, one line each (who, what, since when), people before services. ${options.emailDrafts === true ? "When he wants a nudge, draft a short, friendly one in the same thread with gmail_draft (reply_to_id = that email's id), in the email's language; only for the ones he picks, or the obviously important ones if he asked for nudges." : "You can't send nudges; he can reply himself."}`,
+              `For "who hasn't answered me?", "anything to follow up?", and in a triage, call gmail_followups for each of his own accounts: emails he sent that got no reply. Mention them as waiting on others, one line each (who, what, since when), people before services. ${options.emailDrafts === true ? "When he wants a nudge, draft a short, friendly one in the same thread with gmail_draft (reply_to_id = that email's id), in the email's language; only for the ones he picks, or the obviously important ones if he asked for nudges." : "You can't send nudges; he can reply himself."}`,
             ]
           : []),
         ...(options.emailTidy === true
           ? [
-              `You manage his inbox. For "go through my email", "triage my inbox" or "what needs me?": gmail_search each account for what's new in the inbox (like in:inbox newer_than:2d, or is:unread), and sort it into needs him (a person waiting on him, a decision, a deadline), FYI, newsletters and notifications, and bills and receipts. Tell him the needs-him ones first, one line each (who, what, by when), then the rest as counts. Then propose tidying with gmail_tidy: archive newsletters, notifications and what's been dealt with, and label bills and receipts ("Bills", "Receipts"). Never archive anything that needs him.${options.emailDrafts === true ? " For each needs-him email where a person is waiting on his reply (a question or request to him, not a notification or an automated sender), read it with gmail_read and prepare a short reply with gmail_draft (reply_to_id), at most three per answer, most urgent first: in his voice, short and direct, in the email's language, signed Renato. Don't invent what only he knows (a date, a price, a yes or no): if the reply needs that, don't draft it, and list it as needing his input. Then say which replies you drafted; each has its own Send it card." : ""} When he says which ones in a way that could mean different emails ("those 2", "the rest", "them"), and the conversation doesn't make it certain, ask in one line which he means (name them) before proposing. If he says you tidied the wrong ones, propose putting them back with inbox. Nothing changes until he taps "Tidy it" or says yes; never say it's done. You can't delete email or mark it as spam.`,
+              `You manage his inbox. For "go through my email", "triage my inbox" or "what needs me?": gmail_search each of his own accounts for what's new in the inbox (Marisa's only when he asks) (like in:inbox newer_than:2d, or is:unread), and sort it into needs him (a person waiting on him, a decision, a deadline), FYI, newsletters and notifications, and bills and receipts. Tell him the needs-him ones first, one line each (who, what, by when), then the rest as counts. Then propose tidying with gmail_tidy: archive newsletters, notifications and what's been dealt with, and label bills and receipts ("Bills", "Receipts"). Never archive anything that needs him.${options.emailDrafts === true ? " For each needs-him email where a person is waiting on his reply (a question or request to him, not a notification or an automated sender), read it with gmail_read and prepare a short reply with gmail_draft (reply_to_id), at most three per answer, most urgent first: in his voice, short and direct, in the email's language, signed as that account's owner (Renato; KidClub on kidclub; Marisa on marisa, in her voice). Don't invent what only he knows (a date, a price, a yes or no): if the reply needs that, don't draft it, and list it as needing his input. Then say which replies you drafted; each has its own Send it card." : ""} When he says which ones in a way that could mean different emails ("those 2", "the rest", "them"), and the conversation doesn't make it certain, ask in one line which he means (name them) before proposing. If he says you tidied the wrong ones, propose putting them back with inbox. Nothing changes until he taps "Tidy it" or says yes; never say it's done. You can't delete email or mark it as spam.`,
             ]
           : []),
         options.emailDrafts === true
@@ -644,7 +645,7 @@ export const makeBareAnswerer = (deps: {
   readonly profile?: ProfileSource;
   /** Where they are, for "now" in every prompt (#102). Defaults to Europe/Lisbon. */
   readonly timeZone?: string;
-  /** CALENDAR=on (#100): it can read their calendars (#137: personal and noisysource), in this time zone. */
+  /** CALENDAR=on (#100): it can read their calendars (#137, #245: the Google accounts), in this time zone. */
   readonly calendar?: {
     /** The personal calendar; used alone when `accounts` isn't given. */
     readonly read: CalendarReader;
@@ -1289,7 +1290,7 @@ export const makeBareAnswerer = (deps: {
       const range = checked.value;
       if (input.account !== undefined && !isCalendarAccount(input.account)) {
         onStep?.({ kind: "tool", name: "calendar_read", args: "", by: "model", ok: false, error: "refused: unknown calendar" });
-        return { callId: call.id, content: 'Refused: unknown calendar. Use "personal" or "noisysource", or leave account out to read all.', isError: true };
+        return { callId: call.id, content: `Refused: unknown calendar. Use ${accountNames()}, or leave account out to read his own.`, isError: true };
       }
       const which = isCalendarAccount(input.account) ? input.account : undefined;
       const label = `${which ? `${which} · ` : ""}${shortRangeLabel(range)}`;
@@ -1744,7 +1745,7 @@ export const makeBareAnswerer = (deps: {
       if (call.name === GMAIL_FOLLOWUPS_TOOL.name && gmail.reader.unanswered) {
         const input = typeof call.input === "object" && call.input !== null ? (call.input as Record<string, unknown>) : {};
         const account = input.account;
-        if (!isGmailAccount(account)) return refuse("unknown account", "Refused: account is personal or noisysource.");
+        if (!isGmailAccount(account)) return refuse("unknown account", `Refused: account is ${accountNames()}.`);
         const days = typeof input.days === "number" && input.days >= 1 && input.days <= 13 ? Math.round(input.days) : 3;
         const found = await gmail.reader.unanswered({ account: account, minDays: days, maxDays: 14, max: 10 }, signal);
         if (!found.ok) return failed(account, found.error.code, found.error.message);

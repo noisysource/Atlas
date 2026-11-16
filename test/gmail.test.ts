@@ -193,9 +193,10 @@ describe("Claude uses Gmail", () => {
     };
   };
 
-  it("the prompt says read-only, two accounts, EC is Kiro's", () => {
+  it("the prompt says read-only, whose each account is, EC is Kiro's", () => {
     const p = barePrompt("Alex", { tools: true, email: true });
-    expect(p).toContain('"personal" (their personal Gmail) and "noisysource"');
+    expect(p).toContain('"personal" (Renato\'s personal Gmail), "noisysource" (his company Noisy Source\'s Gmail), "kidclub"');
+    expect(p).toContain('"marisa" only when he names Marisa or asks about the two of them or the family');
     expect(p).toContain("You can't send, reply to, forward, delete or label email.");
     expect(p).toContain('"EC email, handled by Kiro"');
     expect(barePrompt("Alex", { email: true })).not.toContain("gmail_search"); // no tools, no email

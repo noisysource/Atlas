@@ -1,4 +1,4 @@
-// Gmail, read-only (Reach 3): two accounts, "personal" and "noisysource",
+// Gmail, read-only (Reach 3): the accounts in google-accounts.ts (#245),
 // each connected separately (npm run gmail:connect -- <account>).
 //
 // Claude asks with the gmail_search / gmail_read tools; code checks every
@@ -12,12 +12,13 @@
 import { err, ok, type Result } from "../result.js";
 import type { LlmTool } from "../llm/types.js";
 import type { CalendarError } from "../calendar/read.js";
+import { accountsLine as accountsFor, GOOGLE_ACCOUNTS, isGoogleAccount, type GoogleAccount } from "../google-accounts.js";
 import { attachmentLines, attachmentsOf, decodeBytes, MAX_ATTACHMENT_BYTES, textOf, unpdfText, type Attachment, type AttachmentText, type PdfText } from "./attachments.js";
 
 export const GMAIL_SCOPE = "https://www.googleapis.com/auth/gmail.readonly";
-export const GMAIL_ACCOUNTS = ["personal", "noisysource"] as const;
-export type GmailAccount = (typeof GMAIL_ACCOUNTS)[number];
-export const isGmailAccount = (v: unknown): v is GmailAccount => typeof v === "string" && (GMAIL_ACCOUNTS as readonly string[]).includes(v);
+export const GMAIL_ACCOUNTS = GOOGLE_ACCOUNTS;
+export type GmailAccount = GoogleAccount;
+export const isGmailAccount = isGoogleAccount;
 
 /** What an EC email looks like to the brain: no sender, subject or text. */
 export const EC_EMAIL = "EC email, handled by Kiro";
@@ -25,7 +26,7 @@ export const MAX_RESULTS = 10;
 const MAX_QUERY = 200;
 const MAX_BODY = 6000;
 
-const accountsLine = "account: \"personal\" (Renato's personal Gmail) or \"noisysource\" (his company Noisy Source's Gmail)";
+const accountsLine = accountsFor("Gmail");
 
 /** #217: emails he sent that got no reply. */
 export const GMAIL_FOLLOWUPS_TOOL: LlmTool = {
