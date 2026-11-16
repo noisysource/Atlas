@@ -4,6 +4,7 @@
 // No secret values are read here. ANTHROPIC_API_KEY (local dev only) is
 // handled by the secrets module (#6); this module only knows secret *names*.
 
+import { parseSubscriptions, type Subscription } from "./costs.js";
 import { z } from "zod";
 import { parseModelRef, type ModelRef } from "./llm/model-ref.js";
 import { parseLocalUrl } from "./local-url.js";
@@ -108,6 +109,8 @@ export type Config = {
    */
   /** `write` (GMAIL_WRITE=on, #120): drafts, and sending after "Send it". Needs gmail:connect with write access. */
   /** #220 (WEB_SEARCH=on): Claude searches the web, capped per answer and per day in code. */
+  /** #247: what Atlas costs, counted per call; fixed fees from COST_SUBSCRIPTIONS. */
+  readonly costs: { readonly subscriptions: readonly Subscription[]; readonly path: string };
   readonly webSearch: { readonly enabled: boolean; readonly perQuestion: number; readonly perDay: number; readonly country: string; readonly city: string };
   readonly gmail: {
     readonly enabled: boolean;
@@ -445,6 +448,12 @@ const EnvSchema = z.object({
   WEB_SEARCH_PER_DAY: z.coerce.number().int().min(1).max(500).default(40),
   WEB_SEARCH_COUNTRY: z.string().regex(/^[A-Z]{2}$/).default("PT"),
   WEB_SEARCH_CITY: z.string().max(60).default(""),
+  // #247: fixed monthly fees for the costs panel, in USD: "Claude Pro=20".
+  COST_SUBSCRIPTIONS: z
+    .string()
+    .max(300)
+    .default("")
+    .refine((v) => parseSubscriptions(v) !== undefined, { error: 'must be "Name=amount" pairs, comma-separated, like "Claude Pro=20"' }),
   GMAIL_ARCHIVE_CLEARS: z.string().max(400).default(""),
   MEMORY: onOff,
   INTROSPECTION: onOff,
@@ -626,6 +635,7 @@ export const loadConfig = (given: Env): Result<Config, string> => {
       minute: Number(e.BRIEF_AT.split(":")[1]),
       path: "data/brief",
     },
+    costs: { subscriptions: parseSubscriptions(e.COST_SUBSCRIPTIONS) ?? [], path: "data/costs.jsonl" },
     webSearch: { enabled: e.WEB_SEARCH === "on", perQuestion: e.WEB_SEARCH_PER_QUESTION, perDay: e.WEB_SEARCH_PER_DAY, country: e.WEB_SEARCH_COUNTRY, city: e.WEB_SEARCH_CITY.trim() },
     gmail: { enabled: e.GMAIL === "on", write: e.GMAIL === "on" && e.GMAIL_WRITE === "on", tidy: e.GMAIL === "on" && e.GMAIL_TIDY === "on",
       archiveClears: e.GMAIL_ARCHIVE_CLEARS.split(",").map((l) => l.trim()).filter((l) => l !== "" && l.length <= 40).slice(0, 10),

@@ -392,6 +392,15 @@ export const makeServer = (
     });
   }
 
+  // #247: what Atlas costs, per service, for the costs panel.
+  const costs = deps.costs;
+  if (costs) {
+    app.get("/costs", async (c) => {
+      c.header("Cache-Control", "no-store");
+      return c.json(await costs.summary());
+    });
+  }
+
   // #138: his answer to opening an issue for a gap. Only "yes" opens it.
   const gapIssue = deps.gapIssue;
   if (gapIssue) {

@@ -1107,6 +1107,17 @@ Confirmed (2026-11-12):
   himself aren't picked up yet: the handoff between them is the branch,
   the PR and STATUS.md.
 
+- **Costs (#247):** `src/costs.ts`. Every `LlmCall` built in `app.ts`
+  is wrapped (`meteredLlm`, purpose classify / answer / local) and the
+  code agent and task runner too (`meteredCodeAgent`,
+  `meteredTaskRunner`: on his login it's the plan, with the API-equivalent
+  `total_cost_usd` beside it; on the API key it's API spend). Each call is
+  priced from a dated list-price table (Anthropic, Gemini incl. Live audio
+  and the 2027 Flash rise, web search $0.01) and appended to
+  `data/costs.jsonl` (mode 600, gitignored, CI guard; counts and amounts
+  only). `GET /costs` sums per service for today, 7 days and the
+  calendar month in his time zone, plus `COST_SUBSCRIPTIONS` fees; the 💲
+  Costs dialog shows it. Estimates; the consoles have the bill.
 - **More Google accounts (#245):** `src/google-accounts.ts` is the one
   list (personal, noisysource, kidclub, marisa) for Gmail and Calendar,
   with whose each is, how drafts are signed and whether it's his own.

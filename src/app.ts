@@ -43,6 +43,7 @@ import { makeClassifier } from "./classify.js";
 import type { Config, Env } from "./config.js";
 import { loadContexts } from "./contexts.js";
 import type { ModelRef } from "./llm/model-ref.js";
+import { makeCostLog, meteredCodeAgent, meteredLlm, meteredTaskRunner, summarize, type CostLog } from "./costs.js";
 import { makeLlm, type ProviderKeys, type ProviderUrls } from "./llm/registry.js";
 import type { LlmCall } from "./llm/types.js";
 import { makeBackgroundTasks, type BackgroundTasks } from "./background.js";
@@ -96,6 +97,8 @@ export type AppInputs = {
   readonly codeFixes?: Fixes;
   /** Tests: a code agent and repo copies instead of Claude Code and git (#126). */
   readonly codeAgent?: CodeAgent;
+  /** #247: where costs are counted (tests give their own). */
+  readonly costLog?: CostLog;
   readonly repoCopies?: RepoCopies;
   /** Tests: where code notes are kept (#127), instead of data/code/. */
   readonly noteFiles?: NoteFiles;
@@ -170,12 +173,15 @@ export const buildDeps = async (inputs: AppInputs): Promise<Result<Deps, string>
 
   const buildLlm = inputs.makeLlm ?? makeLlm;
   const keys: ProviderKeys = { anthropic: key.value.key };
-  const classifierLlm = buildLlm(config.models.classifier, keys, { log });
+  // #247: every model call is counted for the costs panel (counts and amounts only).
+  const costLog = inputs.costLog ?? makeCostLog({ path: config.costs.path, onError: () => log.warn("cost log write failed") });
+  const metered = (r: Result<LlmCall, string>, ref: ModelRef, purpose: string): Result<LlmCall, string> => (r.ok ? ok(meteredLlm(r.value, ref, purpose, costLog)) : r);
+  const classifierLlm = metered(buildLlm(config.models.classifier, keys, { log }), config.models.classifier, "classify");
   if (!classifierLlm.ok) return err(`CLASSIFIER_MODEL: ${classifierLlm.error}`);
-  const answerLlm = buildLlm(config.models.answer, keys, { log });
+  const answerLlm = metered(buildLlm(config.models.answer, keys, { log }), config.models.answer, "answer");
   if (!answerLlm.ok) return err(`ANSWER_MODEL: ${answerLlm.error}`);
   // The "Local" brain (#88): Ollama on this machine.
-  const localLlm = buildLlm(config.models.local, keys, { ollama: config.ollamaUrl, ollamaThink: config.ollamaThink });
+  const localLlm = metered(buildLlm(config.models.local, keys, { ollama: config.ollamaUrl, ollamaThink: config.ollamaThink }), config.models.local, "local");
   if (!localLlm.ok) return err(`OLLAMA_MODEL: ${localLlm.error}`);
 
   if (!contexts.value.some((c) => c.id === "personal" && c.handling.kind === "answer")) {
@@ -347,7 +353,9 @@ export const buildDeps = async (inputs: AppInputs): Promise<Result<Deps, string>
       list: () => readdir(config.codeAgent.study.notesPath),
     },
   );
-  const codeAgent = github && config.codeAgent.enabled ? (inputs.codeAgent ?? makeClaudeCodeAgent({ apiKey: key.value.key, auth: config.codeAgent.auth, model: config.codeAgent.model })) : undefined;
+  const rawCodeAgent = github && config.codeAgent.enabled ? (inputs.codeAgent ?? makeClaudeCodeAgent({ apiKey: key.value.key, auth: config.codeAgent.auth, model: config.codeAgent.model })) : undefined;
+  // #247: code questions and fixes cost what Claude Code reports, on the API or the plan.
+  const codeAgent = rawCodeAgent ? meteredCodeAgent(rawCodeAgent, costLog, config.codeAgent.model ?? "claude-code") : undefined;
   const repoCopies = inputs.repoCopies ?? makeRepoCopies({ root: config.codeAgent.reposPath, token: githubTokens.token, run: runCommand });
   const studies = codeAgent
     ? makeStudies({ agent: codeAgent, copies: repoCopies, store: noteStore, isEc: isEcText, maxUsd: config.codeAgent.study.maxUsd, maxTurns: config.codeAgent.study.maxTurns, now, log })
@@ -402,7 +410,7 @@ export const buildDeps = async (inputs: AppInputs): Promise<Result<Deps, string>
     codeAgent && config.codeAgent.tasks.enabled
       ? (inputs.codeTasks ??
         makeTasks({
-          runner: makeTaskRunner({ model: config.codeAgent.model }),
+          runner: meteredTaskRunner(makeTaskRunner({ model: config.codeAgent.model }), costLog, config.codeAgent.model ?? "claude-code"),
           store: {
             read: async () => {
               const text = await readFileFs(tasksFile, "utf8").catch(() => undefined);
@@ -628,6 +636,7 @@ export const buildDeps = async (inputs: AppInputs): Promise<Result<Deps, string>
     ...(gaps ? { gapIssue: gaps } : {}),
     ...(calendarChanges ? { calendarChange: calendarChanges } : {}),
     ...(reminders ? { reminders } : {}),
+    costs: { summary: async () => summarize(await costLog.all(), { now: new Date(), timeZone: config.timeZone, subscriptions: config.costs.subscriptions }) },
     ...(inboxTidy ? { gmailTidy: inboxTidy } : {}),
     classify: makeClassifier({ contexts: contexts.value, llm: classifierLlm.value, log, thinking: config.turn.classifierThinking }),
     stickyContext: config.turn.stickyContext,

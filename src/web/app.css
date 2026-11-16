@@ -1481,6 +1481,79 @@ li[data-status="waiting"] > .t-leaf .t-result {
   font-size: 0.78rem;
 }
 
+/* #247: what Atlas costs. */
+.costs {
+  width: min(96vw, 46rem);
+  max-height: 92vh;
+  padding: 1rem 1.1rem;
+  border: 1px solid var(--border);
+  border-radius: 0.9rem;
+  background: var(--bg);
+  color: var(--text);
+}
+
+.costs::backdrop {
+  background: rgb(0 0 0 / 0.55);
+}
+
+.costs-head {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.costs-head h2 {
+  margin: 0;
+  flex: 1 1 auto;
+  font-size: 1.1rem;
+}
+
+.costs-body {
+  overflow-x: auto;
+}
+
+.costs-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 0.6rem 0;
+  font-size: 0.9rem;
+}
+
+.costs-table th,
+.costs-table td {
+  padding: 0.4rem 0.5rem;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+  vertical-align: top;
+}
+
+.costs-table .costs-num {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.costs-num span {
+  display: block;
+}
+
+.costs-kind,
+.costs-calls,
+.costs-note {
+  display: block;
+  margin: 0.1rem 0 0;
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
+.costs-more td {
+  padding-top: 0;
+}
+
+.costs-table tfoot td {
+  font-weight: 600;
+  border-bottom: none;
+}
+
 .codemap {
   width: min(96vw, 80rem);
   max-height: 92vh;
