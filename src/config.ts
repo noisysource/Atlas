@@ -112,6 +112,8 @@ export type Config = {
     readonly write: boolean;
     /** #214 (GMAIL_TIDY=on): archive and label after his OK. Needs gmail:connect with tidying allowed. */
     readonly tidy: boolean;
+    /** #228 (GMAIL_ARCHIVE_CLEARS="NoisySource,…"): labels archiving also takes off, so it leaves those views. */
+    readonly archiveClears: readonly string[];
     readonly tokensPath: (account: string) => string;
   };
   /**
@@ -436,6 +438,7 @@ const EnvSchema = z.object({
   ),
   GMAIL_WRITE: onOff,
   GMAIL_TIDY: onOff,
+  GMAIL_ARCHIVE_CLEARS: z.string().max(400).default(""),
   MEMORY: onOff,
   INTROSPECTION: onOff,
   BRIEF_SCHEDULE: onOff,
@@ -616,7 +619,9 @@ export const loadConfig = (given: Env): Result<Config, string> => {
       minute: Number(e.BRIEF_AT.split(":")[1]),
       path: "data/brief",
     },
-    gmail: { enabled: e.GMAIL === "on", write: e.GMAIL === "on" && e.GMAIL_WRITE === "on", tidy: e.GMAIL === "on" && e.GMAIL_TIDY === "on", tokensPath: (account: string) => `data/google-gmail-${account}.json` },
+    gmail: { enabled: e.GMAIL === "on", write: e.GMAIL === "on" && e.GMAIL_WRITE === "on", tidy: e.GMAIL === "on" && e.GMAIL_TIDY === "on",
+      archiveClears: e.GMAIL_ARCHIVE_CLEARS.split(",").map((l) => l.trim()).filter((l) => l !== "" && l.length <= 40).slice(0, 10),
+      tokensPath: (account: string) => `data/google-gmail-${account}.json` },
     github: { enabled: e.GITHUB === "on", tokensPath: "data/github-tokens.json" },
     gcloud: { enabled: e.GCLOUD === "on", keysPath: "data/gcloud" },
     vendus: { enabled: e.VENDUS === "on", keyPath: "data/vendus.json" },
