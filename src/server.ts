@@ -360,6 +360,18 @@ export const makeServer = (
     });
   }
 
+  // #219: his answer to moving or cancelling an event. Only "yes" changes it.
+  const calendarChange = deps.calendarChange;
+  if (calendarChange) {
+    const ChangeBody = z.object({ id: z.string().regex(/^[a-f0-9]{8,64}$/), decision: z.enum(["yes", "no"]) }).strict();
+    app.post("/calendar/change", bodyLimit({ maxSize: 1024, onError: (c) => c.json(errorBody("The request is too large."), 413) }), async (c) => {
+      if (!isJson(c.req.header("content-type"))) return c.json(errorBody("POST /calendar/change needs Content-Type: application/json."), 415);
+      const body = ChangeBody.safeParse(await c.req.json().catch(() => undefined));
+      if (!body.success) return c.json(errorBody('Send { id, decision: "yes" | "no" }.'), 400);
+      return c.json(await calendarChange.decide(body.data.id, body.data.decision));
+    });
+  }
+
   // #218: his reminders on the page: today's, overdue and the next week's; ticking one off.
   const reminders = deps.reminders;
   if (reminders) {

@@ -12,6 +12,7 @@ import { makePrCloser } from "./github/pr-close.js";
 import { makePlans } from "./plans/plans.js";
 import { makeDecisions } from "./decisions/decisions.js";
 import { makeGaps } from "./gaps/gaps.js";
+import { makeCalendarChanger, makeCalendarChanges } from "./calendar/change.js";
 import { makeReminders, reminderLine } from "./reminders/reminders.js";
 import { makeGmailTidier, makeInboxTidy } from "./gmail/tidy.js";
 import { availableSwitches, makeSettings, makeSwitchedAnswerer, type BareDeps } from "./switches.js";
@@ -211,6 +212,8 @@ export const buildDeps = async (inputs: AppInputs): Promise<Result<Deps, string>
   const pending = config.calendar.write ? makePendingProposals() : undefined;
   const creator = config.calendar.write ? (inputs.eventCreator ?? makeGoogleEventCreator({ accessToken: calendarToken, timeZone: config.timeZone })) : undefined;
   const isEcText = (text: string): boolean => precheck(text).kind === "handoff";
+  // #219: moving and cancelling events, after his OK, with the same write access.
+  const calendarChanges = config.calendar.write ? makeCalendarChanges({ changer: makeCalendarChanger({ accessToken: calendarToken, timeZone: config.timeZone }), isEc: isEcText, timeZone: config.timeZone, log }) : undefined;
   // #116: skills, with memory. data/skills.json, gitignored, readable only by him.
   const skillStore = config.bareMemory
     ? (inputs.skillStore ??
@@ -618,6 +621,7 @@ export const buildDeps = async (inputs: AppInputs): Promise<Result<Deps, string>
     ...(prs ? { prClose: prs } : {}),
     ...(blinds && config.house.enabled ? { houseBlinds: blinds } : {}),
     ...(gaps ? { gapIssue: gaps } : {}),
+    ...(calendarChanges ? { calendarChange: calendarChanges } : {}),
     ...(reminders ? { reminders } : {}),
     ...(inboxTidy ? { gmailTidy: inboxTidy } : {}),
     classify: makeClassifier({ contexts: contexts.value, llm: classifierLlm.value, log, thinking: config.turn.classifierThinking }),
@@ -637,7 +641,7 @@ export const buildDeps = async (inputs: AppInputs): Promise<Result<Deps, string>
               spokenSentences: config.turn.spokenSentences,
               pauses: config.turn.punctuationStyle,
               ...(config.bareProfile ? { profile } : {}),
-              ...(calendar ? { calendar: { ...calendar, ...(pending ? { create: { pending, isEc: isEcText } } : {}) } } : {}),
+              ...(calendar ? { calendar: { ...calendar, ...(pending ? { create: { pending, isEc: isEcText } } : {}), ...(calendarChanges ? { change: calendarChanges } : {}) } } : {}),
               // Gmail needs tools (Claude); the local brain doesn't get it.
               ...(gmail && config.toolCalling ? { gmail } : {}),
               // #107: memory across conversations, with tools (Claude); every rule enforced in code.

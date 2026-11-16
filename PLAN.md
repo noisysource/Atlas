@@ -1107,6 +1107,16 @@ Confirmed (2026-11-12):
   himself aren't picked up yet: the handoff between them is the branch,
   the PR and STATUS.md.
 
+- **Moving and cancelling events (#219):** reads now carry Google's
+  event id (never for EC events; "(id …)" in the brain's lines).
+  `src/calendar/change.ts`: `calendar_change` (account, event_id,
+  move|cancel, date/start/end); code GETs the event itself, refuses EC,
+  events with other guests or not his, past days and bad times; a move
+  keeps the length (or all-day day count) unless an end is given. Card
+  kind `calendar-change`, `POST /calendar/change`; on yes, PATCH or
+  DELETE with `sendUpdates=none`; the confirmation is built from
+  Google's answer. Same write scope as adding; the `calendar.write`
+  switch turns both off.
 - **Reminders (#218):** `src/reminders/reminders.ts`: `reminder_add`
   (text, date worked out from today, optional HH:MM; no past days, at
   most a year ahead, EC refused, duplicates on the same day kept once),

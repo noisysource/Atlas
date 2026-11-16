@@ -45,6 +45,7 @@ import {
 import { HOUSE_NOW_TOOL, HOUSE_STATE_PATH, houseForBrain, houseSummary } from "../house/house.js";
 import { isGmailAccount } from "../gmail/gmail.js";
 import { GMAIL_TIDY_TOOL, type InboxTidy } from "../gmail/tidy.js";
+import { CALENDAR_CHANGE_TOOL, type CalendarChanges } from "../calendar/change.js";
 import { REMINDER_ADD_TOOL, REMINDER_DONE_TOOL, REMINDER_TOOLS, reminderLine, type Reminders } from "../reminders/reminders.js";
 import { GAP_LIST_TOOL, GAP_NOTE_TOOL, GAP_TOOLS, gapLine, type Gaps } from "../gaps/gaps.js";
 import { DECISION_LIST_TOOL, DECISION_RECORD_TOOL, DECISION_TOOLS, decisionLine, decisionsForPrompt, type Decisions } from "../decisions/decisions.js";
@@ -237,6 +238,8 @@ export const barePrompt = (
     readonly calendar?: boolean;
     /** It reads the calendar itself, with the calendar_read tool (#104), instead of the app reading it. */
     readonly tools?: boolean;
+    /** #219: it can propose moving or cancelling events; only his OK changes them. */
+    readonly calendarChange?: boolean;
     /** It can propose new events with calendar_create (Reach 2); only Renato's OK adds them. */
     readonly create?: boolean;
     /** It can search and read their email with gmail_search / gmail_read (Reach 3), read-only. With tools only. */
@@ -421,7 +424,12 @@ export const barePrompt = (
           "What you can do right now: talk, and read their Google Calendars (which ones are connected is at the end of this prompt). You can chat, answer questions from what you know, think things through together, and tell them what's on their calendar.",
           ...(options.tools
             ? [
-                `When answering needs their calendar, call the calendar_read tool, without announcing it first. Answer about their calendar only from what a read returned, and if a read fails or is refused, say so plainly. ${options.create ? "You can't move or delete events yet." : "You can't add, move or delete events yet."}`,
+                `When answering needs their calendar, call the calendar_read tool, without announcing it first. Answer about their calendar only from what a read returned, and if a read fails or is refused, say so plainly. ${options.calendarChange ? "" : options.create ? "You can't move or delete events yet." : "You can't add, move or delete events yet."}`,
+                ...(options.calendarChange
+                  ? [
+                      "When he wants an event moved or cancelled, read the day first (calendar_read gives each event's id), then call calendar_change with its id: a move gives the new date and start (and end, or it keeps its length). That doesn't change it: the app shows him the change and only his OK applies it. Say in one sentence what you'd change and that it needs his OK; never say it's done. Events with other guests can't be changed here: say he does those in Google Calendar.",
+                    ]
+                  : []),
                 ...(options.create
                   ? [
                       "When they want an event added, call calendar_create with the title, the day and the times (work them out from today's date at the end of this prompt). That doesn't add it: the app shows them the event and only their yes adds it. Then say in one short sentence what you'd add and that it needs their OK. Never say it's added. If something is unclear (the day, the time), ask first.",
@@ -637,6 +645,8 @@ export const makeBareAnswerer = (deps: {
     readonly now?: () => Date;
     /** Reach 2: proposals for new events wait here for Renato's OK; `isEc` keeps EC work off his calendar. With tools only. */
     readonly create?: { readonly pending: PendingProposals; readonly isEc: (text: string) => boolean };
+    /** #219: moving and cancelling events, after his OK. */
+    readonly change?: CalendarChanges;
   };
   /** #116: skills they approved, and drafts proposed in chat. With tools only. */
   readonly skills?: { readonly store: SkillStore; readonly ec: EcMatchers };
@@ -723,7 +733,7 @@ export const makeBareAnswerer = (deps: {
   const prompts = (profile?: string) => {
     // ATLAS_USER_NAME wins; otherwise the profile's "Name:" line.
     const name = deps.userName ?? (profile ? profileName(profile) : undefined);
-    const extra = { ...(deps.elsewhere && deps.tools !== true ? { elsewhere: deps.elsewhere } : {}), ...(deps.decisions && deps.tools === true ? { decisions: true, tools: true } : {}), ...(deps.gaps && deps.tools === true ? { gaps: true, tools: true } : {}), ...(deps.reminders && deps.tools === true ? { reminders: true, tools: true } : {}), ...(profile ? { profile } : {}), ...(deps.calendar ? { calendar: true } : {}), ...(deps.calendar && deps.tools === true ? { tools: true } : {}), ...(deps.calendar?.create && deps.tools === true ? { create: true } : {}), ...(deps.gmail && deps.tools === true ? { email: true, tools: true } : {}), ...(deps.gmail?.writer && deps.tools === true ? { emailDrafts: true } : {}), ...(deps.gmail?.tidy && deps.tools === true ? { emailTidy: true } : {}), ...(deps.gmail?.reader.unanswered && deps.tools === true ? { emailFollowups: true } : {}), ...(deps.memory && deps.tools === true ? { memory: true, tools: true } : {}), ...(deps.memory && deps.skills && deps.tools === true ? { skills: true } : {}), ...(deps.github && deps.tools === true ? { github: true, tools: true } : {}), ...(deps.github?.plans && deps.tools === true ? { plans: true } : {}), ...(deps.github && deps.code && deps.tools === true ? { code: true } : {}), ...(deps.github && deps.code?.study && deps.tools === true ? { study: true } : {}), ...(deps.gcloud && deps.tools === true ? { gcloud: true, tools: true } : {}), ...(deps.vendus && deps.tools === true ? { vendus: true, tools: true } : {}), ...(deps.house && deps.tools === true ? { house: true, tools: true } : {}), ...(deps.house?.blinds && deps.tools === true ? { houseControl: true } : {}), ...(deps.gcloud?.db && deps.tools === true ? { gcloudDb: true } : {}), ...(deps.route && deps.route.mode !== "all" && deps.tools === true ? { routed: true } : {}), ...(deps.brief === true && deps.calendar && deps.tools === true ? { brief: true } : {}), ...(deps.github && deps.code?.fix && deps.tools === true ? { fix: true } : {}), ...(deps.github && deps.code?.tasks && deps.tools === true ? { tasks: true } : {}) };
+    const extra = { ...(deps.elsewhere && deps.tools !== true ? { elsewhere: deps.elsewhere } : {}), ...(deps.decisions && deps.tools === true ? { decisions: true, tools: true } : {}), ...(deps.gaps && deps.tools === true ? { gaps: true, tools: true } : {}), ...(deps.reminders && deps.tools === true ? { reminders: true, tools: true } : {}), ...(profile ? { profile } : {}), ...(deps.calendar ? { calendar: true } : {}), ...(deps.calendar && deps.tools === true ? { tools: true } : {}), ...(deps.calendar?.create && deps.tools === true ? { create: true } : {}), ...(deps.calendar?.change && deps.tools === true ? { calendarChange: true } : {}), ...(deps.gmail && deps.tools === true ? { email: true, tools: true } : {}), ...(deps.gmail?.writer && deps.tools === true ? { emailDrafts: true } : {}), ...(deps.gmail?.tidy && deps.tools === true ? { emailTidy: true } : {}), ...(deps.gmail?.reader.unanswered && deps.tools === true ? { emailFollowups: true } : {}), ...(deps.memory && deps.tools === true ? { memory: true, tools: true } : {}), ...(deps.memory && deps.skills && deps.tools === true ? { skills: true } : {}), ...(deps.github && deps.tools === true ? { github: true, tools: true } : {}), ...(deps.github?.plans && deps.tools === true ? { plans: true } : {}), ...(deps.github && deps.code && deps.tools === true ? { code: true } : {}), ...(deps.github && deps.code?.study && deps.tools === true ? { study: true } : {}), ...(deps.gcloud && deps.tools === true ? { gcloud: true, tools: true } : {}), ...(deps.vendus && deps.tools === true ? { vendus: true, tools: true } : {}), ...(deps.house && deps.tools === true ? { house: true, tools: true } : {}), ...(deps.house?.blinds && deps.tools === true ? { houseControl: true } : {}), ...(deps.gcloud?.db && deps.tools === true ? { gcloudDb: true } : {}), ...(deps.route && deps.route.mode !== "all" && deps.tools === true ? { routed: true } : {}), ...(deps.brief === true && deps.calendar && deps.tools === true ? { brief: true } : {}), ...(deps.github && deps.code?.fix && deps.tools === true ? { fix: true } : {}), ...(deps.github && deps.code?.tasks && deps.tools === true ? { tasks: true } : {}) };
     return { typed: barePrompt(name, extra), spoken: barePrompt(name, { spoken: true, maxSentences: max, pauses, ...extra }) };
   };
   const withoutProfile = prompts();
@@ -838,7 +848,7 @@ export const makeBareAnswerer = (deps: {
   );
   const toolsOf = (g: ToolGroup): readonly LlmTool[] =>
     g === "calendar"
-      ? [CALENDAR_READ_TOOL, ...(deps.brief === true ? [DAY_BRIEF_TOOL] : []), ...(deps.calendar?.create ? [CALENDAR_CREATE_TOOL] : [])]
+      ? [CALENDAR_READ_TOOL, ...(deps.brief === true ? [DAY_BRIEF_TOOL] : []), ...(deps.calendar?.create ? [CALENDAR_CREATE_TOOL] : []), ...(deps.calendar?.change ? [CALENDAR_CHANGE_TOOL] : [])]
       : g === "gmail"
         ? [GMAIL_SEARCH_TOOL, GMAIL_READ_TOOL, ...(deps.gmail?.reader.unanswered ? [GMAIL_FOLLOWUPS_TOOL] : []), ...(deps.gmail?.writer ? [GMAIL_DRAFT_TOOL] : []), ...(deps.gmail?.writer?.book && deps.gmail.writer.deletions ? [GMAIL_DRAFT_DELETE_TOOL] : []), ...(deps.gmail?.tidy ? [GMAIL_TIDY_TOOL] : [])]
         : g === "github"
@@ -1221,6 +1231,17 @@ export const makeBareAnswerer = (deps: {
       if (deps.github && deps.code?.tasks && TASK_TOOLS.some((t) => t.name === call.name)) return runTask(deps.code.tasks, deps.code.isEc, call);
       if (deps.github && deps.code?.study && (call.name === CODE_NOTES_TOOL.name || call.name === CODE_STUDY_TOOL.name)) return runStudy(deps.code, deps.code.study, call);
       const cal = deps.calendar;
+      if (call.name === CALENDAR_CHANGE_TOOL.name && cal?.change) {
+        const input = typeof call.input === "object" && call.input !== null ? (call.input as Record<string, unknown>) : {};
+        const proposed = await cal.change.propose(input);
+        const account = typeof input.account === "string" ? input.account : "";
+        if (!proposed.ok) {
+          onStep?.({ kind: "tool", name: call.name, args: account, by: "model", ok: false, error: `refused: ${proposed.error.slice(0, 60)}` });
+          return { callId: call.id, content: `Not proposed: ${proposed.error}. Say so plainly.`, isError: true };
+        }
+        onStep?.({ kind: "tool", name: call.name, args: account, by: "model", ok: true, result: "waiting for your OK", confirm: { id: proposed.value.id, label: proposed.value.label, kind: "calendar-change" } });
+        return { callId: call.id, content: `Not changed yet: the app is asking him to confirm: ${proposed.value.label}. Say in one sentence that it needs his OK; never say it's done.` };
+      }
       if (call.name === CALENDAR_CREATE_TOOL.name && cal?.create) {
         // Reach 2: never written here. Code checks it and keeps it for Renato's OK.
         const today = localDate((cal.now ?? (() => new Date()))(), cal.timeZone);
