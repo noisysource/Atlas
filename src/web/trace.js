@@ -2,6 +2,7 @@
 // Atlas works (brain → Tools → tool → service → account · result) and
 // stays until the next question. States come from trace-lib.js.
 
+import { brainName } from "./chat.js";
 import { EMPTY_TRACE, settleTrace, traceOfPath, traceReach, traceStep, traceTree, traceDecided } from "./trace-lib.js";
 
 /** @typedef {import("./chat.js").PathStep} PathStep */
@@ -125,7 +126,7 @@ export const makeTraceView = (root) => {
     finish: (path) => {
       working = false;
       const brainStep = path.find((s) => s.kind === "brain");
-      if (brainStep && brainStep.kind === "brain") brain = brainStep.brain === "claude" ? "Claude" : "Local";
+      if (brainStep && brainStep.kind === "brain") brain = brainName(brainStep.brain);
       trace = path.length > 0 ? traceOfPath(path) : settleTrace(trace);
       draw();
     },

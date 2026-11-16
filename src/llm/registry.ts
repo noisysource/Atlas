@@ -4,6 +4,7 @@
 import { err, ok, type Result } from "../result.js";
 import { makeAnthropicLlm } from "./anthropic.js";
 import { makeOllamaLlm } from "./ollama.js";
+import { makeGeminiLlm } from "./gemini.js";
 import type { ModelRef, Provider } from "./model-ref.js";
 import type { Logger } from "../types.js";
 import type { LlmCall } from "./types.js";
@@ -27,6 +28,10 @@ export const makeLlm = (
     case "anthropic": {
       const apiKey = keys.anthropic;
       return apiKey ? ok(makeAnthropicLlm({ model: ref.model, apiKey, ...(options.log ? { log: options.log } : {}) })) : err("No API key for provider anthropic");
+    }
+    case "google": {
+      const apiKey = keys.google;
+      return apiKey ? ok(makeGeminiLlm({ model: ref.model, apiKey, ...(options.log ? { log: options.log } : {}) })) : err("No API key for provider google");
     }
     case "ollama":
       return ok(

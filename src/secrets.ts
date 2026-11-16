@@ -66,6 +66,25 @@ export const makeGcpSecretAccess = (): SecretAccess => {
 export type KeySource = "env" | "secret-manager";
 
 /**
+ * #248: the Gemini API key, by the same rules as Anthropic's: production from
+ * Secret Manager only (GEMINI_API_KEY ignored); elsewhere GEMINI_API_KEY from
+ * .env, otherwise Secret Manager when GOOGLE_CLOUD_PROJECT is set.
+ */
+export const resolveGeminiKey = async (deps: {
+  readonly config: Config;
+  readonly env: Env;
+  readonly getSecret: GetSecret | undefined;
+}): Promise<Result<{ key: string; source: KeySource }, string>> => {
+  const localKey = deps.env.GEMINI_API_KEY?.trim();
+  if (deps.config.env !== "production" && localKey) return ok({ key: localKey, source: "env" });
+  if (!deps.getSecret || deps.config.secrets.gcpProject === undefined) {
+    return err("GEMINI=on needs a Gemini API key: set GEMINI_API_KEY in .env (from Google AI Studio), or GOOGLE_CLOUD_PROJECT to use Secret Manager");
+  }
+  const secret = await deps.getSecret(deps.config.gemini.secretName);
+  return secret.ok ? ok({ key: secret.value, source: "secret-manager" }) : secret;
+};
+
+/**
  * Resolves the Anthropic API key:
  * - production: Secret Manager only; ANTHROPIC_API_KEY is ignored.
  * - elsewhere: ANTHROPIC_API_KEY (from .env) if set, otherwise Secret Manager

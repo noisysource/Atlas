@@ -57,7 +57,7 @@ const AskRequestSchema = z
       .regex(/^[a-z][a-z0-9-]*$/, { error: "stickyContext must be a context id" })
       .optional(),
     // Only the two configured brains (#88); never a model name.
-    brain: z.enum(["claude", "local"], { error: 'brain must be "claude" or "local"' }).optional(),
+    brain: z.enum(["claude", "local", "google"], { error: 'brain must be "claude", "local" or "google"' }).optional(),
   })
   .strict();
 

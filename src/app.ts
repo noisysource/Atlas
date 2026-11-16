@@ -16,7 +16,7 @@ import { makeWebSearch } from "./web-search.js";
 import { makeCalendarChanger, makeCalendarChanges } from "./calendar/change.js";
 import { makeReminders, reminderLine } from "./reminders/reminders.js";
 import { makeGmailTidier, makeInboxTidy } from "./gmail/tidy.js";
-import { availableSwitches, makeSettings, makeSwitchedAnswerer, type BareDeps } from "./switches.js";
+import { availableSwitches, makeSettings, makeSwitchedAnswerer, omit, type BareDeps } from "./switches.js";
 import { makeBlinds, makeCallable, readFirebaseUser } from "./house/blinds.js";
 import { makeVendusGet, type VendusGet } from "./vendus/vendus.js";
 import { makeCodeRefresh } from "./code/freshness.js";
@@ -59,7 +59,7 @@ import { makeMemoryStoreInMemory, type MemoryStore } from "./memory-store.js";
 import { makePrecheck } from "./precheck.js";
 import { makeProfileSource, type ProfileFileSystem } from "./profile.js";
 import { err, ok, type Result } from "./result.js";
-import { makeGcpSecretAccess, makeSecretGetter, resolveAnthropicKey } from "./secrets.js";
+import { makeGcpSecretAccess, makeSecretGetter, resolveAnthropicKey, resolveGeminiKey } from "./secrets.js";
 import type { Context, Deps, Logger } from "./types.js";
 
 export type AppInputs = {
@@ -163,16 +163,17 @@ export const buildDeps = async (inputs: AppInputs): Promise<Result<Deps, string>
   if (!firstProfile.ok) return err(firstProfile.error.message);
 
   const project = config.secrets.gcpProject;
-  const key = await resolveAnthropicKey({
-    config,
-    env,
-    getSecret: project ? makeSecretGetter({ project, access: makeGcpSecretAccess() }) : undefined,
-  });
+  const getSecret = project ? makeSecretGetter({ project, access: makeGcpSecretAccess() }) : undefined;
+  const key = await resolveAnthropicKey({ config, env, getSecret });
   if (!key.ok) return key;
   log.info("anthropic key loaded", { source: key.value.source });
+  // #248: the Google brain's key, only when GEMINI=on.
+  const geminiKey = config.gemini.enabled ? await resolveGeminiKey({ config, env, getSecret }) : undefined;
+  if (geminiKey && !geminiKey.ok) return geminiKey;
+  if (geminiKey) log.info("gemini key loaded", { source: geminiKey.value.source });
 
   const buildLlm = inputs.makeLlm ?? makeLlm;
-  const keys: ProviderKeys = { anthropic: key.value.key };
+  const keys: ProviderKeys = { anthropic: key.value.key, ...(geminiKey ? { google: geminiKey.value.key } : {}) };
   // #247: every model call is counted for the costs panel (counts and amounts only).
   const costLog = inputs.costLog ?? makeCostLog({ path: config.costs.path, onError: () => log.warn("cost log write failed") });
   const metered = (r: Result<LlmCall, string>, ref: ModelRef, purpose: string): Result<LlmCall, string> => (r.ok ? ok(meteredLlm(r.value, ref, purpose, costLog)) : r);
@@ -183,6 +184,11 @@ export const buildDeps = async (inputs: AppInputs): Promise<Result<Deps, string>
   // The "Local" brain (#88): Ollama on this machine.
   const localLlm = metered(buildLlm(config.models.local, keys, { ollama: config.ollamaUrl, ollamaThink: config.ollamaThink }), config.models.local, "local");
   if (!localLlm.ok) return err(`OLLAMA_MODEL: ${localLlm.error}`);
+  // #248: the Google brain: Gemini answers, Flash-Lite picks the tool groups.
+  const googleLlm = config.gemini.enabled ? metered(buildLlm(config.gemini.model, keys, { log }), config.gemini.model, "answer") : undefined;
+  if (googleLlm && !googleLlm.ok) return err(`GEMINI_MODEL: ${googleLlm.error}`);
+  const googleRouterLlm = config.gemini.enabled ? metered(buildLlm(config.gemini.router, keys, { log }), config.gemini.router, "route") : undefined;
+  if (googleRouterLlm && !googleRouterLlm.ok) return err(`GEMINI_ROUTER_MODEL: ${googleRouterLlm.error}`);
 
   if (!contexts.value.some((c) => c.id === "personal" && c.handling.kind === "answer")) {
     return err(`${config.contextsPath} needs an answered "personal" context`);
@@ -686,6 +692,21 @@ export const buildDeps = async (inputs: AppInputs): Promise<Result<Deps, string>
             }),
               settings,
             ),
+            // #248: the Google brain: Atlas's same tools, prompts and OK cards, Gemini answering.
+            // No web search (that's Anthropic's tool); the switches apply as with Claude.
+            ...(googleLlm?.ok && googleRouterLlm?.ok && claudeDeps
+              ? {
+                  google: makeSwitchedAnswerer(
+                    makeBareAnswerer,
+                    {
+                      ...omit(claudeDeps, "webSearch"),
+                      llm: googleLlm.value,
+                      route: { mode: config.toolRouter, ...(config.toolRouter === "model" ? { router: makeToolRouter({ llm: googleRouterLlm.value, log }) } : {}) },
+                    },
+                    settings,
+                  ),
+                }
+              : {}),
             local: makeBareAnswerer({
               llm: localLlm.value,
               // What only Claude reaches, so the local model says to switch instead of guessing.

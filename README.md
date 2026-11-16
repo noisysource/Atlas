@@ -772,6 +772,19 @@ Requires Node 22.13 or later (the memory store uses `node:sqlite`, which needs a
    yet) or `error`. `GET /healthz` returns `{"status":"ok"}`. Logs are JSON
    lines and never include your questions or answers.
 
+## The Google brain
+
+`GEMINI=on` and `GEMINI_API_KEY` (from Google AI Studio, in `.env`) add a
+third choice to the brain button: **✦ Google**. The button then goes
+Local → Claude → Google. With Google, typed and spoken questions are
+answered by Gemini (`gemini-3.8-flash`; Flash-Lite picks the tool groups)
+with Atlas's same prompts, tools, switches, EC precheck and OK cards;
+tap back to Claude any time. What a question needs (calendar events,
+emails, invoices) then goes to Google instead of Anthropic. Not with
+Google: web search (Anthropic's tool). Coding tasks stay on Claude Code.
+Its cost shows in 💲 Costs as the Gemini API. Gemini Live (speech to
+speech, for the microphone) is next.
+
 ## What it costs
 
 **💲 Costs** on the page shows what each service costs today, in the last

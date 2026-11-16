@@ -140,7 +140,7 @@ const app = makeServer(deps.ok ? deps.value : refuse("unreachable"), {
   reactionFirst: cfg.bareMode,
   brains: {
     default: "local",
-    labels: { local: `Local · ${cfg.models.local.model}`, claude: `Claude · ${cfg.models.answer.model}` },
+    labels: { local: `Local · ${cfg.models.local.model}`, claude: `Claude · ${cfg.models.answer.model}`, ...(cfg.gemini.enabled ? { google: `Google · ${cfg.gemini.model.model}` } : {}) },
     calendar: cfg.calendar.enabled,
   },
   ...(cfg.env === "production" ? {} : { allowedHosts: localHosts(cfg.port) }),

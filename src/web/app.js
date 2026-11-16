@@ -27,6 +27,9 @@ import {
   matchContextOption,
   newConversationId,
   parseBrain,
+  brainIcon,
+  brainName,
+  nextBrain,
   CALENDAR_CLAUDE_NOTE,
   calendarNoteDue,
   pathLines,
@@ -183,7 +186,7 @@ const randomBytes = (count) => crypto.getRandomValues(new Uint8Array(count));
  *   listening: boolean, transcribing: boolean, pending: PendingClarify | null,
  *   phase: import("./turn-lib.js").Phase, lastContext: string | undefined,
  *   conversation: boolean, voiceSession: boolean, autoBlocked: boolean,
- *   conversationId: string, remember: boolean, brain: "claude" | "local",
+ *   conversationId: string, remember: boolean, brain: "claude" | "local" | "google",
  * }}
  */
 const state = {
@@ -209,6 +212,8 @@ const state = {
 };
 /** The brains' labels from GET /brains, e.g. "Local · llama3.1:8b". @type {Record<string, string>} */
 let brainLabels = { local: "Local", claude: "Claude" };
+/** #248: the brains this Atlas has (Google only when GEMINI=on). @type {("claude" | "local" | "google")[]} */
+let brainsAvailable = ["local", "claude"];
 
 // The brain view (#131): lines to what Atlas reaches for in the current answer.
 // Each node opens a panel (#133); Memory and Skills link to their full views.
@@ -534,7 +539,7 @@ const setMessageText = (item, text) => {
 
 const renderControls = () => {
   // The core shows the brain's short name; the model is on the Local/Claude button.
-  brainView.setBrain(state.brain === "claude" ? "Claude" : "Local");
+  brainView.setBrain(brainName(state.brain));
   sendButton.disabled = state.busy;
   // Context buttons can't be used while a request is in flight.
   for (const b of state.pending?.buttons ?? []) b.disabled = state.busy;
@@ -552,9 +557,9 @@ const renderControls = () => {
   micNote.textContent = micSupported
     ? "Listening works in English only for now (Whisper on this computer). Type in Portuguese."
     : "This browser can't record the microphone. Typing works; for voice use Chrome or Safari.";
-  brainButton.setAttribute("aria-pressed", String(state.brain === "claude"));
-  brainButton.textContent = state.brain === "claude" ? "☁️ Claude" : "🧠 Local";
-  brainButton.title = `Answering: ${brainLabels[state.brain] ?? state.brain}. Tap to switch between Local (Ollama on this computer) and Claude.`;
+  brainButton.setAttribute("aria-pressed", String(state.brain !== "local"));
+  brainButton.textContent = `${brainIcon(state.brain)} ${brainName(state.brain)}`;
+  brainButton.title = `Answering: ${brainLabels[state.brain] ?? state.brain}. Tap to switch: ${brainsAvailable.map(brainName).join(", ")}.`;
   conversationButton.setAttribute("aria-pressed", String(state.conversation));
   conversationButton.textContent = state.conversation ? "💬 Conversation on" : "💬 Conversation off";
   autoNote.hidden = !(state.conversation && state.autoBlocked);
@@ -998,7 +1003,7 @@ const ask = async (question, context) => {
   state.busy = true;
   setPhase("thinking");
   brainView.begin();
-  traceView.begin(state.brain === "claude" ? "Claude" : "Local");
+  traceView.begin(brainName(state.brain));
   renderControls();
   const userItem = context ? undefined : addMessage("user", text);
   setStatus("");
@@ -1187,7 +1192,7 @@ const ask = async (question, context) => {
     }
     details.append(summary, steps);
     item.append(details);
-  } else if (view.kind === "answer" && (brain === "local" || brain === "claude")) {
+  } else if (view.kind === "answer" && (brain === "local" || brain === "claude" || brain === "google")) {
     const tag = document.createElement("span");
     tag.className = "brain-tag";
     tag.textContent = brainLabels[brain] ?? brain;
@@ -1989,7 +1994,7 @@ const showCalendarNote = () => {
 };
 
 brainButton.addEventListener("click", () => {
-  state.brain = state.brain === "claude" ? "local" : "claude";
+  state.brain = nextBrain(state.brain, brainsAvailable);
   save("atlas.brain", state.brain);
   renderControls();
   showCalendarNote();
@@ -1998,9 +2003,14 @@ brainButton.addEventListener("click", () => {
 void fetch("/brains")
   .then((res) => (res.ok ? res.json() : null))
   .then((body) => {
-    for (const b of Array.isArray(body?.brains) ? body.brains : []) {
-      if ((b.id === "local" || b.id === "claude") && typeof b.label === "string") brainLabels[b.id] = b.label;
+    const listed = Array.isArray(body?.brains) ? body.brains : [];
+    for (const b of listed) {
+      if ((b.id === "local" || b.id === "claude" || b.id === "google") && typeof b.label === "string") brainLabels[b.id] = b.label;
     }
+    brainsAvailable = listed.map((/** @type {{ id: string }} */ b) => b.id).filter((/** @type {string} */ id) => id === "local" || id === "claude" || id === "google");
+    if (brainsAvailable.length === 0) brainsAvailable = ["local", "claude"];
+    // A saved Google choice with Google switched off falls back to Claude.
+    if (!brainsAvailable.includes(state.brain)) state.brain = "claude";
     calendarOn = body?.calendar === true;
     renderControls();
     showCalendarNote();

@@ -1107,6 +1107,21 @@ Confirmed (2026-11-12):
   himself aren't picked up yet: the handoff between them is the branch,
   the PR and STATUS.md.
 
+- **The Google brain (#248, typed first):** `src/llm/gemini.ts`, a third
+  provider (`google:<model>`) on `generateContent`, streamed as SSE, plain
+  fetch (no SDK). Tools go as `functionDeclarations` with
+  `parametersJsonSchema`; `thinking: "off"` is `thinkingLevel: "minimal"`;
+  JSON output via `responseJsonSchema`. Gemini 3 requires its thought
+  signatures back exactly as received, so an assistant turn's payload is
+  the model's parts, unchanged, replayed on the next request; tool results
+  go back as `functionResponse` parts by name. Usage: cached tokens apart,
+  thinking billed as output. Two retries on 429/5xx. `GEMINI=on` builds a
+  `google` bare answerer from Claude's deps (minus web search) with the
+  Gemini model and a Flash-Lite tool router, behind the same switches;
+  `brain: "google"` in requests; `/brains` lists it; the page's button
+  cycles Local → Claude → Google. Key: `GEMINI_API_KEY` in `.env` locally,
+  Secret Manager (`GEMINI_SECRET_NAME`) in production. Next: Gemini Live
+  for the microphone.
 - **Costs (#247):** `src/costs.ts`. Every `LlmCall` built in `app.ts`
   is wrapped (`meteredLlm`, purpose classify / answer / local) and the
   code agent and task runner too (`meteredCodeAgent`,

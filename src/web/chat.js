@@ -69,7 +69,7 @@ export const toolsRan = (path) =>
  * `spoken`: a spoken turn (answered for speed, #76); `stickyContext`: the
  * context the spoken conversation was last answered in (used only when the
  * server has STICKY_CONTEXT=on); `brain`: "claude" or "local" (#88).
- * @param {{ question: string, context?: string, history: readonly Turn[], conversationId?: string, remember?: boolean, spoken?: boolean, stickyContext?: string, brain?: "claude" | "local" }} input
+ * @param {{ question: string, context?: string, history: readonly Turn[], conversationId?: string, remember?: boolean, spoken?: boolean, stickyContext?: string, brain?: "claude" | "local" | "google" }} input
  */
 export const buildAskBody = ({ question, context, history, conversationId, remember, spoken, stickyContext, brain }) => ({
   question: question.trim().slice(0, LIMITS.questionChars),
@@ -82,8 +82,28 @@ export const buildAskBody = ({ question, context, history, conversationId, remem
   ...(brain ? { brain } : {}),
 });
 
-/** The page's brain choice (#88): Local unless Claude was picked. @param {string | null} saved */
-export const parseBrain = (saved) => (saved === "claude" ? "claude" : "local");
+/** @typedef {"claude" | "local" | "google"} Brain */
+
+/** The page's brain choice (#88; #248: Google): Local unless another was picked. @param {string | null} saved @returns {Brain} */
+export const parseBrain = (saved) => (saved === "claude" || saved === "google" ? saved : "local");
+
+/** Each brain's mark and short name. @type {Record<Brain, { icon: string, name: string }>} */
+export const BRAINS = { local: { icon: "🧠", name: "Local" }, claude: { icon: "☁️", name: "Claude" }, google: { icon: "✦", name: "Google" } };
+
+/** @param {string} brain */
+export const brainName = (brain) => (brain === "claude" || brain === "google" || brain === "local" ? BRAINS[brain].name : "Local");
+/** @param {string} brain */
+export const brainIcon = (brain) => (brain === "claude" || brain === "google" || brain === "local" ? BRAINS[brain].icon : "🧠");
+
+/**
+ * The next brain on a tap: Local → Claude → Google (when it's there) → Local.
+ * @param {Brain} current @param {readonly Brain[]} available @returns {Brain}
+ */
+export const nextBrain = (current, available) => {
+  const order = /** @type {Brain[]} */ (["local", "claude", "google"]).filter((b) => available.includes(b));
+  const i = order.indexOf(current);
+  return order[(i + 1) % order.length] ?? "local";
+};
 
 /** Shown once (#100): with the calendar on and Claude answering, event titles leave this computer. */
 export const CALENDAR_CLAUDE_NOTE =
@@ -92,7 +112,7 @@ export const CALENDAR_CLAUDE_NOTE =
 /**
  * Whether to show that note now: the calendar is on, Claude is answering,
  * and it hasn't been shown before.
- * @param {{ calendar: boolean, brain: "claude" | "local", seen: boolean }} s
+ * @param {{ calendar: boolean, brain: Brain, seen: boolean }} s
  */
 export const calendarNoteDue = ({ calendar, brain, seen }) => calendar && brain === "claude" && !seen;
 
@@ -356,7 +376,7 @@ export const voiceNoteVisible = ({ note, voiceInUse }) => note !== "" && voiceIn
 
 /**
  * @typedef {{ kind: "precheck", result: "none" | "handoff" | "route" }
- *   | { kind: "brain", brain: "claude" | "local" }
+ *   | { kind: "brain", brain: Brain }
  *   | { kind: "tools", offered: readonly string[] }
  *   | { kind: "tool" | "skill", name: string, args: string, by: "code" | "model", ok: boolean, result?: string, error?: string, confirm?: { id: string, label: string, kind?: "calendar" | "skill" | "email" | "draft-delete" | "fix" | "pr-close" | "task-start" | "task-publish" | "task-close" | "house" | "gap-issue" | "gmail-tidy" | "calendar-change" } }
  *   | { kind: "guard", claimedAction: number, promise: number, perception: number, toolResult?: number, replaced: boolean }} PathStep
@@ -389,7 +409,7 @@ export const pathSummary = (path) =>
         case "precheck":
           return step.result === "handoff" ? ["🚦 EC precheck → Kiro"] : [];
         case "brain":
-          return [step.brain === "claude" ? "☁️ Claude" : "🧠 Local"];
+          return [`${brainIcon(step.brain)} ${brainName(step.brain)}`];
         case "tools":
           // #141: say so when it had no tools, or had them and used none.
           return step.offered.length === 0 ? ["🧰 no tools"] : path.some((s) => s.kind === "tool" || s.kind === "skill") ? [] : [`🧰 ${count(step.offered.length, "tool")}, none used`];
@@ -418,7 +438,7 @@ export const pathLines = (path, brainLabels = {}) =>
             ? "🚦 EC precheck: mentions the EC, but it's yours to answer (invoicing)."
             : "🚦 EC precheck: not EC work.";
       case "brain":
-        return `${step.brain === "claude" ? "☁️" : "🧠"} Brain: ${brainLabels[step.brain] ?? (step.brain === "claude" ? "Claude" : "Local")}`;
+        return `${brainIcon(step.brain)} Brain: ${brainLabels[step.brain] ?? brainName(step.brain)}`;
       case "tools":
         return step.offered.length === 0 ? "🧰 No tools offered this turn." : `🧰 Tools offered: ${step.offered.join(", ")}`;
       case "tool":
