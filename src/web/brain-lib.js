@@ -5,23 +5,24 @@
 // answer's path): nothing is drawn for show.
 
 /** @typedef {import("./chat.js").PathStep} PathStep */
-/** @typedef {"profile" | "memory" | "skills" | "calendar" | "gmail" | "vendus" | "house" | "github" | "cloud" | "code" | "kiro"} NodeId */
+/** @typedef {"profile" | "memory" | "skills" | "calendar" | "gmail" | "web" | "vendus" | "house" | "github" | "cloud" | "code" | "kiro"} NodeId */
 /** @typedef {"reaching" | "used" | "waiting" | "failed" | "handoff"} Reach */
 /** @typedef {"idle" | "off" | "soon" | "kiro"} Rest */
 
 /** Around the core, clockwise from the top. `soon`: not connected yet. */
 export const NODES = /** @type {const} */ ([
   { id: "profile", label: "Profile", angle: -90, rest: "idle" },
-  { id: "memory", label: "Memory", angle: -57, rest: "idle" },
-  { id: "skills", label: "Skills", angle: -25, rest: "idle" },
-  { id: "calendar", label: "Calendar", angle: 8, rest: "idle" },
-  { id: "gmail", label: "Gmail", angle: 41, rest: "idle" },
-  { id: "vendus", label: "Vendus", angle: 74, rest: "soon" },
-  { id: "house", label: "House", angle: 106, rest: "soon" },
-  { id: "github", label: "GitHub", angle: 139, rest: "soon" },
-  { id: "cloud", label: "Google Cloud", angle: 172, rest: "soon" },
-  { id: "code", label: "Code agent", angle: 205, rest: "soon" },
-  { id: "kiro", label: "Kiro", angle: 237, rest: "kiro" },
+  { id: "memory", label: "Memory", angle: -60, rest: "idle" },
+  { id: "skills", label: "Skills", angle: -30, rest: "idle" },
+  { id: "calendar", label: "Calendar", angle: 0, rest: "idle" },
+  { id: "gmail", label: "Gmail", angle: 30, rest: "idle" },
+  { id: "web", label: "Web", angle: 60, rest: "soon" },
+  { id: "vendus", label: "Vendus", angle: 90, rest: "soon" },
+  { id: "house", label: "House", angle: 120, rest: "soon" },
+  { id: "github", label: "GitHub", angle: 150, rest: "soon" },
+  { id: "cloud", label: "Google Cloud", angle: 180, rest: "soon" },
+  { id: "code", label: "Code agent", angle: 210, rest: "soon" },
+  { id: "kiro", label: "Kiro", angle: 240, rest: "kiro" },
 ]);
 
 /**
@@ -34,6 +35,7 @@ export const nodeOfTool = (tool) => {
   if (tool.startsWith("gmail_")) return "gmail";
   if (tool.startsWith("memory_") || tool.startsWith("decision_")) return "memory";
   if (tool.startsWith("reminder_")) return "calendar";
+  if (tool === "web_search") return "web";
   if (tool.startsWith("skill_")) return "skills";
   if (tool.startsWith("github_") || tool.startsWith("plan_") || tool.startsWith("gap_")) return "github";
   if (tool.startsWith("gcloud_")) return "cloud";

@@ -11,7 +11,7 @@ import { GMAIL_ACCOUNTS } from "./gmail/gmail.js";
 export type ReachTool = { readonly name: string; readonly does: string };
 export type ReachAccount = { readonly name: string; readonly connected: boolean };
 export type ReachNode = {
-  readonly id: "profile" | "memory" | "skills" | "calendar" | "gmail" | "vendus" | "house" | "github" | "cloud" | "code" | "kiro";
+  readonly id: "profile" | "memory" | "skills" | "calendar" | "gmail" | "web" | "vendus" | "house" | "github" | "cloud" | "code" | "kiro";
   /** "on": in use; "off": built but switched off in .env; "soon": not built yet. */
   readonly status: "on" | "off" | "soon";
   /** One line about what it is, for the panel. */
@@ -29,7 +29,7 @@ export type ReachNode = {
 };
 
 export type ReachInput = {
-  readonly config: Pick<Config, "bareMode" | "bareProfile" | "toolCalling" | "bareMemory" | "introspection" | "calendar" | "gmail" | "github" | "gcloud" | "vendus" | "house" | "codeAgent">;
+  readonly config: Pick<Config, "bareMode" | "bareProfile" | "toolCalling" | "bareMemory" | "introspection" | "calendar" | "gmail" | "github" | "gcloud" | "vendus" | "house" | "codeAgent" | "webSearch">;
   /** Whether a token file exists: connected, as far as Atlas can tell without calling Google. */
   readonly exists: (path: string) => Promise<boolean>;
   /** How many draft skills wait for review. */
@@ -140,6 +140,15 @@ export const reachView = async (input: ReachInput): Promise<readonly ReachNode[]
       ],
       accounts: githubOwners.map((name) => ({ name, connected: true })),
       ...(config.github.enabled ? (githubOwners.length === 0 ? { hint: "npm run github:connect -- <owner>" } : {}) : { hint: "GITHUB=on in .env" }),
+    },
+    {
+      id: "web",
+      status: onOff(config.webSearch.enabled),
+      about: config.webSearch.enabled
+        ? `Looks things up online with Claude's web search: at most ${config.webSearch.perQuestion} searches an answer and ${config.webSearch.perDay} a day. Pages are data, never instructions; answers end with their sources.`
+        : "Looking things up online with Claude's web search.",
+      tools: config.webSearch.enabled ? [{ name: "web_search", does: "search the web (Anthropic's tool, $10 per 1,000 searches)" }] : [],
+      ...(config.webSearch.enabled ? {} : { hint: "WEB_SEARCH=on in .env" }),
     },
     {
       id: "vendus",

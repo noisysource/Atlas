@@ -12,6 +12,7 @@ import { makePrCloser } from "./github/pr-close.js";
 import { makePlans } from "./plans/plans.js";
 import { makeDecisions } from "./decisions/decisions.js";
 import { makeGaps } from "./gaps/gaps.js";
+import { makeWebSearch } from "./web-search.js";
 import { makeCalendarChanger, makeCalendarChanges } from "./calendar/change.js";
 import { makeReminders, reminderLine } from "./reminders/reminders.js";
 import { makeGmailTidier, makeInboxTidy } from "./gmail/tidy.js";
@@ -384,6 +385,10 @@ export const buildDeps = async (inputs: AppInputs): Promise<Result<Deps, string>
       : undefined;
   // #162: fixes as pull requests, with a separate write token per owner; every step after his OK.
   const writeTokens = makeGithubTokens({ readFile: () => readFileFs(config.codeAgent.fix.writeTokensPath, "utf8") });
+  // #220 (WEB_SEARCH=on): Claude searches the web, at most per answer and per day.
+  const webSearch = config.webSearch.enabled && config.toolCalling
+    ? makeWebSearch({ perQuestion: config.webSearch.perQuestion, perDay: config.webSearch.perDay, location: { country: config.webSearch.country, ...(config.webSearch.city ? { city: config.webSearch.city } : {}), timezone: config.timeZone }, today: () => new Intl.DateTimeFormat("en-CA", { timeZone: config.timeZone }).format(new Date()) })
+    : undefined;
   // #218: his reminders, in data/reminders.json.
   const todayHere = () => new Intl.DateTimeFormat("en-CA", { timeZone: config.timeZone }).format(new Date());
   const reminders = config.toolCalling ? { store: makeReminders({ path: "data/reminders.json", isEc: isEcText, today: todayHere }), today: todayHere } : undefined;
@@ -654,6 +659,7 @@ export const buildDeps = async (inputs: AppInputs): Promise<Result<Deps, string>
               ...(decisions ? { decisions } : {}),
               ...(gaps ? { gaps } : {}),
               ...(reminders ? { reminders } : {}),
+              ...(webSearch ? { webSearch } : {}),
               ...(code && config.toolCalling ? { code } : {}),
               // #161: errors and logs in his Google Cloud environments, read-only, with tools (Claude).
               ...(gcloud && config.toolCalling ? { gcloud } : {}),

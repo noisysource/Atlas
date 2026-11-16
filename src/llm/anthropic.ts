@@ -117,8 +117,31 @@ export const buildParams = (model: string, request: LlmRequest): CreateParams =>
           ...(request.systemSuffix ? [{ type: "text" as const, text: request.systemSuffix }] : []),
         ]
       : request.system,
-  messages: request.messages.map(toMessageParam),
-  ...(request.tools && request.tools.length > 0
+  // #220: after a paused turn the next request ends with the paused message itself, so a trailing
+  // user message with no tool results (the loop's empty round) is left out.
+  messages: request.messages.filter((m, i, all) => !(i === all.length - 1 && m.role === "user" && !("text" in m) && m.toolResults.length === 0)).map(toMessageParam),
+  ...(request.webSearch
+    ? {
+        tools: [
+          ...(request.tools ?? []).map((t) => ({ name: t.name, description: t.description, input_schema: t.inputSchema as Anthropic.Beta.Messages.BetaTool.InputSchema })),
+          {
+            type: "web_search_20250305" as const,
+            name: "web_search" as const,
+            max_uses: request.webSearch.maxUses,
+            ...(request.webSearch.country || request.webSearch.city || request.webSearch.timezone
+              ? {
+                  user_location: {
+                    type: "approximate" as const,
+                    ...(request.webSearch.country ? { country: request.webSearch.country } : {}),
+                    ...(request.webSearch.city ? { city: request.webSearch.city } : {}),
+                    ...(request.webSearch.timezone ? { timezone: request.webSearch.timezone } : {}),
+                  },
+                }
+              : {}),
+          },
+        ],
+      }
+    : request.tools && request.tools.length > 0
     ? {
         // Not strict (#174): Anthropic compiles strict tools into one grammar, which
         // failed ("too large") once Atlas had twenty-odd tools. Nothing relies on
@@ -144,10 +167,25 @@ export const buildParams = (model: string, request: LlmRequest): CreateParams =>
   };
 };
 
+/** #220: how many searches ran, and the pages they found (url and title only). */
+const webOf = (content: Message["content"]): LlmResponse["web"] => {
+  const blocks = content as readonly { type?: string; name?: string; content?: unknown }[];
+  const searches = blocks.filter((b) => b.type === "server_tool_use" && b.name === "web_search").length;
+  if (searches === 0) return undefined;
+  const sources = blocks.flatMap((b) =>
+    b.type === "web_search_tool_result" && Array.isArray(b.content)
+      ? (b.content as { type?: string; url?: unknown; title?: unknown }[]).flatMap((r) => (r.type === "web_search_result" && typeof r.url === "string" ? [{ url: r.url, title: typeof r.title === "string" ? r.title : r.url }] : []))
+      : [],
+  );
+  return { searches, sources };
+};
+
 export const mapResponse = (message: Message, wantsJson: boolean): Result<LlmResponse, LlmError> => {
+  const web = webOf(message.content);
   const common = {
     servedBy: message.model,
     payload: payloadOf(message.content),
+    ...(web ? { web } : {}),
     usage: {
       inputTokens: message.usage.input_tokens,
       outputTokens: message.usage.output_tokens,
@@ -172,6 +210,9 @@ export const mapResponse = (message: Message, wantsJson: boolean): Result<LlmRes
     case "max_tokens":
     case "model_context_window_exceeded":
       return err({ kind: "max_tokens", message: `Output was cut off (${message.stop_reason})`, retryable: false });
+    // #220: a long turn with web searches paused; sending it back continues it (no tools to run).
+    case "pause_turn":
+      return ok({ ...common, kind: "tool_calls", text, calls: [] });
     case "tool_use": {
       const calls: LlmToolCall[] = message.content.flatMap((b) =>
         b.type === "tool_use" ? [{ id: b.id, name: b.name, input: b.input }] : [],

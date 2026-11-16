@@ -1107,6 +1107,19 @@ Confirmed (2026-11-12):
   himself aren't picked up yet: the handoff between them is the branch,
   the PR and STATUS.md.
 
+- **Web search (#220):** Anthropic's server tool
+  `web_search_20250305`, added by `buildParams` when the request carries
+  `webSearch {maxUses, country, city, timezone}`; `mapResponse` returns
+  `web {searches, sources}` from the `server_tool_use` /
+  `web_search_tool_result` blocks, and `pause_turn` as a tool round with
+  no calls (the next request resends the paused turn; a trailing empty
+  user message is dropped). `src/web-search.ts`: `makeWebSearch` counts
+  per answer and per day (his day) in code; the answer loop offers
+  `min(left this answer, left today)` each round, adds a path step
+  "web_search · N searches · sites" (brain node Web, switch `web`), and
+  appends "Sources: …" when the answer cites none of the pages found.
+  `WEB_SEARCH=on`, `WEB_SEARCH_PER_QUESTION` (3), `WEB_SEARCH_PER_DAY`
+  (40), `WEB_SEARCH_COUNTRY` (PT), `WEB_SEARCH_CITY`. Claude only.
 - **Moving and cancelling events (#219):** reads now carry Google's
   event id (never for EC events; "(id …)" in the brain's lines).
   `src/calendar/change.ts`: `calendar_change` (account, event_id,
