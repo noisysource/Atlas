@@ -26,6 +26,22 @@ const MAX_BODY = 6000;
 
 const accountsLine = "account: \"personal\" (Renato's personal Gmail) or \"noisysource\" (his company Noisy Source's Gmail)";
 
+/** #217: emails he sent that got no reply. */
+export const GMAIL_FOLLOWUPS_TOOL: LlmTool = {
+  name: "gmail_followups",
+  description:
+    "Emails he sent in one account that got no reply: sent between `days` and two weeks ago, and the thread's last message is still his (automated recipients left out). Use it for \"who hasn't answered me?\", \"anything to follow up?\", or in a triage. Returns id, date, to, subject.",
+  inputSchema: {
+    type: "object",
+    properties: {
+      account: { type: "string", enum: [...GMAIL_ACCOUNTS] },
+      days: { type: "number", description: "How many days without a reply count as waiting (default 3)" },
+    },
+    required: ["account"],
+    additionalProperties: false,
+  },
+};
+
 export const GMAIL_SEARCH_TOOL: LlmTool = {
   name: "gmail_search",
   description: `Search one of their Gmail accounts (read-only) with Gmail's search syntax, e.g. "from:school newer_than:7d" or "is:unread". Returns up to ${MAX_RESULTS} emails: id, date, sender, subject and a snippet. ${accountsLine}.`,
@@ -119,7 +135,17 @@ export type GmailReader = {
   readonly search: (r: SearchRequest, signal?: AbortSignal) => Promise<Result<readonly GmailMessage[], CalendarError>>;
   /** The message's headers and plain text. */
   readonly read: (r: ReadRequest, signal?: AbortSignal) => Promise<Result<GmailMessage & { readonly body: string; readonly thread?: EmailThread }, CalendarError>>;
+  /**
+   * #217: emails he sent between minDays and maxDays ago whose thread got no reply since
+   * (the thread's last message is still his). The last one he sent in each thread.
+   */
+  readonly unanswered?: (r: UnansweredRequest, signal?: AbortSignal) => Promise<Result<readonly GmailMessage[], CalendarError>>;
 };
+
+export type UnansweredRequest = { readonly account: GmailAccount; readonly minDays: number; readonly maxDays: number; readonly max: number };
+
+/** Automated senders and lists: no one to follow up with (#217). */
+const AUTOMATED = /^(?:[^<]*<)?(?:no-?reply|do-?not-?reply|mailer-daemon|postmaster|bounces?|notifications?|alerts?|news(?:letter)?)(?:[+._-][^@]*)?@/i;
 
 const API = "https://gmail.googleapis.com/gmail/v1/users/me/messages";
 
@@ -228,6 +254,28 @@ export const makeGmailReader = (deps: {
         messages.push(toMessage(one.value as RawMessage));
       }
       return ok(messages);
+    },
+    unanswered: async (r, signal) => {
+      const minDays = Math.max(1, Math.min(30, Math.round(r.minDays)));
+      const maxDays = Math.max(minDays + 1, Math.min(60, Math.round(r.maxDays)));
+      const q = `in:sent newer_than:${maxDays}d older_than:${minDays}d -in:chats`;
+      const list = await get(r.account, `${API}?${new URLSearchParams({ q, maxResults: "40" }).toString()}`, signal);
+      if (!list.ok) return list;
+      const threads = [...new Set(((list.value as { messages?: { threadId?: unknown }[] }).messages ?? []).map((m) => m.threadId).filter((t): t is string => typeof t === "string"))].slice(0, 20);
+      const got = await Promise.all(threads.map((t) => get(r.account, `${API.replace(/\/messages$/, "/threads")}/${encodeURIComponent(t)}?${metadata}`, signal)));
+      const out: GmailMessage[] = [];
+      for (const one of got) {
+        if (!one.ok) return one;
+        const messages = ((one.value as { messages?: RawMessage[] }).messages ?? []).filter((m) => !(Array.isArray(m.labelIds) && m.labelIds.includes("DRAFT")));
+        const last = messages.at(-1);
+        // Still his: the last message in the thread is one he sent, to someone who isn't automated.
+        if (!last || !(Array.isArray(last.labelIds) && last.labelIds.includes("SENT"))) continue;
+        const m = toMessage(last);
+        if (m.to.split(",").every((a) => AUTOMATED.test(a.trim()))) continue;
+        out.push(m);
+        if (out.length >= r.max) break;
+      }
+      return ok(out);
     },
     read: async (r, signal) => {
       const one = await get(r.account, `${API}/${encodeURIComponent(r.id)}?format=full`, signal);

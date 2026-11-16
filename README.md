@@ -392,6 +392,11 @@ Requires Node 22.13 or later (the memory store uses `node:sqlite`, which needs a
        never inventing what only you know: those are listed as needing
        your input. The morning brief lists drafts still waiting for your
        Send it, and how much Atlas tidied the day before.
+     - **Follow-ups.** "Who hasn't answered me?" (and every triage and
+       morning brief) finds email you sent 3 to 14 days ago whose thread
+       got no reply since, leaving out automated recipients and EC
+       email. With drafts on, he drafts a short nudge in the same thread
+       for the ones you pick; each has its Send it card.
        Archiving also marks the email read. If you read mail in a label
        view (a "NoisySource" section, say), put its name in
        `GMAIL_ARCHIVE_CLEARS=NoisySource` so archiving takes that label off
