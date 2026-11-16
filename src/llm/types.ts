@@ -73,6 +73,11 @@ export type LlmRequest = {
    */
   readonly thinking?: "off";
   readonly maxTokens: number;
+  /**
+   * #220: let the model search the web itself (a provider-side tool), at most
+   * `maxUses` searches for this request. Where he is, approximately, for local results.
+   */
+  readonly webSearch?: { readonly maxUses: number; readonly country?: string; readonly city?: string; readonly timezone?: string };
 };
 
 export type LlmUsage = {
@@ -88,6 +93,8 @@ type ResponseCommon = {
   readonly usage: LlmUsage;
   /** Pass back on the assistant message if the conversation continues. */
   readonly payload: ProviderPayload;
+  /** #220: web searches the provider ran for this response, and what they found. */
+  readonly web?: { readonly searches: number; readonly sources: readonly { readonly url: string; readonly title: string }[] };
 };
 
 export type LlmResponse =

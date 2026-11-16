@@ -107,6 +107,8 @@ export type Config = {
    * (npm run gmail:connect -- <account>); its token file is under data/.
    */
   /** `write` (GMAIL_WRITE=on, #120): drafts, and sending after "Send it". Needs gmail:connect with write access. */
+  /** #220 (WEB_SEARCH=on): Claude searches the web, capped per answer and per day in code. */
+  readonly webSearch: { readonly enabled: boolean; readonly perQuestion: number; readonly perDay: number; readonly country: string; readonly city: string };
   readonly gmail: {
     readonly enabled: boolean;
     readonly write: boolean;
@@ -438,6 +440,11 @@ const EnvSchema = z.object({
   ),
   GMAIL_WRITE: onOff,
   GMAIL_TIDY: onOff,
+  WEB_SEARCH: onOff,
+  WEB_SEARCH_PER_QUESTION: z.coerce.number().int().min(1).max(5).default(3),
+  WEB_SEARCH_PER_DAY: z.coerce.number().int().min(1).max(500).default(40),
+  WEB_SEARCH_COUNTRY: z.string().regex(/^[A-Z]{2}$/).default("PT"),
+  WEB_SEARCH_CITY: z.string().max(60).default(""),
   GMAIL_ARCHIVE_CLEARS: z.string().max(400).default(""),
   MEMORY: onOff,
   INTROSPECTION: onOff,
@@ -619,6 +626,7 @@ export const loadConfig = (given: Env): Result<Config, string> => {
       minute: Number(e.BRIEF_AT.split(":")[1]),
       path: "data/brief",
     },
+    webSearch: { enabled: e.WEB_SEARCH === "on", perQuestion: e.WEB_SEARCH_PER_QUESTION, perDay: e.WEB_SEARCH_PER_DAY, country: e.WEB_SEARCH_COUNTRY, city: e.WEB_SEARCH_CITY.trim() },
     gmail: { enabled: e.GMAIL === "on", write: e.GMAIL === "on" && e.GMAIL_WRITE === "on", tidy: e.GMAIL === "on" && e.GMAIL_TIDY === "on",
       archiveClears: e.GMAIL_ARCHIVE_CLEARS.split(",").map((l) => l.trim()).filter((l) => l !== "" && l.length <= 40).slice(0, 10),
       tokensPath: (account: string) => `data/google-gmail-${account}.json` },

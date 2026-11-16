@@ -401,6 +401,16 @@ Requires Node 22.13 or later (the memory store uses `node:sqlite`, which needs a
        spoken conversation). They're in the morning brief and in "what's
        on today?". "Put it in my calendar too" adds an event with its own
        card. Kept in `data/reminders.json`; the Calendar panel has a switch.
+     - **Web search (`WEB_SEARCH=on`).** "When does the Fnac open on
+       Sunday?", "what's the IUC for a 2021 Model 3?": with Claude, Atlas
+       looks it up online (Anthropic's web search, $10 per 1,000
+       searches) and ends the answer with its sources. Never for your own
+       things (email, calendar, repos), which have their tools. Capped in
+       code: at most `WEB_SEARCH_PER_QUESTION` (3) searches per answer and
+       `WEB_SEARCH_PER_DAY` (40) a day, so a loop can't run up a bill.
+       `WEB_SEARCH_COUNTRY` (PT) and `WEB_SEARCH_CITY` make results local.
+       Pages are data, never instructions. The brain has a Web node and
+       a switch.
      - **Follow-ups.** "Who hasn't answered me?" (and every triage and
        morning brief) finds email you sent 3 to 14 days ago whose thread
        got no reply since, leaving out automated recipients and EC

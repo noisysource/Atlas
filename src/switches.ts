@@ -50,6 +50,7 @@ export const SWITCHES: readonly SwitchDef[] = [
   { id: "house", node: "house", label: "House", what: "Reading the heating, energy and blinds" },
   { id: "house.control", node: "house", label: "Move the blinds", what: "Moving blinds (each move needs your OK)" },
   { id: "invoices", node: "vendus", label: "Invoices", what: "Reading KidClub's invoices in Vendus" },
+  { id: "web", node: "web", label: "Web search", what: "Looking things up online (capped per answer and per day)" },
 ];
 
 const KNOWN = new Set(SWITCHES.map((s) => s.id));
@@ -86,6 +87,8 @@ export const availableSwitches = (deps: BareDeps, accounts: readonly GmailAccoun
         return deps.gaps !== undefined;
       case "reminders":
         return deps.reminders !== undefined;
+      case "web":
+        return deps.webSearch !== undefined;
       case "skills":
         return deps.skills !== undefined;
       case "cloud":
@@ -119,7 +122,7 @@ const omitAll = <T extends object, K extends keyof T>(o: T, keys: readonly K[]):
 /** The deps with what's switched off taken away. Never adds anything. */
 export const withSwitches = (deps: BareDeps, off: ReadonlySet<string>): BareDeps => {
   if (off.size === 0) return deps;
-  const { calendar, gmail, github, code, memory, skills, decisions, gaps, reminders, gcloud, house, vendus, ...rest } = deps;
+  const { calendar, gmail, github, code, memory, skills, decisions, gaps, reminders, webSearch, gcloud, house, vendus, ...rest } = deps;
   const githubOn = github && !off.has("github");
   const codeOn = code && githubOn && !off.has("code");
   const memoryOn = memory && !off.has("memory");
@@ -137,6 +140,7 @@ export const withSwitches = (deps: BareDeps, off: ReadonlySet<string>): BareDeps
     ...(decisions && !off.has("decisions") ? { decisions } : {}),
     ...(gaps && !off.has("gaps") ? { gaps } : {}),
     ...(reminders && !off.has("reminders") ? { reminders } : {}),
+    ...(webSearch && !off.has("web") ? { webSearch } : {}),
     ...(gcloud && !off.has("cloud") ? { gcloud } : {}),
     ...(house && !off.has("house") ? { house: off.has("house.control") ? omit(house, "blinds") : house } : {}),
     ...(vendus && !off.has("invoices") ? { vendus } : {}),

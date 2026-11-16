@@ -21,10 +21,10 @@ import { nodeOfTool } from "./brain-lib.js";
 export const EMPTY_TRACE = { offered: undefined, calls: [], handoff: false };
 
 /** @type {Record<string, string>} */
-const SERVICES = { calendar: "Calendar", gmail: "Gmail", memory: "Memory", skills: "Skills", github: "GitHub", cloud: "Google Cloud", vendus: "Vendus", house: "House", code: "Code agent" };
+const SERVICES = { web: "Web", calendar: "Calendar", gmail: "Gmail", memory: "Memory", skills: "Skills", github: "GitHub", cloud: "Google Cloud", vendus: "Vendus", house: "House", code: "Code agent" };
 
 /** The service a tool reaches: "Gmail" for gmail_search. @param {string} tool */
-export const serviceOf = (tool) => (tool === "tools_more" ? "More tools" : (SERVICES[nodeOfTool(tool) ?? ""] ?? "Unknown"));
+export const serviceOf = (tool) => (tool === "tools_more" ? "More tools" : tool === "web_search" ? "Web" : (SERVICES[nodeOfTool(tool) ?? ""] ?? "Unknown"));
 
 const ACCOUNT = /^(personal|noisysource)(?: · (.*))?$/;
 
