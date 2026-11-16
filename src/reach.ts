@@ -165,8 +165,18 @@ export const reachView = async (input: ReachInput): Promise<readonly ReachNode[]
     {
       id: "house",
       status: config.house.enabled ? onOff(true) : "soon",
-      about: `Sees the house right now, read-only: the heating automation and why, temperatures, the heat pump, solar, battery and energy, from the domotics bridge's state in ${config.house.env}. He can't change anything in the house yet.`,
-      tools: [{ name: "house_now", does: "the house right now" }],
+      about: config.house.control.enabled
+        ? `Sees the house right now (the heating automation and why, temperatures, solar, battery, energy, blinds and lights) from ${config.house.env}, and moves the blinds and switches the lights after your OK on a card. The heating isn't his to change.`
+        : `Sees the house right now, read-only: the heating automation and why, temperatures, the heat pump, solar, battery and energy, from the domotics bridge's state in ${config.house.env}. HOUSE_CONTROL=on (and npm run house:connect) lets him move the blinds and switch the lights.`,
+      tools: [
+        { name: "house_now", does: "the house right now" },
+        ...(config.house.control.enabled
+          ? [
+              { name: "house_blinds", does: "move the blinds, after your OK" },
+              { name: "house_lights", does: "switch or dim the lights, after your OK" },
+            ]
+          : []),
+      ],
       accounts: [],
       ...(config.house.enabled ? {} : { hint: "HOUSE=on in .env (with GCLOUD=on)" }),
     },

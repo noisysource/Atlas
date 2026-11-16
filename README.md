@@ -480,24 +480,30 @@ Requires Node 22.13 or later (the memory store uses `node:sqlite`, which needs a
      - **The house (`HOUSE=on`, with `GCLOUD=on`), read-only.** "Is the
        heating on?", "why is the pump on?", "how much solar now?". The
        domotics bridge on the Pi publishes the house's state to the
-       database of `HOUSE_ENV` (default `dev`, where it runs today), and
+       database of `HOUSE_ENV` (since the restructure the bridge publishes
+       to `noisysource-prod`: connect it with
+       `npm run gcloud:connect -- nsprod noisysource-prod` and set
+       `HOUSE_ENV=nsprod`), and
        Atlas reads that one document: the heating automation's own
        explanation and plan, room and outdoor temperatures, each
        thermostat, the heat pump, solar, battery, grid and consumption.
        If the bridge hasn't reported for 15 minutes he says so.
-     - **The blinds (`HOUSE_CONTROL=on`, with `HOUSE=on`), after your OK.**
-       "Close the living room blinds", "abre as persianas do Duarte". A
-       card shows which blinds and where they are now; they move only on
-       "Move them" (an OK lasts ten minutes, at most 20 moves an hour).
+     - **The blinds and lights (`HOUSE_CONTROL=on`, with `HOUSE=on`), after your OK.**
+       "Close the living room blinds", "abre as persianas do Duarte",
+       "turn off the kitchen lights", "dim the living room to 30". A card
+       shows which ones and how they are now; nothing changes until "Move
+       them" / "Do it" (an OK lasts ten minutes; at most 20 blind moves and
+       30 light changes an hour). Dimmers take a level; plain switches just
+       go on. `house_now` also says which lights are on.
        Atlas calls the domotics app's own functions (`legrandGetHome`,
        `legrandGetStatus`, `legrandSetState`), signed in as his own
        Firebase Auth user, like the Pi bridge: in the domotics project's
        Firebase console add a user for him, then run
-       `npm run house:connect -- <project> <web-api-key> <email>` and type
-       its password (it signs in and reads the blinds once, and keeps it in
-       `data/house/firebase.json`, gitignored, readable only by you). The
-       domotics functions must let that user in. Nothing else in the house
-       can be changed yet (lights, heating).
+       `npm run house:connect -- noisysource-prod <web-api-key> atlas@kidclub.pt` and type
+       its password (it signs in and reads the blinds and lights once, and
+       keeps it in `data/house/firebase.json`, gitignored, readable only by
+       you). The domotics functions must let that user in. The heating
+       can't be changed from Atlas.
      - **Google Cloud (`GCLOUD=on`, ☁️ Claude), read-only.** Errors and
        logs in your environments, one at a time (start with dev). No key
        file (the organisation blocks service account keys): in that

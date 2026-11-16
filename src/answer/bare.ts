@@ -54,6 +54,7 @@ import { GAP_LIST_TOOL, GAP_NOTE_TOOL, GAP_TOOLS, gapLine, type Gaps } from "../
 import { DECISION_LIST_TOOL, DECISION_RECORD_TOOL, DECISION_TOOLS, decisionLine, decisionsForPrompt, type Decisions } from "../decisions/decisions.js";
 import { PLAN_FOLLOW_TOOL, PLAN_STATUS_TOOL, PLAN_TOOLS, planForBrain, type Plans } from "../plans/plans.js";
 import { blindsForBrain, HOUSE_BLINDS_TOOL, type Blinds } from "../house/blinds.js";
+import { HOUSE_LIGHTS_TOOL, lightsForBrain, type Lights } from "../house/lights.js";
 import { checkInvoicesRequest, invoiceForBrain, invoicesForBrain, listInvoices, VENDUS_INVOICES_TOOL, VENDUS_TOOLS, type VendusGet } from "../vendus/vendus.js";
 import { staleNote, staleSuffix, type CodeRefresh } from "../code/freshness.js";
 import { checkStart, TASK_LIST_TOOL, TASK_PUBLISH_TOOL, TASK_START_TOOL, TASK_TELL_TOOL, TASK_TOOLS, taskForBrain, type Tasks } from "../code/tasks.js";
@@ -361,7 +362,7 @@ export const barePrompt = (
     options.house === true && options.tools === true
       ? [
           options.houseControl === true
-            ? "You can see the house right now with house_now: what the heating automation is doing and why, today's plan, room and outdoor temperatures, each thermostat, the heat pump, solar, battery, grid and consumption, and where each blind is. Answer from it in plain words; quote the automation's reason when he asks why. You can move the blinds with house_blinds: it shows him a card and they move only after his OK, so call it directly when he asks (\"close the blinds in the living room\", \"abre as persianas\"). Nothing else in the house can be changed yet (lights, heating): say so if he asks."
+            ? "You can see the house right now with house_now: what the heating automation is doing and why, today's plan, room and outdoor temperatures, each thermostat, the heat pump, solar, battery, grid and consumption, and where each blind is. Answer from it in plain words; quote the automation's reason when he asks why. You can move the blinds with house_blinds and switch or dim the lights with house_lights: each shows him a card and nothing changes until his OK, so call them directly when he asks (\"close the blinds in the living room\", \"abre as persianas\", \"turn off the kitchen lights\", \"apaga as luzes da sala\"). The heating can't be changed from here: say so if he asks."
             : "You can see the house right now, read-only, with house_now: what the heating automation is doing and why, today's plan, room and outdoor temperatures, each thermostat, the heat pump, solar, battery, grid and consumption. Answer from it in plain words; quote the automation's reason when he asks why. You can't change anything in the house yet: say so if he asks, and that it's coming with an OK step.",
         ]
       : [];
@@ -719,7 +720,7 @@ export const makeBareAnswerer = (deps: {
   /** #9: KidClub's invoices in Vendus, GET only. With tools only. */
   readonly vendus?: { readonly get: VendusGet; readonly timeZone: string };
   /** #166: the house now, read-only, from the domotics bridge's state in an environment's database. */
-  readonly house?: { readonly db: DbReader; readonly env: string; readonly timeZone: string; readonly blinds?: Blinds };
+  readonly house?: { readonly db: DbReader; readonly env: string; readonly timeZone: string; readonly blinds?: Blinds; readonly lights?: Lights };
   /**
    * #175: which tool groups Claude gets per question. Without it, every tool
    * every time. "rules": the words of the question and the last answers;
@@ -881,7 +882,7 @@ export const makeBareAnswerer = (deps: {
               ? [...GCLOUD_TOOLS, ...(deps.gcloud?.db ? DB_TOOLS : [])]
               : g === "invoices"
                 ? VENDUS_TOOLS
-                : [HOUSE_NOW_TOOL, ...(deps.house?.blinds ? [HOUSE_BLINDS_TOOL] : [])];
+                : [HOUSE_NOW_TOOL, ...(deps.house?.blinds ? [HOUSE_BLINDS_TOOL] : []), ...(deps.house?.lights ? [HOUSE_LIGHTS_TOOL] : [])];
   const routing = deps.tools === true && deps.route !== undefined && deps.route.mode !== "all";
 
   return async ({ question, history, onText, signal, spoken, onStep, onReach, onOffered, now, remember, onToolSucceeded }) => {
@@ -1257,6 +1258,9 @@ export const makeBareAnswerer = (deps: {
         // The blinds too, when Atlas can see them; a failure there doesn't hide the rest.
         const blinds = deps.house.blinds ? await deps.house.blinds.list(signal) : undefined;
         const extra = blinds === undefined ? [] : blinds.ok ? [blindsForBrain(blinds.value)] : [`The blinds: ${blinds.error.message}.`];
+        // #211: and which lights are on (the same Netatmo read, cached).
+        const lights = deps.house.lights ? await deps.house.lights.list(signal) : undefined;
+        if (lights) extra.push(lights.ok ? lightsForBrain(lights.value) : `The lights: ${lights.error.message}.`);
         onStep?.({ kind: "tool", name: call.name, args: deps.house.env, by: "model", ok: true, result: houseSummary(fields, now) });
         return { callId: call.id, content: houseForBrain(fields, now, deps.house.timeZone, extra, deps.house.blinds !== undefined) };
       }
@@ -1270,6 +1274,17 @@ export const makeBareAnswerer = (deps: {
         }
         onStep?.({ kind: "tool", name: call.name, args: asked.join(", "), by: "model", ok: true, result: "waiting for your OK", confirm: { id: proposed.value.id, label: proposed.value.label, kind: "house" } });
         return { callId: call.id, content: `Not moved yet: the app is asking him "Move them" / "Leave them" for: ${proposed.value.label}. Say in one sentence that it needs his OK. Never say they've moved.` };
+      }
+      if (deps.house?.lights && call.name === HOUSE_LIGHTS_TOOL.name) {
+        const input = typeof call.input === "object" && call.input !== null ? (call.input as Record<string, unknown>) : {};
+        const asked = Array.isArray(input.lights) ? input.lights.filter((b): b is string => typeof b === "string").slice(0, 30).map((b) => b.slice(0, 80)) : [];
+        const proposed = await deps.house.lights.propose(asked, input.action, signal);
+        if (!proposed.ok) {
+          onStep?.({ kind: "tool", name: call.name, args: asked.join(", "), by: "model", ok: false, error: `refused: ${proposed.error.slice(0, 60)}` });
+          return { callId: call.id, content: `Not proposed: ${proposed.error}. Tell him plainly, or ask which lights he means.`, isError: true };
+        }
+        onStep?.({ kind: "tool", name: call.name, args: asked.join(", "), by: "model", ok: true, result: "waiting for your OK", confirm: { id: proposed.value.id, label: proposed.value.label, kind: "lights" } });
+        return { callId: call.id, content: `Not changed yet: the app is asking him "Do it" / "Leave them" for: ${proposed.value.label}. Say in one sentence that it needs his OK. Never say they've changed.` };
       }
       if (deps.gcloud?.db && DB_TOOLS.some((t) => t.name === call.name)) return runGcloudDb(deps.gcloud.reader, deps.gcloud.db, call);
       if (deps.github && deps.code && call.name === CODE_ASK_TOOL.name) return runCode(deps.code, call);

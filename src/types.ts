@@ -9,6 +9,7 @@ import type { MorningBriefs } from "./morning.js";
 import type { CodeRefresh } from "./code/freshness.js";
 import type { PrCloser } from "./github/pr-close.js";
 import type { Blinds } from "./house/blinds.js";
+import type { Lights } from "./house/lights.js";
 import type { Gaps } from "./gaps/gaps.js";
 import type { Reminders } from "./reminders/reminders.js";
 import type { TalkStore } from "./talk.js";
@@ -149,7 +150,7 @@ export type PathStep =
        * card with "Add it" / "Don't add", and POSTs `id` to /calendar/confirm.
        * Page only: the path is never logged.
        */
-      readonly confirm?: { readonly id: string; readonly label: string; readonly kind?: "calendar" | "skill" | "email" | "draft-delete" | "fix" | "pr-close" | "task-start" | "task-publish" | "task-close" | "house" | "gap-issue" | "gmail-tidy" | "calendar-change" };
+      readonly confirm?: { readonly id: string; readonly label: string; readonly kind?: "calendar" | "skill" | "email" | "draft-delete" | "fix" | "pr-close" | "task-start" | "task-publish" | "task-close" | "house" | "lights" | "gap-issue" | "gmail-tidy" | "calendar-change" };
     }
   | {
       readonly kind: "guard";
@@ -371,6 +372,8 @@ export type Deps = {
   readonly gapIssue?: Pick<Gaps, "decide">;
   /** #166: his answer to moving the blinds (POST /house/blinds). Only "yes" moves them. */
   readonly houseBlinds?: Pick<Blinds, "decide">;
+  /** #211: his answer to switching the lights (POST /house/lights). Only "yes" changes them. */
+  readonly houseLights?: Pick<Lights, "decide">;
   /** #183: his answer to closing a pull request (POST /github/pr-close). */
   readonly prClose?: Pick<PrCloser, "decide">;
   /** #124: his answer to deleting a draft Atlas wrote (POST /gmail/delete). Only "yes" deletes. */

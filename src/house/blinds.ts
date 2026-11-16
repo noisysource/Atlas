@@ -135,7 +135,7 @@ export const blindsOf = (home: unknown, status: unknown): Blind[] => {
 
 const plain = (s: string): string => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().trim();
 const ALL = new Set(["all", "every", "everything", "todas", "todos", "tudo", "todas as persianas", "all blinds", "all the blinds"]);
-const FILLER = /\b(the|blinds?|persianas?|estores?|shutters?|da|do|de|na|no|in|room|quarto de)\b/g;
+const FILLER = /\b(the|as|os|a|o|blinds?|persianas?|estores?|shutters?|da|do|de|na|no|in|room|quarto de)\b/g;
 
 /** Which blinds he means: "all", a blind's name, or a room. Unknown words are an error listing what there is. */
 export const pickBlinds = (all: readonly Blind[], asked: readonly string[]): Result<Blind[], string> => {
@@ -192,27 +192,59 @@ export type Blinds = {
 /** At most this many moves an hour, whatever is asked: the API is rate-limited and the blinds are real. */
 export const MOVES_PER_HOUR = 20;
 
-export const makeBlinds = (deps: { readonly call: Callable; readonly now?: () => number; readonly newId?: () => string; readonly log?: Logger; readonly movesPerHour?: number }): Blinds => {
+/**
+ * Netatmo's homesdata (names, rooms; kept a day) and homestatus (where each
+ * module is now; kept 30 s), shared by the blinds and the lights (#211), so
+ * asking about both reads Netatmo once.
+ */
+export type Legrand = {
+  readonly read: (signal?: AbortSignal) => Promise<Result<{ readonly home: unknown; readonly status: unknown }, CallableError>>;
+  /** Something moved: the next read asks Netatmo again. */
+  readonly changed: () => void;
+  readonly call: Callable;
+};
+
+export const makeLegrand = (deps: { readonly call: Callable; readonly now?: () => number }): Legrand => {
+  const now = deps.now ?? Date.now;
+  let home: { value: unknown; until: number } | undefined;
+  let status: { value: unknown; until: number } | undefined;
+  return {
+    call: deps.call,
+    changed: () => (status = undefined),
+    read: async (signal) => {
+      if (!home || home.until <= now()) {
+        const got = await deps.call("legrandGetHome", {}, signal);
+        if (!got.ok) return got;
+        home = { value: got.value, until: now() + 24 * 3600_000 };
+      }
+      if (!status || status.until <= now()) {
+        const got = await deps.call("legrandGetStatus", {}, signal);
+        if (!got.ok) return got;
+        status = { value: got.value, until: now() + 30_000 };
+      }
+      return ok({ home: home.value, status: status.value });
+    },
+  };
+};
+
+export const makeBlinds = (deps: {
+  readonly call?: Callable;
+  readonly legrand?: Legrand;
+  readonly now?: () => number;
+  readonly newId?: () => string;
+  readonly log?: Logger;
+  readonly movesPerHour?: number;
+}): Blinds => {
   const now = deps.now ?? Date.now;
   const newId = deps.newId ?? (() => randomBytes(12).toString("hex"));
   const cap = deps.movesPerHour ?? MOVES_PER_HOUR;
-  let home: { value: unknown; until: number } | undefined;
-  let status: { value: unknown; until: number } | undefined;
+  const legrand = deps.legrand ?? makeLegrand({ call: deps.call ?? (async () => err({ code: "auth", message: "no domotics connection" })), now });
   const moves: number[] = [];
   const pending = new Map<string, { blinds: Blind[]; position: number; until: number }>();
 
   const list: Blinds["list"] = async (signal) => {
-    if (!home || home.until <= now()) {
-      const got = await deps.call("legrandGetHome", {}, signal);
-      if (!got.ok) return got;
-      home = { value: got.value, until: now() + 24 * 3600_000 };
-    }
-    if (!status || status.until <= now()) {
-      const got = await deps.call("legrandGetStatus", {}, signal);
-      if (!got.ok) return got;
-      status = { value: got.value, until: now() + 30_000 };
-    }
-    return ok(blindsOf(home.value, status.value));
+    const got = await legrand.read(signal);
+    return got.ok ? ok(blindsOf(got.value.home, got.value.status)) : got;
   };
 
   return {
@@ -238,13 +270,13 @@ export const makeBlinds = (deps: { readonly call: Callable; readonly now?: () =>
       while (moves.length > 0 && (moves[0] ?? 0) <= now() - 3600_000) moves.shift();
       if (moves.length >= cap) return { ok: false, text: `I've moved the blinds ${cap} times this hour, which is my limit, so nothing moved. Try again later or use the domotics app.` };
       moves.push(now());
-      const sent = await deps.call("legrandSetState", { modules: got.blinds.map((b) => ({ id: b.id, ...(b.bridge ? { bridge: b.bridge } : {}), target_position: got.position })) });
+      const sent = await legrand.call("legrandSetState", { modules: got.blinds.map((b) => ({ id: b.id, ...(b.bridge ? { bridge: b.bridge } : {}), target_position: got.position })) });
       const names = got.blinds.map((b) => b.name).join(", ");
       if (!sent.ok) {
         deps.log?.warn("blinds move failed", { code: sent.error.code, count: got.blinds.length });
         return { ok: false, text: `The blinds didn't move: ${sent.error.message}.` };
       }
-      status = undefined;
+      legrand.changed();
       deps.log?.info("blinds moved", { count: got.blinds.length, position: got.position });
       return { ok: true, text: `Sent: ${names}, ${target(got.position)}. They take a few seconds to get there.`, tool: `house_blinds ${got.blinds.length} → ${got.position}%` };
     },

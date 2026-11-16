@@ -1044,8 +1044,20 @@ Confirmed (2026-11-12):
   Atlas coding task, lets in the owner and Atlas only). `house_blinds`
   proposes; a card ("Move them" / "Leave them") moves them, one
   `legrandSetState` call for all, 0 closed and 100 open; an OK lasts ten
-  minutes; at most 20 moves an hour in code. Lights and heating next, the
-  same way.
+  minutes; at most 20 moves an hour in code.
+- **The lights, after an OK (#211):** `src/house/lights.ts`, the blinds'
+  path: Legrand light modules (NLF, NLFN, NLFE, NLL, NLM, NLIS, NLPT; not
+  sockets) from homesdata, on/off and brightness from homestatus;
+  `house_lights` proposes on, off or a level (to dimmers only; NLFN or any
+  light Netatmo reports a brightness for); a "lights" card ("Do it" /
+  "Leave them") sends one `legrandSetState` with `on` (and `brightness`);
+  30 changes an hour in code. Blinds and lights share one cached Netatmo
+  read (`makeLegrand`: homesdata a day, homestatus 30 s, dropped after a
+  change). Since the restructure (2026-11-16) the domotics project is
+  `noisysource-prod`: the bridge's state is there (`HOUSE_ENV=nsprod`, read
+  with a read-only `atlas-read` account), and the Legrand functions let in
+  the owner and Atlas's verified `atlas@kidclub.pt` (the monorepo's change).
+  The heating stays the domotics app's.
 
 - **Google Cloud (#161):** Atlas (not the code agent) reads errors and
   logs, read-only, from Cloud Logging. Each environment is a project and a

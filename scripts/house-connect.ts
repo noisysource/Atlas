@@ -1,19 +1,20 @@
-// Connects Atlas to the blinds (#166), on this Mac.
+// Connects Atlas to the blinds and lights (#166, #211), on this Mac.
 //
 //   npm run house:connect -- <project> <web-api-key> <email>
-//   e.g. npm run house:connect -- kidclub-dev AIza… atlas@kidclub.pt
+//   e.g. npm run house:connect -- noisysource-prod AIza… atlas@kidclub.pt
 //
-// 1. In the Firebase console of the domotics project (kidclub-dev today):
-//    Authentication → Users → Add user, with Atlas's own email and a long
-//    random password. Like the Pi bridge's user, it's only a sign-in for the
-//    domotics functions; it isn't a mailbox and has no role anywhere else.
+// 1. In the domotics project (noisysource-prod since the restructure), Atlas's
+//    own Firebase Auth user, with a verified email and a long random password
+//    (the monorepo's create-agent-user.sh makes it, like the Pi bridge's).
+//    It's only a sign-in for the domotics functions: not a mailbox, no role
+//    anywhere else.
 // 2. The domotics functions must let that user in (the monorepo's
-//    functions/src/domotics/legrand.ts) and have legrandGetHome deployed.
+//    firebase/noisysource/functions/src/auth.ts) and have legrandGetHome deployed.
 // 3. Run this with the project, the web API key (the VITE_FIREBASE_API_KEY in
-//    apps/noisysource/domotics/.env.staging; it's public, the web app ships it)
+//    apps/noisysource/domotics/.env.nsprod; it's public, the web app ships it)
 //    and the email, then type the password (it won't show). It signs in and
-//    reads the blinds once, then keeps it all in data/house/firebase.json
-//    (gitignored, only you can read it).
+//    reads the blinds and lights once, then keeps it all in
+//    data/house/firebase.json (gitignored, only you can read it).
 // 4. Set HOUSE_CONTROL=on in .env (with HOUSE=on) and restart Atlas.
 //
 // Nothing moves here: it only reads.
@@ -24,6 +25,7 @@ import { dirname } from "node:path";
 import { Writable } from "node:stream";
 import { loadConfig } from "../src/config.js";
 import { blindsOf, checkFirebaseUser, makeCallable } from "../src/house/blinds.js";
+import { lightsOf } from "../src/house/lights.js";
 
 const fail = (message: string): never => {
   console.error(`✗ ${message}`);
@@ -61,12 +63,14 @@ const homeData = home.ok ? home.value : fail(`${home.error.message}. Nothing was
 const status = await call("legrandGetStatus", {});
 const statusData = status.ok ? status.value : fail(`${status.error.message}. Nothing was saved.`);
 const blinds = blindsOf(homeData, statusData);
-if (blinds.length === 0) fail("Signed in, but no blinds came back. Nothing was saved.");
+const lights = lightsOf(homeData, statusData);
+if (blinds.length === 0 && lights.length === 0) fail("Signed in, but no blinds or lights came back. Nothing was saved.");
 
 const path = config.house.control.userPath;
 await mkdir(dirname(path), { recursive: true, mode: 0o700 });
 await writeFile(path, JSON.stringify(user), { mode: 0o600 });
 await chmod(path, 0o600);
 console.log(`✓ Atlas sees ${blinds.length} blinds: ${blinds.map((b) => b.name).join(", ")}.`);
+console.log(`  and ${lights.length} lights: ${lights.map((l) => l.name).join(", ")}.`);
 console.log(`  Saved to ${path} (only you can read it; gitignored).`);
-console.log("\nPut HOUSE_CONTROL=on in .env (with HOUSE=on) and restart Atlas. Every move asks for your OK.");
+console.log("\nPut HOUSE_CONTROL=on in .env (with HOUSE=on) and restart Atlas. Every change asks for your OK.");
