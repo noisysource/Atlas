@@ -123,9 +123,11 @@ describe("asking Atlas", () => {
     expect(steps[0]).toMatchObject({ ok: false, error: "forbidden" });
   });
 
-  it("HOUSE=on needs GCLOUD=on", () => {
+  it("HOUSE=on needs Atlas's domotics user (HOUSE_CONTROL) or GCLOUD=on", () => {
     const bad = loadConfig({ ANTHROPIC_API_KEY: "sk-test", BARE_MODE: "on", HOUSE: "on" });
-    expect(!bad.ok && bad.error).toContain("HOUSE: needs GCLOUD=on");
+    expect(!bad.ok && bad.error).toContain("HOUSE: needs HOUSE_CONTROL=on");
+    const user = loadConfig({ ANTHROPIC_API_KEY: "sk-test", BARE_MODE: "on", HOUSE: "on", HOUSE_CONTROL: "on" });
+    expect(user.ok && user.value.house).toEqual({ enabled: true, env: "dev", control: { enabled: true, userPath: "data/house/firebase.json" } });
     const good = loadConfig({ ANTHROPIC_API_KEY: "sk-test", BARE_MODE: "on", GCLOUD: "on", HOUSE: "on" });
     expect(good.ok && good.value.house).toEqual({ enabled: true, env: "dev", control: { enabled: false, userPath: "data/house/firebase.json" } });
   });

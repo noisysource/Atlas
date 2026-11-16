@@ -444,6 +444,18 @@ export const makeServer = (
     });
   }
 
+  // #166: his answer to a change to the house (heating, thermostats, the pump, the guard, the tariff).
+  const houseChanges = deps.houseChanges;
+  if (houseChanges) {
+    const ChangeBody = z.object({ id: z.string().regex(/^[a-f0-9]{8,64}$/), decision: z.enum(["yes", "no"]) }).strict();
+    app.post("/house/change", bodyLimit({ maxSize: 1024, onError: (c) => c.json(errorBody("The request is too large."), 413) }), async (c) => {
+      if (!isJson(c.req.header("content-type"))) return c.json(errorBody("POST /house/change needs Content-Type: application/json."), 415);
+      const body = ChangeBody.safeParse(await c.req.json().catch(() => undefined));
+      if (!body.success) return c.json(errorBody('Send { id, decision: "yes" | "no" }.'), 400);
+      return c.json(await houseChanges.decide(body.data.id, body.data.decision));
+    });
+  }
+
   // #211: his answer to switching the lights. Only "yes" changes them, and only what the card showed.
   const houseLights = deps.houseLights;
   if (houseLights) {

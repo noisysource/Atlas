@@ -477,33 +477,32 @@ Requires Node 22.13 or later (the memory store uses `node:sqlite`, which needs a
        `VENDUS=on` in `.env` and restart. Atlas can only GET two paths
        with it; he can't issue, change or cancel anything. Contract and
        checks: [docs/vendus.md](docs/vendus.md).
-     - **The house (`HOUSE=on`, with `GCLOUD=on`), read-only.** "Is the
-       heating on?", "why is the pump on?", "how much solar now?". The
-       domotics bridge on the Pi publishes the house's state to the
-       database of `HOUSE_ENV` (since the restructure the bridge publishes
-       to `noisysource-prod`: connect it with
-       `npm run gcloud:connect -- nsprod noisysource-prod` and set
-       `HOUSE_ENV=nsprod`), and
-       Atlas reads that one document: the heating automation's own
-       explanation and plan, room and outdoor temperatures, each
-       thermostat, the heat pump, solar, battery, grid and consumption.
-       If the bridge hasn't reported for 15 minutes he says so.
-     - **The blinds and lights (`HOUSE_CONTROL=on`, with `HOUSE=on`), after your OK.**
-       "Close the living room blinds", "abre as persianas do Duarte",
-       "turn off the kitchen lights", "dim the living room to 30". A card
-       shows which ones and how they are now; nothing changes until "Move
-       them" / "Do it" (an OK lasts ten minutes; at most 20 blind moves and
-       30 light changes an hour). Dimmers take a level; plain switches just
-       go on. `house_now` also says which lights are on.
-       Atlas calls the domotics app's own functions (`legrandGetHome`,
-       `legrandGetStatus`, `legrandSetState`), signed in as his own
-       Firebase Auth user, like the Pi bridge: in the domotics project's
-       Firebase console add a user for him, then run
-       `npm run house:connect -- noisysource-prod <web-api-key> atlas@kidclub.pt` and type
-       its password (it signs in and reads the blinds and lights once, and
-       keeps it in `data/house/firebase.json`, gitignored, readable only by
-       you). The domotics functions must let that user in. The heating
-       can't be changed from Atlas.
+     - **The whole house (`HOUSE=on`, `HOUSE_CONTROL=on`).** Atlas signs
+       in to the domotics project (`noisysource-prod`) as his own Firebase
+       Auth user, like the Pi bridge, and the project's Firestore rules and
+       functions decide what he may touch: what you may in the Domotics
+       app, except the bridge's admin channel and the vendor secrets.
+       - Reads: the house now (`house_now`: the heating automation's own
+         explanation and plan, rooms, outdoor, thermostats, the heat pump,
+         solar, battery, grid, blinds, lights; if the bridge hasn't
+         reported for 15 minutes he says so), electricity over any days in
+         kWh and euros (`house_energy`), a day's climate per room
+         (`house_climate`), the heat pump's faults and switching
+         (`house_incidents`), and the settings: heating schedule, E13 guard,
+         tariff, warm-by (`house_settings`).
+       - Changes, each one a card, nothing until your OK (an OK lasts ten
+         minutes; capped per hour in code): blinds and lights; the heating
+         automation (on/off, pause, warm windows, comfort, day minimum);
+         "warm by 18:00"; a room's thermostat; the heat pump; the E13 guard;
+         the tariff.
+       - Setup, once: the monorepo's change (rules and functions letting in
+         `atlas@kidclub.pt`), then create that user
+         (`create-agent-user.sh noisysource-prod` in the monorepo), then
+         `npm run house:connect -- noisysource-prod <web-api-key> atlas@kidclub.pt`
+         and type its password (kept in `data/house/firebase.json`,
+         gitignored, readable only by you).
+       - Without `HOUSE_CONTROL`, `HOUSE=on` with `GCLOUD=on` still reads
+         `house_now` read-only from `HOUSE_ENV`'s database.
      - **Google Cloud (`GCLOUD=on`, ☁️ Claude), read-only.** Errors and
        logs in your environments, one at a time (start with dev). No key
        file (the organisation blocks service account keys): in that

@@ -1057,7 +1057,20 @@ Confirmed (2026-11-12):
   `noisysource-prod`: the bridge's state is there (`HOUSE_ENV=nsprod`, read
   with a read-only `atlas-read` account), and the Legrand functions let in
   the owner and Atlas's verified `atlas@kidclub.pt` (the monorepo's change).
-  The heating stays the domotics app's.
+- **The whole house, after an OK (#166, part 3):** one identity,
+  `atlas@kidclub.pt`, for everything: `src/house/domotics.ts` signs in once
+  (ID token cached) and with that token calls the callables and reads and
+  writes Firestore over REST, so the rules decide (no service account,
+  no admin SDK). `house-data.ts` reads: `domotics_energy/{date}` (or the
+  `domoticsEnergyBill` callable, for euros, when it exists),
+  `domotics_climate/{date}`, `domotics_incidents`, `domotics_config/*`.
+  `house-changes.ts` builds each change as a pure value (label + one
+  patch, one `domotics_commands` entry with `createdAt` set by the server,
+  or one callable) and applies it only from a "house-change" card; an OK
+  lasts ten minutes, 30 changes an hour. `domotics_admin` (the bridge's
+  remote execution) and the vendor secrets stay out, in the rules too.
+  `HOUSE_CONTROL=on` alone is enough; `house_now` then reads through the
+  same user.
 
 - **Google Cloud (#161):** Atlas (not the code agent) reads errors and
   logs, read-only, from Cloud Logging. Each environment is a project and a
