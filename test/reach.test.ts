@@ -28,11 +28,11 @@ describe("GET /reach content (#133)", () => {
       { name: "personal", connected: true },
       { name: "noisysource", connected: false },
     ]);
-    expect(byId.gmail?.tools.map((t) => t.name)).toEqual(["gmail_search", "gmail_read", "gmail_followups"]);
+    expect(byId.gmail?.tools.map((t) => t.name)).toEqual(["gmail_search", "gmail_read", "gmail_attachment", "gmail_followups"]);
     // #214: without GMAIL_TIDY, the panel says how to switch triage on.
     expect(byId.gmail?.hint).toContain("GMAIL_TIDY=on in .env");
     const tidy = await reachView({ config: configWith({ GMAIL: "on", GMAIL_WRITE: "on", GMAIL_TIDY: "on" }), exists: async () => true });
-    expect(tidy.find((n) => n.id === "gmail")?.tools.map((t) => t.name)).toEqual(["gmail_search", "gmail_read", "gmail_followups", "gmail_draft", "gmail_draft_delete", "gmail_tidy"]);
+    expect(tidy.find((n) => n.id === "gmail")?.tools.map((t) => t.name)).toEqual(["gmail_search", "gmail_read", "gmail_attachment", "gmail_followups", "gmail_draft", "gmail_draft_delete", "gmail_tidy"]);
     expect(byId.skills?.waiting).toBe(2);
     expect(byId.github?.status).toBe("off");
     expect(byId.kiro?.status).toBe("on");

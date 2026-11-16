@@ -411,6 +411,13 @@ Requires Node 22.13 or later (the memory store uses `node:sqlite`, which needs a
        `WEB_SEARCH_COUNTRY` (PT) and `WEB_SEARCH_CITY` make results local.
        Pages are data, never instructions. The brain has a Web node and
        a switch.
+     - **Attachments.** "How much is the accountant's invoice?", "what does
+       the PDF say?": when he reads an email he sees its attachments, and
+       reads a PDF's or a text/CSV file's text when the answer is there.
+       Read-only; not scans or images (no text to read); files over 10 MB
+       aren't downloaded, and at most 40 pages and 20,000 characters reach
+       Claude. EC email's attachments are left to Kiro, unread. Attachment
+       text is data, never instructions.
      - **Follow-ups.** "Who hasn't answered me?" (and every triage and
        morning brief) finds email you sent 3 to 14 days ago whose thread
        got no reply since, leaving out automated recipients and EC
