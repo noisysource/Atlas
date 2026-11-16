@@ -69,9 +69,9 @@ const RULES: readonly { readonly pattern: RegExp; readonly groups: readonly Tool
     pattern: words(`
       calendar*, agenda*, brief*, resumo*, anything i should know, good morning, bom dia, meeting*, appointment*, schedul*, book, booked, booking, free, busy, availab*, event*,
       today, tonight, tomorrow, yesterday, week*, weekend*, month, morning, afternoon, evening,
-      monday, tuesday, wednesday, thursday, friday, saturday, sunday, plate, invite*, call, calls,
+      monday, tuesday, wednesday, thursday, friday, saturday, sunday, plate, invite*, call, calls, reschedul*, postpone, cancel*, move it, move the,
       calendario*, reuniao, reunioes, marcacao, marcar, marca, livre, ocupado, evento*, hoje, amanha, ontem, semana*,
-      manha, tarde, noite, segunda, terca, quarta, quinta, sexta, sabado, domingo, convite*, chamada*`),
+      manha, tarde, noite, segunda, terca, quarta, quinta, sexta, sabado, domingo, convite*, chamada*, desmarca*, adia*, adiar, cancela*, muda*, passa*`),
     groups: ["calendar"],
   },
   {

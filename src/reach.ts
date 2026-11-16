@@ -100,7 +100,7 @@ export const reachView = async (input: ReachInput): Promise<readonly ReachNode[]
       tools: [
         { name: "calendar_read", does: "read days from one or all calendars" },
         ...(config.toolCalling ? [{ name: "day_brief", does: "today's brief: calendars, unread email, overnight errors, CI" }] : []),
-        ...(config.calendar.write ? [{ name: "calendar_create", does: "propose an event, added after your OK" }] : []),
+        ...(config.calendar.write ? [{ name: "calendar_create", does: "propose an event, added after your OK" }, { name: "calendar_change", does: "move or cancel an event, after your OK" }] : []),
       ],
       accounts: calendarAccounts,
       ...(config.calendar.enabled ? {} : { hint: "CALENDAR=on in .env" }),

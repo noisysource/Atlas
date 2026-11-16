@@ -33,6 +33,8 @@ export type CalendarEvent = {
   readonly ec: boolean;
   /** Which calendar it's from, when more than one is read (#137). */
   readonly account?: string;
+  /** #219: Google's id, to move or cancel it (never for EC events). */
+  readonly id?: string;
 };
 
 export type CalendarError = {
@@ -163,12 +165,13 @@ export const checkCalendarRequest = (value: unknown, today: string): Result<DayR
 
 /** The Google event fields used, and only these are asked for. */
 export type GoogleEvent = {
+  readonly id?: string;
   readonly summary?: string;
   readonly location?: string;
   readonly status?: string;
   readonly start?: { readonly date?: string; readonly dateTime?: string };
   readonly end?: { readonly date?: string; readonly dateTime?: string };
-  readonly organizer?: { readonly email?: string };
+  readonly organizer?: { readonly email?: string; readonly self?: boolean };
   readonly attendees?: readonly { readonly email?: string; readonly self?: boolean; readonly responseStatus?: string }[];
 };
 
@@ -204,7 +207,8 @@ export const toCalendarEvents = (items: readonly GoogleEvent[], isEc: (e: Google
     if (!start || !end) return [];
     const ec = isEc(item);
     const location = !ec && item.location ? clean(item.location) : "";
-    return [{ title: ec ? EC_EVENT : clean(item.summary ?? "") || "(no title)", start, end, allDay: item.start?.dateTime === undefined, ...(location ? { location } : {}), ec }];
+    const id = !ec && typeof item.id === "string" && /^[A-Za-z0-9_-]{4,1024}$/.test(item.id) ? item.id : "";
+    return [{ title: ec ? EC_EVENT : clean(item.summary ?? "") || "(no title)", start, end, allDay: item.start?.dateTime === undefined, ...(location ? { location } : {}), ec, ...(id ? { id } : {}) }];
   });
 
 const time = (iso: string, timeZone: string): string =>
@@ -217,12 +221,12 @@ const eventLine = (e: CalendarEvent, timeZone: string): string => {
   if (e.allDay) {
     const lastDay = addDays(e.end, -1);
     const days = lastDay > e.start ? `${dayName(e.start)} to ${dayName(lastDay)}` : dayName(e.start);
-    return `- ${days}, all day: ${e.title}`;
+    return `- ${days}, all day: ${e.title}${e.id ? ` (id ${e.id})` : ""}`;
   }
   const startDay = dayOf(e.start, timeZone);
   const endDay = dayOf(e.end, timeZone);
   const span = startDay === endDay ? `${time(e.start, timeZone)}–${time(e.end, timeZone)}` : `${time(e.start, timeZone)} to ${dayName(endDay)} ${time(e.end, timeZone)}`;
-  return `- ${dayName(startDay)}, ${span}: ${e.title}${e.location ? ` (at ${e.location})` : ""}`;
+  return `- ${dayName(startDay)}, ${span}: ${e.title}${e.location ? ` (at ${e.location})` : ""}${e.id ? ` (id ${e.id})` : ""}`;
 };
 
 /** "[noisysource] " before an event, when more than one calendar was read. */

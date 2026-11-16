@@ -631,6 +631,14 @@ Requires Node 22.13 or later (the memory store uses `node:sqlite`, which needs a
        Connect once with write access:
        `CALENDAR_WRITE=on npm run calendar:connect`, then add
        `CALENDAR_WRITE=on` to `.env`.
+     - **Moving and cancelling events (same `CALENDAR_WRITE=on`).** "Move
+       the Tesla service to Friday at 14:30", "cancel tomorrow's gym".
+       Atlas reads the day, then a card shows exactly what changes
+       ("Move “Tesla service” from Thursday 26 November, 09:00–10:30 to
+       Friday 20 November, 14:30–16:00"); only **Do it** changes it. A
+       move keeps the event's length unless you give an end. Events with
+       other guests are left to you in Google Calendar (changing them
+       notifies people); nobody is ever notified from here. Never EC.
      - **EC events** (the EC precheck matches the title or place, or anyone
        invited is at europa.eu) reach the brain only as "EC work, handled
        by Kiro", with their time.

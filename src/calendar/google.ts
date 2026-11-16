@@ -7,7 +7,7 @@ import { err, ok, type Result } from "../result.js";
 import { startOfDay, addDays, toCalendarEvents, type CalendarError, type CalendarEvent, type DayRange, type GoogleEvent } from "./read.js";
 
 const EVENTS_URL = "https://www.googleapis.com/calendar/v3/calendars/primary/events";
-const FIELDS = "items(summary,location,status,start,end,organizer/email,attendees(email,self,responseStatus))";
+const FIELDS = "items(id,summary,location,status,start,end,organizer(email,self),attendees(email,self,responseStatus))";
 const MAX_EVENTS = 100;
 
 export type CalendarReader = (range: DayRange, signal?: AbortSignal) => Promise<Result<CalendarEvent[], CalendarError>>;

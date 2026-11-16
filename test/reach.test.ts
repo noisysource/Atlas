@@ -19,7 +19,7 @@ describe("GET /reach content (#133)", () => {
     const byId = Object.fromEntries(nodes.map((n) => [n.id, n]));
     expect(nodes.map((n) => n.id)).toEqual(["profile", "memory", "skills", "calendar", "gmail", "github", "vendus", "house", "cloud", "code", "kiro"]);
     expect(byId.calendar?.status).toBe("on");
-    expect(byId.calendar?.tools.map((t) => t.name)).toEqual(["calendar_read", "day_brief", "calendar_create"]);
+    expect(byId.calendar?.tools.map((t) => t.name)).toEqual(["calendar_read", "day_brief", "calendar_create", "calendar_change"]);
     expect(byId.calendar?.accounts).toEqual([
       { name: "personal", connected: true },
       { name: "noisysource", connected: false },

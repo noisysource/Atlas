@@ -126,7 +126,7 @@ export const withSwitches = (deps: BareDeps, off: ReadonlySet<string>): BareDeps
   const gmailOff = [...off].some((k) => k.startsWith("gmail:"));
   return {
     ...rest,
-    ...(calendar && !off.has("calendar") ? { calendar: off.has("calendar.write") ? omit(calendar, "create") : calendar } : {}),
+    ...(calendar && !off.has("calendar") ? { calendar: off.has("calendar.write") ? omitAll(calendar, ["create", "change"] as const) : calendar } : {}),
     ...(gmail && !off.has("gmail")
       ? { gmail: { ...omitAll(gmail, [...(off.has("gmail.write") ? (["writer"] as const) : []), ...(off.has("gmail.tidy") ? (["tidy"] as const) : [])]), ...(gmailOff ? { reader: withoutAccounts(gmail.reader, off) } : {}) } }
       : {}),
