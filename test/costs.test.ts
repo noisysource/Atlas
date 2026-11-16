@@ -52,6 +52,24 @@ describe("counting", () => {
     expect(log.events).toEqual([expect.objectContaining({ service: "anthropic", model: "claude-sonnet-5-5", purpose: "answer", searches: 1, usd: expect.closeTo(0.002 + 0.001 + 0.01, 6) })]);
   });
 
+  it("a streamed call still streams, and is counted when it ends", async () => {
+    const log = memoryLog();
+    const response: LlmResponse = { kind: "text", text: "Hello there", servedBy: "m", usage: usage(10, 5), payload: { provider: "anthropic", data: "x" } };
+    async function* chunks() {
+      yield "Hello";
+      yield " there";
+    }
+    const llm: LlmCall = Object.assign(async () => ok(response), { stream: () => ({ text: chunks(), result: Promise.resolve(ok(response)) }) });
+    const metered = meteredLlm(llm, { provider: "anthropic", model: "claude-sonnet-5-5" }, "answer", log, () => NOW);
+    expect(metered.stream).toBeDefined();
+    const s = metered.stream?.({ system: "s", messages: [{ role: "user", text: "q" }], maxTokens: 10 });
+    const got: string[] = [];
+    for await (const t of s?.text ?? []) got.push(t);
+    expect(got).toEqual(["Hello", " there"]);
+    await s?.result;
+    expect(log.events).toHaveLength(1);
+  });
+
   it("code on his plan goes to the subscription (with the API price beside it); on the API key, to the API", async () => {
     expect(codeEvent("subscription", "claude-sonnet-5-5", "coding task", 0.8, NOW)).toMatchObject({ service: "claude-plan", usd: 0, apiEquivalentUsd: 0.8 });
     expect(codeEvent("api-key", "claude-sonnet-5-5", "code question", 0.3, NOW)).toMatchObject({ service: "anthropic", usd: 0.3 });

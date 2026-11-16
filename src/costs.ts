@@ -12,7 +12,8 @@
 
 import { appendFile, mkdir, readFile } from "node:fs/promises";
 import { dirname } from "node:path";
-import type { LlmCall, LlmUsage } from "./llm/types.js";
+import type { LlmCall, LlmError, LlmRequest, LlmResponse, LlmUsage } from "./llm/types.js";
+import type { Result } from "./result.js";
 import type { ModelRef } from "./llm/model-ref.js";
 import type { CodeAgent } from "./code/agent.js";
 import type { TaskRunner } from "./code/task-runner.js";
@@ -152,10 +153,22 @@ export const makeCostLog = (deps: { readonly path: string; readonly onError?: (e
 };
 
 /** Counts every call of an LlmCall (#247), by its model and purpose. */
-export const meteredLlm = (llm: LlmCall, ref: ModelRef, purpose: string, log: CostLog, now: () => Date = () => new Date()): LlmCall => async (request) => {
-  const got = await llm(request);
-  if (got.ok) log.record(eventOf(ref, purpose, got.value.usage, got.value.web?.searches ?? 0, now()));
-  return got;
+export const meteredLlm = (llm: LlmCall, ref: ModelRef, purpose: string, log: CostLog, now: () => Date = () => new Date()): LlmCall => {
+  const count = (got: Result<LlmResponse, LlmError>): Result<LlmResponse, LlmError> => {
+    if (got.ok) log.record(eventOf(ref, purpose, got.value.usage, got.value.web?.searches ?? 0, now()));
+    return got;
+  };
+  const call = async (request: LlmRequest) => count(await llm(request));
+  // Streaming stays as it was: the count comes when the stream's result settles.
+  const stream = llm.stream;
+  return stream
+    ? Object.assign(call, {
+        stream: (request: LlmRequest, signal?: AbortSignal) => {
+          const s = stream(request, signal);
+          return { text: s.text, result: s.result.then(count) };
+        },
+      })
+    : call;
 };
 
 /** A fixed monthly fee he pays (COST_SUBSCRIPTIONS="Claude Pro=20"). */
