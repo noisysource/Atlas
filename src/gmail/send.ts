@@ -61,6 +61,12 @@ const oneLine = (s: string, max: number): string =>
     .slice(0, max + 1);
 
 /** Checks the brain's draft. `isEc`: the EC precheck, so EC mail is never written by Atlas. */
+/** noreply@, no-reply@, donotreply@, mailer-daemon@, notifications@, bounce@…: automated senders (#215). */
+export const isNoReply = (address: string): boolean => /^(?:no-?reply|do-?not-?reply|mailer-daemon|postmaster|bounces?|notifications?|alerts?|news(?:letter)?)(?:[+._-][^@]*)?@/i.test(address.trim());
+
+/** At most this many drafts in one answer (#215): he reviews each one. */
+export const MAX_DRAFTS_PER_ANSWER = 3;
+
 export const checkDraftRequest = (value: unknown, isEc: (text: string) => boolean): Result<DraftRequest, string> => {
   if (typeof value !== "object" || value === null) return err("not understood");
   const v = value as Record<string, unknown>;
@@ -72,6 +78,8 @@ export const checkDraftRequest = (value: unknown, isEc: (text: string) => boolea
   if (to.length + cc.length > LIMITS.recipients) return err(`at most ${LIMITS.recipients} recipients`);
   if ([...to, ...cc].some((a) => !ADDRESS.test(a))) return err("an address isn't a real email address");
   if ([...to, ...cc].some((a) => EC_DOMAIN.test(a))) return err("EC email is for Kiro");
+  // #215: nobody reads replies to automated senders.
+  if (to.some(isNoReply)) return err("that address doesn't take replies (an automated sender)");
   const subject = typeof v.subject === "string" ? oneLine(v.subject, LIMITS.subject) : "";
   if (subject === "" || subject.length > LIMITS.subject) return err("a subject of one short line");
   const body = typeof v.body === "string" ? v.body.replace(/\r\n?/g, "\n").trim() : "";

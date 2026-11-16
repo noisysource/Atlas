@@ -385,6 +385,12 @@ Requires Node 22.13 or later (the memory store uses `node:sqlite`, which needs a
        as spam; EC email is left alone. Reconnect each account once with
        tidying allowed: `GMAIL_WRITE=on GMAIL_TIDY=on npm run gmail:connect
        -- personal` (and `noisysource`), then add `GMAIL_TIDY=on` to `.env`.
+       With drafts on (`GMAIL_WRITE=on`), triage also prepares replies for
+       up to three emails where a person is waiting on you: short, in your
+       voice and the email's language, each with its own **Send it**
+       card. Never to automated senders (noreply@, notifications@…), and
+       never inventing what only you know: those are listed as needing
+       your input.
        Archiving also marks the email read. If you read mail in a label
        view (a "NoisySource" section, say), put its name in
        `GMAIL_ARCHIVE_CLEARS=NoisySource` so archiving takes that label off
