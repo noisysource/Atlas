@@ -3,7 +3,7 @@
 import { describe, expect, it } from "vitest";
 import { makeBareAnswerer } from "../src/answer/bare.js";
 import { groupsByWords } from "../src/answer/tool-groups.js";
-import { BRIEF_EMAIL_QUERY, briefForBrain, briefSummary, gatherBrief, type BriefSources } from "../src/brief.js";
+import { BRIEF_DRAFTS_QUERY, BRIEF_EMAIL_QUERY, briefForBrain, briefSummary, gatherBrief, type BriefSources } from "../src/brief.js";
 import type { CalendarReader } from "../src/calendar/google.js";
 import type { CalendarEvent } from "../src/calendar/read.js";
 import type { GcloudReader } from "../src/gcloud/gcloud.js";
@@ -137,5 +137,34 @@ describe("asking for the brief", () => {
     expect(sent).toContain("School run");
     expect(sent).toContain("Timeout after 3000 ms");
     expect(sent).not.toContain("European Commission meeting");
+  });
+});
+
+describe("the inbox part of the brief (#216)", () => {
+  it("drafts waiting for his Send it and what was tidied; EC drafts never named", async () => {
+    const queries: string[] = [];
+    const reader: GmailReader = {
+      search: async (r) => {
+        queries.push(`${r.account}: ${r.query}`);
+        if (r.query === BRIEF_DRAFTS_QUERY) return r.account === "noisysource" ? ok([mail("d1", "renato@x.pt", "Re: Orçamento"), mail("d2", "renato@x.pt", "European Commission sprint")]) : ok([]);
+        return ok([]);
+      },
+      read: async () => err({ code: "api" as const, message: "x" }),
+    };
+    const facts = await gatherBrief({ gmail: { reader, accounts: ["personal", "noisysource"], isEc, drafts: true, tidied: (since) => (since === NOW.getTime() - 24 * 3600_000 ? { archived: 7, labelled: 2 } : { archived: 0, labelled: 0 }) } }, NOW, TZ);
+    expect(queries).toContain(`noisysource: ${BRIEF_DRAFTS_QUERY}`);
+    const text = briefForBrain(facts, false, isEc);
+    expect(text).toContain('## Drafts waiting for his Send it (last 3 days)\nnoisysource: to renato@x.pt: "Re: Orçamento"');
+    expect(text).not.toContain("sprint");
+    expect(text).toContain("## Tidied by Atlas in the last day\nArchived 7, labelled 2.");
+    expect(text).toContain("then drafts waiting for his Send it (who and what), and how much was tidied in a few words");
+    expect(briefSummary(facts, isEc)).toBe("0 unread · 1 draft to send");
+  });
+
+  it("without drafts or tidying, nothing extra is read or said", async () => {
+    const s = sources();
+    const facts = await gatherBrief({ gmail: s.all.gmail }, NOW, TZ);
+    expect(s.emailQueries.some((q) => q.includes("in:drafts"))).toBe(false);
+    expect(briefForBrain(facts, false, isEc)).not.toContain("Drafts waiting");
   });
 });

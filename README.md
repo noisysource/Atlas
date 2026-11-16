@@ -390,7 +390,8 @@ Requires Node 22.13 or later (the memory store uses `node:sqlite`, which needs a
        voice and the email's language, each with its own **Send it**
        card. Never to automated senders (noreply@, notifications@…), and
        never inventing what only you know: those are listed as needing
-       your input.
+       your input. The morning brief lists drafts still waiting for your
+       Send it, and how much Atlas tidied the day before.
        Archiving also marks the email read. If you read mail in a label
        view (a "NoisySource" section, say), put its name in
        `GMAIL_ARCHIVE_CLEARS=NoisySource` so archiving takes that label off
