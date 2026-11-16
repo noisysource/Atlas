@@ -26,7 +26,7 @@ import {
 } from "../calendar/read.js";
 import { rangeLabel, readSentence, resolveDatePhrase, shortRangeLabel } from "../calendar/dates.js";
 import { calendarIntent } from "../calendar/intent.js";
-import { checkReadRequest, checkSearchRequest, EC_EMAIL, GMAIL_READ_TOOL, GMAIL_SEARCH_TOOL, isEcEmail, messageForBrain, searchForBrain, type GmailReader } from "../gmail/gmail.js";
+import { checkReadRequest, checkSearchRequest, EC_EMAIL, GMAIL_READ_TOOL, GMAIL_SEARCH_TOOL, isEcEmail, messageForBrain, searchForBrain, type GmailReader, GMAIL_FOLLOWUPS_TOOL } from "../gmail/gmail.js";
 import {
   checkChecksRequest,
   checkIssuesRequest,
@@ -43,6 +43,7 @@ import {
   type GithubReader,
 } from "../github/github.js";
 import { HOUSE_NOW_TOOL, HOUSE_STATE_PATH, houseForBrain, houseSummary } from "../house/house.js";
+import { isGmailAccount } from "../gmail/gmail.js";
 import { GMAIL_TIDY_TOOL, type InboxTidy } from "../gmail/tidy.js";
 import { GAP_LIST_TOOL, GAP_NOTE_TOOL, GAP_TOOLS, gapLine, type Gaps } from "../gaps/gaps.js";
 import { DECISION_LIST_TOOL, DECISION_RECORD_TOOL, DECISION_TOOLS, decisionLine, decisionsForPrompt, type Decisions } from "../decisions/decisions.js";
@@ -257,6 +258,8 @@ export const barePrompt = (
     readonly gaps?: boolean;
     /** #214: it triages the inbox and proposes tidying it. With tools only. */
     readonly emailTidy?: boolean;
+    /** #217: it finds sent email that got no reply. With tools only. */
+    readonly emailFollowups?: boolean;
     /** It can ask a code agent about a repo (#126). With GitHub only. */
     readonly code?: boolean;
     /** It can study repos and keeps notes (#127). With the code agent only. */
@@ -295,6 +298,11 @@ export const barePrompt = (
   const emailLines = email
     ? [
         "You can also search and read their email, read-only, with gmail_search and gmail_read, in two accounts: \"personal\" (their personal Gmail) and \"noisysource\" (their company Noisy Source). Pick the account that fits; if unclear, search both. Search first, then read an email only when its snippet isn't enough. Answer about their email only from what the tools returned, and never invent senders, subjects or contents.",
+        ...(options.emailFollowups === true
+          ? [
+              `For "who hasn't answered me?", "anything to follow up?", and in a triage, call gmail_followups for each account: emails he sent that got no reply. Mention them as waiting on others, one line each (who, what, since when), people before services. ${options.emailDrafts === true ? "When he wants a nudge, draft a short, friendly one in the same thread with gmail_draft (reply_to_id = that email's id), in the email's language; only for the ones he picks, or the obviously important ones if he asked for nudges." : "You can't send nudges; he can reply himself."}`,
+            ]
+          : []),
         ...(options.emailTidy === true
           ? [
               `You manage his inbox. For "go through my email", "triage my inbox" or "what needs me?": gmail_search each account for what's new in the inbox (like in:inbox newer_than:2d, or is:unread), and sort it into needs him (a person waiting on him, a decision, a deadline), FYI, newsletters and notifications, and bills and receipts. Tell him the needs-him ones first, one line each (who, what, by when), then the rest as counts. Then propose tidying with gmail_tidy: archive newsletters, notifications and what's been dealt with, and label bills and receipts ("Bills", "Receipts"). Never archive anything that needs him.${options.emailDrafts === true ? " For each needs-him email where a person is waiting on his reply (a question or request to him, not a notification or an automated sender), read it with gmail_read and prepare a short reply with gmail_draft (reply_to_id), at most three per answer, most urgent first: in his voice, short and direct, in the email's language, signed Renato. Don't invent what only he knows (a date, a price, a yes or no): if the reply needs that, don't draft it, and list it as needing his input. Then say which replies you drafted; each has its own Send it card." : ""} When he says which ones in a way that could mean different emails ("those 2", "the rest", "them"), and the conversation doesn't make it certain, ask in one line which he means (name them) before proposing. If he says you tidied the wrong ones, propose putting them back with inbox. Nothing changes until he taps "Tidy it" or says yes; never say it's done. You can't delete email or mark it as spam.`,
@@ -705,7 +713,7 @@ export const makeBareAnswerer = (deps: {
   const prompts = (profile?: string) => {
     // ATLAS_USER_NAME wins; otherwise the profile's "Name:" line.
     const name = deps.userName ?? (profile ? profileName(profile) : undefined);
-    const extra = { ...(deps.elsewhere && deps.tools !== true ? { elsewhere: deps.elsewhere } : {}), ...(deps.decisions && deps.tools === true ? { decisions: true, tools: true } : {}), ...(deps.gaps && deps.tools === true ? { gaps: true, tools: true } : {}), ...(profile ? { profile } : {}), ...(deps.calendar ? { calendar: true } : {}), ...(deps.calendar && deps.tools === true ? { tools: true } : {}), ...(deps.calendar?.create && deps.tools === true ? { create: true } : {}), ...(deps.gmail && deps.tools === true ? { email: true, tools: true } : {}), ...(deps.gmail?.writer && deps.tools === true ? { emailDrafts: true } : {}), ...(deps.gmail?.tidy && deps.tools === true ? { emailTidy: true } : {}), ...(deps.memory && deps.tools === true ? { memory: true, tools: true } : {}), ...(deps.memory && deps.skills && deps.tools === true ? { skills: true } : {}), ...(deps.github && deps.tools === true ? { github: true, tools: true } : {}), ...(deps.github?.plans && deps.tools === true ? { plans: true } : {}), ...(deps.github && deps.code && deps.tools === true ? { code: true } : {}), ...(deps.github && deps.code?.study && deps.tools === true ? { study: true } : {}), ...(deps.gcloud && deps.tools === true ? { gcloud: true, tools: true } : {}), ...(deps.vendus && deps.tools === true ? { vendus: true, tools: true } : {}), ...(deps.house && deps.tools === true ? { house: true, tools: true } : {}), ...(deps.house?.blinds && deps.tools === true ? { houseControl: true } : {}), ...(deps.gcloud?.db && deps.tools === true ? { gcloudDb: true } : {}), ...(deps.route && deps.route.mode !== "all" && deps.tools === true ? { routed: true } : {}), ...(deps.brief === true && deps.calendar && deps.tools === true ? { brief: true } : {}), ...(deps.github && deps.code?.fix && deps.tools === true ? { fix: true } : {}), ...(deps.github && deps.code?.tasks && deps.tools === true ? { tasks: true } : {}) };
+    const extra = { ...(deps.elsewhere && deps.tools !== true ? { elsewhere: deps.elsewhere } : {}), ...(deps.decisions && deps.tools === true ? { decisions: true, tools: true } : {}), ...(deps.gaps && deps.tools === true ? { gaps: true, tools: true } : {}), ...(profile ? { profile } : {}), ...(deps.calendar ? { calendar: true } : {}), ...(deps.calendar && deps.tools === true ? { tools: true } : {}), ...(deps.calendar?.create && deps.tools === true ? { create: true } : {}), ...(deps.gmail && deps.tools === true ? { email: true, tools: true } : {}), ...(deps.gmail?.writer && deps.tools === true ? { emailDrafts: true } : {}), ...(deps.gmail?.tidy && deps.tools === true ? { emailTidy: true } : {}), ...(deps.gmail?.reader.unanswered && deps.tools === true ? { emailFollowups: true } : {}), ...(deps.memory && deps.tools === true ? { memory: true, tools: true } : {}), ...(deps.memory && deps.skills && deps.tools === true ? { skills: true } : {}), ...(deps.github && deps.tools === true ? { github: true, tools: true } : {}), ...(deps.github?.plans && deps.tools === true ? { plans: true } : {}), ...(deps.github && deps.code && deps.tools === true ? { code: true } : {}), ...(deps.github && deps.code?.study && deps.tools === true ? { study: true } : {}), ...(deps.gcloud && deps.tools === true ? { gcloud: true, tools: true } : {}), ...(deps.vendus && deps.tools === true ? { vendus: true, tools: true } : {}), ...(deps.house && deps.tools === true ? { house: true, tools: true } : {}), ...(deps.house?.blinds && deps.tools === true ? { houseControl: true } : {}), ...(deps.gcloud?.db && deps.tools === true ? { gcloudDb: true } : {}), ...(deps.route && deps.route.mode !== "all" && deps.tools === true ? { routed: true } : {}), ...(deps.brief === true && deps.calendar && deps.tools === true ? { brief: true } : {}), ...(deps.github && deps.code?.fix && deps.tools === true ? { fix: true } : {}), ...(deps.github && deps.code?.tasks && deps.tools === true ? { tasks: true } : {}) };
     return { typed: barePrompt(name, extra), spoken: barePrompt(name, { spoken: true, maxSentences: max, pauses, ...extra }) };
   };
   const withoutProfile = prompts();
@@ -822,7 +830,7 @@ export const makeBareAnswerer = (deps: {
     g === "calendar"
       ? [CALENDAR_READ_TOOL, ...(deps.brief === true ? [DAY_BRIEF_TOOL] : []), ...(deps.calendar?.create ? [CALENDAR_CREATE_TOOL] : [])]
       : g === "gmail"
-        ? [GMAIL_SEARCH_TOOL, GMAIL_READ_TOOL, ...(deps.gmail?.writer ? [GMAIL_DRAFT_TOOL] : []), ...(deps.gmail?.writer?.book && deps.gmail.writer.deletions ? [GMAIL_DRAFT_DELETE_TOOL] : []), ...(deps.gmail?.tidy ? [GMAIL_TIDY_TOOL] : [])]
+        ? [GMAIL_SEARCH_TOOL, GMAIL_READ_TOOL, ...(deps.gmail?.reader.unanswered ? [GMAIL_FOLLOWUPS_TOOL] : []), ...(deps.gmail?.writer ? [GMAIL_DRAFT_TOOL] : []), ...(deps.gmail?.writer?.book && deps.gmail.writer.deletions ? [GMAIL_DRAFT_DELETE_TOOL] : []), ...(deps.gmail?.tidy ? [GMAIL_TIDY_TOOL] : [])]
         : g === "github"
           ? [...GITHUB_TOOLS, ...(deps.github?.prs ? [GITHUB_PR_CLOSE_TOOL] : []), ...(deps.github?.plans ? PLAN_TOOLS : [])]
           : g === "code"
@@ -1078,6 +1086,7 @@ export const makeBareAnswerer = (deps: {
         gmail &&
         (call.name === GMAIL_SEARCH_TOOL.name ||
           call.name === GMAIL_READ_TOOL.name ||
+          (call.name === GMAIL_FOLLOWUPS_TOOL.name && gmail.reader.unanswered) ||
           (call.name === GMAIL_DRAFT_TOOL.name && gmail.writer) ||
           (call.name === GMAIL_DRAFT_DELETE_TOOL.name && gmail.writer?.book && gmail.writer.deletions))
       )
@@ -1627,6 +1636,16 @@ export const makeBareAnswerer = (deps: {
           confirm: { id, label: draftLabel(draft), kind: "draft-delete" },
         });
         return { callId: call.id, content: 'Not deleted yet: the app is asking them "Delete it" / "Keep it". Say in one short sentence that it needs their OK. Never say it\'s deleted.' };
+      }
+      if (call.name === GMAIL_FOLLOWUPS_TOOL.name && gmail.reader.unanswered) {
+        const input = typeof call.input === "object" && call.input !== null ? (call.input as Record<string, unknown>) : {};
+        const account = input.account;
+        if (!isGmailAccount(account)) return refuse("unknown account", "Refused: account is personal or noisysource.");
+        const days = typeof input.days === "number" && input.days >= 1 && input.days <= 13 ? Math.round(input.days) : 3;
+        const found = await gmail.reader.unanswered({ account: account, minDays: days, maxDays: 14, max: 10 }, signal);
+        if (!found.ok) return failed(account, found.error.code, found.error.message);
+        onStep?.({ kind: "tool", name: call.name, args: account, by: "model", ok: true, result: `${found.value.length} waiting` });
+        return { callId: call.id, content: found.value.length === 0 ? `${account}: nothing he sent in the last two weeks is waiting on a reply.` : searchForBrain(account, `sent ${days}+ days ago, no reply yet`, found.value, gmail.isEc) };
       }
       if (call.name === GMAIL_SEARCH_TOOL.name) {
         const checked = checkSearchRequest(call.input);

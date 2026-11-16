@@ -157,7 +157,7 @@ describe("the inbox part of the brief (#216)", () => {
     expect(text).toContain('## Drafts waiting for his Send it (last 3 days)\nnoisysource: to renato@x.pt: "Re: Orçamento"');
     expect(text).not.toContain("sprint");
     expect(text).toContain("## Tidied by Atlas in the last day\nArchived 7, labelled 2.");
-    expect(text).toContain("then drafts waiting for his Send it (who and what), and how much was tidied in a few words");
+    expect(text).toContain("then drafts waiting for his Send it (who and what), what's waiting on others (people first), and how much was tidied in a few words");
     expect(briefSummary(facts, isEc)).toBe("0 unread · 1 draft to send");
   });
 

@@ -1107,6 +1107,13 @@ Confirmed (2026-11-12):
   himself aren't picked up yet: the handoff between them is the branch,
   the PR and STATUS.md.
 
+- **Follow-ups (#217):** `GmailReader.unanswered`: `in:sent
+  newer_than:14d older_than:3d`, one `threads.get` (metadata) per
+  thread, at most 20; kept when the thread's last non-draft message is
+  his and the recipient isn't automated. Tool `gmail_followups`
+  (account, days 1–13, default 3); nudges are ordinary `gmail_draft`
+  replies, only for the ones he picks. The brief gets "Waiting on
+  others" (up to 6 per account) and the summary "N waiting on others".
 - **The brief's inbox part (#216):** with drafts on, the brief also
   reads `in:drafts newer_than:3d` per account and lists them (who,
   subject; EC never named) as waiting for his Send it; with triage on,
