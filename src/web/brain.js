@@ -249,7 +249,7 @@ export const makeBrainView = (root, options = {}) => {
         panel.append(ul);
       }
     }
-    if (info.hint && info.status !== "on") panel.append(text("p", "brain-panel-hint", info.hint));
+    if (info.hint) panel.append(text("p", "brain-panel-hint", info.hint));
     const open = options.open?.[id];
     if (open && info.status === "on") {
       const b = document.createElement("button");
