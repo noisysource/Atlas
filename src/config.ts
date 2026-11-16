@@ -117,7 +117,14 @@ export type Config = {
    * #248 (GEMINI=on): the Google brain, a third choice on the page. `model` answers (Gemini Flash),
    * `router` picks the tool groups (Flash-Lite). The key: GEMINI_API_KEY in .env locally, Secret Manager in production.
    */
-  readonly gemini: { readonly enabled: boolean; readonly model: ModelRef; readonly router: ModelRef; readonly secretName: string };
+  readonly gemini: {
+    readonly enabled: boolean;
+    readonly model: ModelRef;
+    readonly router: ModelRef;
+    readonly secretName: string;
+    /** #250 (GEMINI_LIVE, on with GEMINI=on): the microphone talks to Gemini Live when ✦ Google is picked. */
+    readonly live: { readonly enabled: boolean; readonly model: string; readonly voice?: string };
+  };
   readonly gmail: {
     readonly enabled: boolean;
     readonly write: boolean;
@@ -512,6 +519,9 @@ const EnvSchema = z.object({
   GEMINI_MODEL: z.string().regex(/^[a-z0-9][a-z0-9.-]{1,60}$/, { error: "must be a Gemini model id, like gemini-3.8-flash" }).default("gemini-3.8-flash"),
   GEMINI_ROUTER_MODEL: z.string().regex(/^[a-z0-9][a-z0-9.-]{1,60}$/, { error: "must be a Gemini model id, like gemini-3.5-flash-lite" }).default("gemini-3.5-flash-lite"),
   GEMINI_SECRET_NAME: z.string().regex(/^[A-Za-z0-9_-]{1,255}$/).default("gemini-api-key"),
+  GEMINI_LIVE: z.enum(["on", "off"]).default("on"),
+  GEMINI_LIVE_MODEL: z.string().regex(/^[a-z0-9][a-z0-9.-]{1,60}$/, { error: "must be a Gemini Live model id, like gemini-3.8-live" }).default("gemini-3.8-live"),
+  GEMINI_LIVE_VOICE: z.string().regex(/^[A-Za-z]{2,30}$/, { error: "must be a Gemini voice name, like Charon" }).optional(),
   VENDUS_SECRET_NAME: optionalString,
 });
 
@@ -646,7 +656,7 @@ export const loadConfig = (given: Env): Result<Config, string> => {
       path: "data/brief",
     },
     costs: { subscriptions: parseSubscriptions(e.COST_SUBSCRIPTIONS) ?? [], path: "data/costs.jsonl" },
-    gemini: { enabled: e.GEMINI === "on", model: { provider: "google", model: e.GEMINI_MODEL }, router: { provider: "google", model: e.GEMINI_ROUTER_MODEL }, secretName: e.GEMINI_SECRET_NAME },
+    gemini: { enabled: e.GEMINI === "on", model: { provider: "google", model: e.GEMINI_MODEL }, router: { provider: "google", model: e.GEMINI_ROUTER_MODEL }, secretName: e.GEMINI_SECRET_NAME, live: { enabled: e.GEMINI === "on" && e.GEMINI_LIVE === "on", model: e.GEMINI_LIVE_MODEL, ...(e.GEMINI_LIVE_VOICE ? { voice: e.GEMINI_LIVE_VOICE } : {}) } },
     webSearch: { enabled: e.WEB_SEARCH === "on", perQuestion: e.WEB_SEARCH_PER_QUESTION, perDay: e.WEB_SEARCH_PER_DAY, country: e.WEB_SEARCH_COUNTRY, city: e.WEB_SEARCH_CITY.trim() },
     gmail: { enabled: e.GMAIL === "on", write: e.GMAIL === "on" && e.GMAIL_WRITE === "on", tidy: e.GMAIL === "on" && e.GMAIL_TIDY === "on",
       archiveClears: e.GMAIL_ARCHIVE_CLEARS.split(",").map((l) => l.trim()).filter((l) => l !== "" && l.length <= 40).slice(0, 10),

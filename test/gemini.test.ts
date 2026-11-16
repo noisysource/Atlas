@@ -146,7 +146,7 @@ describe("the Google brain", () => {
   it("GEMINI=on with its models; the key from .env locally, never in production", async () => {
     const config = loadConfig({ GEMINI: "on" });
     if (!config.ok) throw new Error(config.error);
-    expect(config.value.gemini).toEqual({ enabled: true, model: { provider: "google", model: "gemini-3.8-flash" }, router: { provider: "google", model: "gemini-3.5-flash-lite" }, secretName: "gemini-api-key" });
+    expect(config.value.gemini).toEqual({ enabled: true, model: { provider: "google", model: "gemini-3.8-flash" }, router: { provider: "google", model: "gemini-3.5-flash-lite" }, secretName: "gemini-api-key", live: { enabled: true, model: "gemini-3.8-live" } });
     expect(await resolveGeminiKey({ config: config.value, env: { GEMINI_API_KEY: " g-key " }, getSecret: undefined })).toEqual(ok({ key: "g-key", source: "env" }));
     expect((await resolveGeminiKey({ config: config.value, env: {}, getSecret: undefined })).ok).toBe(false);
     const prod = loadConfig({ NODE_ENV: "production", GEMINI: "on", GOOGLE_CLOUD_PROJECT: "noisysource-agent" });

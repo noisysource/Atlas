@@ -1122,6 +1122,21 @@ Confirmed (2026-11-12):
   cycles Local → Claude → Google. Key: `GEMINI_API_KEY` in `.env` locally,
   Secret Manager (`GEMINI_SECRET_NAME`) in production. Next: Gemini Live
   for the microphone.
+- **Gemini Live (#250):** `src/live/live.ts` holds one Live session per
+  page on the Mac (WebSocket to `BidiGenerateContent`, key in the URL,
+  server to server), opened on the first spoken turn, closed after 10
+  idle minutes, resumed with Google's handle after goAway. Manual activity
+  (`automaticActivityDetection.disabled`): the page's Silero detector cuts
+  each sentence; `POST /live/turn` runs Whisper and the EC precheck first
+  (he chose this over checking while Google listens: EC turns never reach
+  Google and come back as `ec`, which the page sends the normal way), then
+  sends activityStart, the PCM, activityEnd. One tool, `ask_atlas` (his
+  choice over exposing every tool), runs `handleAsk` with `brain: google`,
+  so tools, cards, EC and the honesty guard are the typed path's; at most
+  3 a turn. Audio (24 kHz PCM) and the output transcript stream back as
+  SSE; the page plays them through `live.js` behind the same `speaker`
+  handle, so barge-in works as with Kokoro. Usage per turn, split by
+  modality, goes to costs as `voice`.
 - **Costs (#247):** `src/costs.ts`. Every `LlmCall` built in `app.ts`
   is wrapped (`meteredLlm`, purpose classify / answer / local) and the
   code agent and task runner too (`meteredCodeAgent`,
