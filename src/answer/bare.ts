@@ -26,7 +26,7 @@ import {
 } from "../calendar/read.js";
 import { rangeLabel, readSentence, resolveDatePhrase, shortRangeLabel } from "../calendar/dates.js";
 import { calendarIntent } from "../calendar/intent.js";
-import { checkReadRequest, checkSearchRequest, EC_EMAIL, GMAIL_READ_TOOL, GMAIL_SEARCH_TOOL, isEcEmail, messageForBrain, searchForBrain, type GmailReader, GMAIL_FOLLOWUPS_TOOL } from "../gmail/gmail.js";
+import { checkAttachmentRequest, checkReadRequest, checkSearchRequest, EC_EMAIL, GMAIL_ATTACHMENT_TOOL, GMAIL_READ_TOOL, GMAIL_SEARCH_TOOL, isEcEmail, messageForBrain, searchForBrain, type GmailReader, GMAIL_FOLLOWUPS_TOOL } from "../gmail/gmail.js";
 import {
   checkChecksRequest,
   checkIssuesRequest,
@@ -57,6 +57,7 @@ import { staleNote, staleSuffix, type CodeRefresh } from "../code/freshness.js";
 import { checkStart, TASK_LIST_TOOL, TASK_PUBLISH_TOOL, TASK_START_TOOL, TASK_TELL_TOOL, TASK_TOOLS, taskForBrain, type Tasks } from "../code/tasks.js";
 import { checkFixRequest, CODE_FIX_TOOL, type Fixes } from "../code/fix.js";
 import { checkPrClose, GITHUB_PR_CLOSE_TOOL, type PrCloser } from "../github/pr-close.js";
+import { attachmentForBrain } from "../gmail/attachments.js";
 import { BRIEF_EMAIL_QUERY, briefForBrain, briefSources, briefSummary, DAY_BRIEF_TOOL, gatherBrief } from "../brief.js";
 import { GROUP_ABOUT, groupOfTool, groupsByWords, groupsUsedLately, pickGroups, TOOL_GROUPS, TOOLS_MORE, toolsMoreTool, type RouterMode, type ToolGroup, type ToolRouter } from "./tool-groups.js";
 import { checkDbCollections, checkDbGet, checkDbQuery, collectionsForBrain, DB_COLLECTIONS_TOOL, DB_QUERY_TOOL, DB_TOOLS, docForBrain, docsForBrain, type DbReader } from "../gcloud/firestore.js";
@@ -306,7 +307,7 @@ export const barePrompt = (
   const email = options.email === true && options.tools === true;
   const emailLines = email
     ? [
-        "You can also search and read their email, read-only, with gmail_search and gmail_read, in two accounts: \"personal\" (their personal Gmail) and \"noisysource\" (their company Noisy Source). Pick the account that fits; if unclear, search both. Search first, then read an email only when its snippet isn't enough. Answer about their email only from what the tools returned, and never invent senders, subjects or contents.",
+        "You can also search and read their email, read-only, with gmail_search and gmail_read, in two accounts: \"personal\" (their personal Gmail) and \"noisysource\" (their company Noisy Source). Pick the account that fits; if unclear, search both. Search first, then read an email only when its snippet isn't enough. When the answer is in an attachment (an invoice, a statement, a quote), read it with gmail_attachment: PDFs and text files, not scans or images. Answer about their email only from what the tools returned, and never invent senders, subjects or contents.",
         ...(options.emailFollowups === true
           ? [
               `For "who hasn't answered me?", "anything to follow up?", and in a triage, call gmail_followups for each account: emails he sent that got no reply. Mention them as waiting on others, one line each (who, what, since when), people before services. ${options.emailDrafts === true ? "When he wants a nudge, draft a short, friendly one in the same thread with gmail_draft (reply_to_id = that email's id), in the email's language; only for the ones he picks, or the obviously important ones if he asked for nudges." : "You can't send nudges; he can reply himself."}`,
@@ -860,7 +861,7 @@ export const makeBareAnswerer = (deps: {
     g === "calendar"
       ? [CALENDAR_READ_TOOL, ...(deps.brief === true ? [DAY_BRIEF_TOOL] : []), ...(deps.calendar?.create ? [CALENDAR_CREATE_TOOL] : []), ...(deps.calendar?.change ? [CALENDAR_CHANGE_TOOL] : [])]
       : g === "gmail"
-        ? [GMAIL_SEARCH_TOOL, GMAIL_READ_TOOL, ...(deps.gmail?.reader.unanswered ? [GMAIL_FOLLOWUPS_TOOL] : []), ...(deps.gmail?.writer ? [GMAIL_DRAFT_TOOL] : []), ...(deps.gmail?.writer?.book && deps.gmail.writer.deletions ? [GMAIL_DRAFT_DELETE_TOOL] : []), ...(deps.gmail?.tidy ? [GMAIL_TIDY_TOOL] : [])]
+        ? [GMAIL_SEARCH_TOOL, GMAIL_READ_TOOL, ...(deps.gmail?.reader.attachment ? [GMAIL_ATTACHMENT_TOOL] : []), ...(deps.gmail?.reader.unanswered ? [GMAIL_FOLLOWUPS_TOOL] : []), ...(deps.gmail?.writer ? [GMAIL_DRAFT_TOOL] : []), ...(deps.gmail?.writer?.book && deps.gmail.writer.deletions ? [GMAIL_DRAFT_DELETE_TOOL] : []), ...(deps.gmail?.tidy ? [GMAIL_TIDY_TOOL] : [])]
         : g === "github"
           ? [...GITHUB_TOOLS, ...(deps.github?.prs ? [GITHUB_PR_CLOSE_TOOL] : []), ...(deps.github?.plans ? PLAN_TOOLS : [])]
           : g === "code"
@@ -1155,6 +1156,7 @@ export const makeBareAnswerer = (deps: {
         gmail &&
         (call.name === GMAIL_SEARCH_TOOL.name ||
           call.name === GMAIL_READ_TOOL.name ||
+          (call.name === GMAIL_ATTACHMENT_TOOL.name && gmail.reader.attachment) ||
           (call.name === GMAIL_FOLLOWUPS_TOOL.name && gmail.reader.unanswered) ||
           (call.name === GMAIL_DRAFT_TOOL.name && gmail.writer) ||
           (call.name === GMAIL_DRAFT_DELETE_TOOL.name && gmail.writer?.book && gmail.writer.deletions))
@@ -1716,6 +1718,22 @@ export const makeBareAnswerer = (deps: {
           confirm: { id, label: draftLabel(draft), kind: "draft-delete" },
         });
         return { callId: call.id, content: 'Not deleted yet: the app is asking them "Delete it" / "Keep it". Say in one short sentence that it needs their OK. Never say it\'s deleted.' };
+      }
+      if (call.name === GMAIL_ATTACHMENT_TOOL.name && gmail.reader.attachment) {
+        const checked = checkAttachmentRequest(call.input);
+        if (!checked.ok) return refuse(checked.error, `Refused: ${checked.error}. Use an email id from gmail_search and an attachment number from gmail_read.`);
+        const r = checked.value;
+        const got = await gmail.reader.attachment(r, signal);
+        if (!got.ok) return failed(r.account, got.error.code, got.error.message);
+        if (isEcEmail(got.value.message, gmail.isEc)) {
+          deps.log?.info("gmail attachment", { account: r.account, ec: true });
+          onStep?.({ kind: "tool", name: GMAIL_ATTACHMENT_TOOL.name, args: r.account, by: "model", ok: false, error: "EC: for Kiro" });
+          return { callId: call.id, content: `That's an ${EC_EMAIL}: European Commission work. Don't describe it; say it's for Kiro.`, isError: true };
+        }
+        const a = got.value.attachment;
+        deps.log?.info("gmail attachment", { account: r.account, ec: false, chars: a.text.length, ...(a.pages ? { pages: a.pages } : {}), ms: Math.round(performance.now() - started) });
+        onStep?.({ kind: "tool", name: GMAIL_ATTACHMENT_TOOL.name, args: r.account, by: "model", ok: true, result: a.pages ? `${a.pages} ${a.pages === 1 ? "page" : "pages"}` : "1 file" });
+        return { callId: call.id, content: attachmentForBrain(r.account, r.id, a) };
       }
       if (call.name === GMAIL_FOLLOWUPS_TOOL.name && gmail.reader.unanswered) {
         const input = typeof call.input === "object" && call.input !== null ? (call.input as Record<string, unknown>) : {};

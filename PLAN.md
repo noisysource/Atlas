@@ -1107,6 +1107,16 @@ Confirmed (2026-11-12):
   himself aren't picked up yet: the handoff between them is the branch,
   the PR and STATUS.md.
 
+- **Email attachments (#235):** `src/gmail/attachments.ts`. `gmail_read`
+  lists attachments (parts with a filename and an `attachmentId`: name,
+  type, size); `gmail_attachment` (account, id, attachment number) GETs
+  the message, then `messages/{id}/attachments/{attachmentId}`, and
+  extracts text: PDFs with `unpdf` (pinned 2.1.0, per page, at most 40
+  pages), text/CSV as UTF-8; images and scans are refused with why.
+  Caps: 10 MB (not downloaded beyond), 20,000 characters to the brain.
+  The EC check runs on the parent email's headers before any text is
+  returned. Read-only scope unchanged; router words: attachment, pdf,
+  anexo.
 - **Web search (#220):** Anthropic's server tool
   `web_search_20250305`, added by `buildParams` when the request carries
   `webSearch {maxUses, country, city, timezone}`; `mapResponse` returns

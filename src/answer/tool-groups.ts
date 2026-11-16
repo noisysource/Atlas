@@ -22,7 +22,7 @@ export const TOOL_GROUPS: readonly ToolGroup[] = ["calendar", "gmail", "github",
 /** One line each, for the router and for tools_more. */
 export const GROUP_ABOUT: Record<ToolGroup, string> = {
   calendar: "his calendars: what's on, free time, booking",
-  gmail: "his email: search, read, draft, delete drafts",
+  gmail: "his email: search, read (and PDF attachments), draft, delete drafts",
   github: "his GitHub repos: files, issues, pull requests, CI checks",
   code: "understanding his code: notes on studied repos and apps, studying, asking the code agent",
   cloud: "his Google Cloud environments: errors, logs and the database",
@@ -76,9 +76,9 @@ const RULES: readonly { readonly pattern: RegExp; readonly groups: readonly Tool
   },
   {
     pattern: words(`
-      email*, e-mail*, mail*, inbox, unread, message*, repl*, draft*, send, sent, wrote, newsletter*, sender, subject,
+      email*, e-mail*, mail*, inbox, unread, message*, repl*, draft*, send, sent, wrote, newsletter*, sender, subject, attachment*, attached, pdf, pdfs,
       triage, tidy, archive*, label*, what needs me, needs me, follow up, follow-up*, followup*, no reply, answered me, waiting on,
-      correio*, mensage*, rascunho*, responde*, enviar, envia*, escreveu, caixa de entrada, arquiva*, arruma*, sem resposta, respondeu, responderam`),
+      correio*, mensage*, rascunho*, anexo*, anexad*, responde*, enviar, envia*, escreveu, caixa de entrada, arquiva*, arruma*, sem resposta, respondeu, responderam`),
     groups: ["gmail"],
   },
   {
