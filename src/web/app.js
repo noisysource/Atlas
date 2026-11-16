@@ -1628,7 +1628,7 @@ const liveTurn = async (samples, how) => {
   refreshPending();
   const tag = document.createElement("span");
   tag.className = "brain-tag";
-  tag.textContent = `${brainLabels.google ?? "Google"} · Live`;
+  tag.textContent = "Google · Gemini Live"; // the typed brain's label names Flash, not the Live model
   item.append(tag);
   state.history = appendTurn(appendTurn(state.history, "user", heard), "assistant", said.trim() || "—", toolsRan(steps));
   if (interrupted) item.classList.add("interrupted");
