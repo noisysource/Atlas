@@ -385,6 +385,11 @@ Requires Node 22.13 or later (the memory store uses `node:sqlite`, which needs a
        as spam; EC email is left alone. Reconnect each account once with
        tidying allowed: `GMAIL_WRITE=on GMAIL_TIDY=on npm run gmail:connect
        -- personal` (and `noisysource`), then add `GMAIL_TIDY=on` to `.env`.
+       Archiving also marks the email read. If you read mail in a label
+       view (a "NoisySource" section, say), put its name in
+       `GMAIL_ARCHIVE_CLEARS=NoisySource` so archiving takes that label off
+       too; putting an email back in the inbox puts it back. If he picked
+       the wrong emails, "put them back in the inbox" is a card too.
      - **Introspection (`INTROSPECTION=on`, with `MEMORY=on`).** Every
        night at 03:30, while Atlas runs, he reviews his short-term memory:
        drops what's done, makes lasting things long-term, merges updates,

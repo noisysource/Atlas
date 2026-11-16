@@ -48,7 +48,7 @@ describe("tidying the inbox", () => {
     expect(p).toMatchObject({ ok: true, value: { label: 'noisysource: archive 2: "Top stories" (Medium Daily Digest), "You appeared in 5 searches" (LinkedIn); label 1 as "Bills": "Fatura de novembro" (Via Verde)', leftOut: 2 } });
     expect(f.applied).toEqual([]);
     if (!p.ok) throw new Error("no card");
-    expect((await tidy.decide(p.value.id, "yes")).text).toBe("Done in noisysource: archived 2 and labelled 1. Archived email is still in All Mail.");
+    expect((await tidy.decide(p.value.id, "yes")).text).toBe("Done in noisysource: archived 2 and labelled 1. Archived email is marked read and still in All Mail.");
     expect(f.applied).toEqual([{ account: "noisysource", archive: ["m1aaaaaa", "m4aaaaaa"], labels: [{ name: "Bills", ids: ["m2aaaaaa"] }] }]);
     // Single use.
     expect((await tidy.decide(p.value.id, "yes")).ok).toBe(false);
@@ -83,10 +83,28 @@ describe("tidying the inbox", () => {
       { method: "POST", url: "/messages/batchModify", body: { ids: ["m5aaaaaa"], addLabelIds: ["Label_1"] } },
       { method: "POST", url: "/labels", body: { name: "Bills", labelListVisibility: "labelShow", messageListVisibility: "show" } },
       { method: "POST", url: "/messages/batchModify", body: { ids: ["m2aaaaaa"], addLabelIds: ["Label_2"] } },
-      { method: "POST", url: "/messages/batchModify", body: { ids: ["m1aaaaaa"], removeLabelIds: ["INBOX"] } },
+      { method: "POST", url: "/messages/batchModify", body: { ids: ["m1aaaaaa"], removeLabelIds: ["INBOX", "UNREAD"] } },
       { method: "POST", url: "/messages/batchModify", body: { ids: ["m6aaaaaa"], addLabelIds: ["INBOX"] } },
     ]);
     expect(calls.some((c) => c.method === "DELETE" || /trash|delete/.test(c.url))).toBe(false);
+  });
+
+  it("archiving also takes off the view labels (like NoisySource) and marks read; undo puts the labels back (#228)", async () => {
+    const calls: { method: string; url: string; body?: unknown }[] = [];
+    const fetcher = (async (url: string, init: RequestInit = {}) => {
+      calls.push({ method: init.method ?? "GET", url: url.replace("https://gmail.googleapis.com/gmail/v1/users/me", ""), ...(init.body ? { body: JSON.parse(String(init.body)) } : {}) });
+      if (url.endsWith("/labels")) return new Response(JSON.stringify({ labels: [{ id: "Label_9", name: "NoisySource" }] }), { status: 200 });
+      return new Response(null, { status: 204 });
+    }) as typeof fetch;
+    const tidier = makeGmailTidier({ accessToken: async () => ok("t"), fetch: fetcher, archiveClears: ["noisysource", "Not There"] });
+    await tidier.apply({ account: "noisysource", archive: ["m1aaaaaa"], labels: [], inbox: ["m2aaaaaa"] });
+    expect(calls).toEqual([
+      { method: "GET", url: "/labels" },
+      { method: "POST", url: "/messages/batchModify", body: { ids: ["m1aaaaaa"], removeLabelIds: ["INBOX", "UNREAD", "Label_9"] } },
+      { method: "POST", url: "/messages/batchModify", body: { ids: ["m2aaaaaa"], addLabelIds: ["INBOX", "Label_9"] } },
+    ]);
+    const c = loadConfig({ ANTHROPIC_API_KEY: "sk-test", BARE_MODE: "on", GMAIL: "on", GMAIL_TIDY: "on", GMAIL_ARCHIVE_CLEARS: " NoisySource , " });
+    expect(c.ok && c.value.gmail.archiveClears).toEqual(["NoisySource"]);
   });
 
   it("GMAIL_TIDY=on needs GMAIL=on", () => {

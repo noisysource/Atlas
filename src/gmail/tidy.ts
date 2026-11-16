@@ -9,6 +9,8 @@
 // changes anything, through Gmail's batchModify: archiving takes the message
 // out of the inbox (it stays in All Mail), labelling adds a label (created
 // if it doesn't exist). Nothing is ever deleted, marked as spam or sent.
+// Archiving also marks it read and takes off the labels in GMAIL_ARCHIVE_CLEARS (the views he
+// reads mail in, like a "NoisySource" section), so it leaves those views too.
 // Needs the Gmail modify scope (GMAIL_TIDY=on npm run gmail:connect -- <account>).
 
 import { randomBytes } from "node:crypto";
@@ -87,7 +89,16 @@ export type GmailTidier = {
 
 const API = "https://gmail.googleapis.com/gmail/v1/users/me";
 
-export const makeGmailTidier = (deps: { readonly accessToken: (account: GmailAccount) => Promise<Result<string, CalendarError>>; readonly fetch?: typeof fetch }): GmailTidier => {
+export const makeGmailTidier = (deps: {
+  readonly accessToken: (account: GmailAccount) => Promise<Result<string, CalendarError>>;
+  readonly fetch?: typeof fetch;
+  /**
+   * #228: labels that archiving also takes off (the views he reads mail in, like "NoisySource"),
+   * so an archived email leaves those views too. Archiving also marks it read. Putting it back
+   * in the inbox puts these labels back.
+   */
+  readonly archiveClears?: readonly string[];
+}): GmailTidier => {
   const doFetch = deps.fetch ?? fetch;
   const call = async (account: GmailAccount, path: string, init?: { method: string; body: unknown }): Promise<Result<unknown, CalendarError>> => {
     const token = await deps.accessToken(account);
@@ -119,10 +130,17 @@ export const makeGmailTidier = (deps: { readonly accessToken: (account: GmailAcc
     },
     apply: async (plan) => {
       let labelled = 0;
-      if (plan.labels.length > 0) {
+      const back = plan.inbox ?? [];
+      const clears = deps.archiveClears ?? [];
+      let existing = new Map<string, string>();
+      if (plan.labels.length > 0 || (clears.length > 0 && (plan.archive.length > 0 || back.length > 0))) {
         const list = await call(plan.account, "/labels");
         if (!list.ok) return list;
-        const existing = new Map(((list.value as { labels?: { id?: unknown; name?: unknown }[] }).labels ?? []).flatMap((l) => (typeof l.id === "string" && typeof l.name === "string" ? [[l.name.toLowerCase(), l.id] as const] : [])));
+        existing = new Map(((list.value as { labels?: { id?: unknown; name?: unknown }[] }).labels ?? []).flatMap((l) => (typeof l.id === "string" && typeof l.name === "string" ? [[l.name.toLowerCase(), l.id] as const] : [])));
+      }
+      // The view labels that exist in this account; a name that isn't there is skipped.
+      const viewIds = clears.flatMap((n) => existing.get(n.toLowerCase()) ?? []);
+      if (plan.labels.length > 0) {
         for (const l of plan.labels) {
           let id = existing.get(l.name.toLowerCase());
           if (!id) {
@@ -138,12 +156,12 @@ export const makeGmailTidier = (deps: { readonly accessToken: (account: GmailAcc
         }
       }
       if (plan.archive.length > 0) {
-        const done = await call(plan.account, "/messages/batchModify", { method: "POST", body: { ids: plan.archive, removeLabelIds: ["INBOX"] } });
+        // Out of the inbox and the views he reads in, and read. Still in All Mail.
+        const done = await call(plan.account, "/messages/batchModify", { method: "POST", body: { ids: plan.archive, removeLabelIds: ["INBOX", "UNREAD", ...viewIds] } });
         if (!done.ok) return done;
       }
-      const back = plan.inbox ?? [];
       if (back.length > 0) {
-        const done = await call(plan.account, "/messages/batchModify", { method: "POST", body: { ids: back, addLabelIds: ["INBOX"] } });
+        const done = await call(plan.account, "/messages/batchModify", { method: "POST", body: { ids: back, addLabelIds: ["INBOX", ...viewIds] } });
         if (!done.ok) return done;
       }
       return ok({ archived: plan.archive.length, labelled, ...(back.length > 0 ? { restored: back.length } : {}) });
@@ -223,7 +241,7 @@ export const makeInboxTidy = (deps: { readonly tidier: GmailTidier; readonly isE
         ...(done.value.labelled > 0 ? [`labelled ${done.value.labelled}`] : []),
         ...(done.value.restored ? [`put ${done.value.restored} back in the inbox`] : []),
       ].join(" and ");
-      return { ok: true, text: `Done in ${p.plan.account}: ${said}.${done.value.archived > 0 ? " Archived email is still in All Mail." : ""}`, tool: `gmail_tidy ${p.plan.account} ${said}` };
+      return { ok: true, text: `Done in ${p.plan.account}: ${said}.${done.value.archived > 0 ? " Archived email is marked read and still in All Mail." : ""}`, tool: `gmail_tidy ${p.plan.account} ${said}` };
     },
   };
 };

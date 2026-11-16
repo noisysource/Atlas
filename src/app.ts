@@ -241,7 +241,7 @@ export const buildDeps = async (inputs: AppInputs): Promise<Result<Deps, string>
     ? { write: inputs.gmailWriter ?? makeGmailWriter({ accessToken: gmailToken }), pending: makePendingDrafts(), book: makeDraftBook(), deletions: makePendingDrafts() }
     : undefined;
   // #214 (GMAIL_TIDY=on): archive and label after "Tidy it"; never delete.
-  const inboxTidy = config.gmail.tidy ? makeInboxTidy({ tidier: makeGmailTidier({ accessToken: gmailToken }), isEc: isEcText, log }) : undefined;
+  const inboxTidy = config.gmail.tidy ? makeInboxTidy({ tidier: makeGmailTidier({ accessToken: gmailToken, archiveClears: config.gmail.archiveClears }), isEc: isEcText, log }) : undefined;
   const gmail = config.gmail.enabled
     ? { reader: inputs.gmailReader ?? makeGmailReader({ accessToken: gmailToken }), isEc: isEcText, ...(drafts ? { writer: drafts } : {}), ...(inboxTidy ? { tidy: inboxTidy } : {}) }
     : undefined;
