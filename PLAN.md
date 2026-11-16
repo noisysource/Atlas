@@ -1117,6 +1117,15 @@ Confirmed (2026-11-12):
   (GMAIL_TIDY=on, reconnect). Next: reply drafts (#215), the brief's
   inbox part (#216), follow-ups (#217); then reminders (#218), calendar
   move/cancel (#219), web search (#220).
+- **Cards by voice, and steps that follow the answer (#224):**
+  `card-lib.js` `cardAnswer` reads a short reply (at most five words: yes
+  / no in English and Portuguese, or the card's own button words) as the
+  answer to the newest pending card, before it's treated as a question;
+  the outcome is spoken in a voice session. The tree's waiting call (by
+  the card's id, `traceDecided`) and the message's "How I got here" text
+  turn done / declined / failed. Coding tasks whose pull request was
+  merged or closed on GitHub close themselves (checked when listed, at
+  most every two minutes; the copy is deleted).
 - **Gaps (#138):** `src/gaps/gaps.ts`. `gap_note` (what was asked and
   what's missing, in general words; emails masked; EC refused; the same
   gap, by most words of what was asked, is counted instead of repeated),

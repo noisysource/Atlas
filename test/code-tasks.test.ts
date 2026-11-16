@@ -145,6 +145,8 @@ describe("the task list", () => {
     const posted: { url: string; body: Record<string, unknown> }[] = [];
     let issueReply = () => new Response(JSON.stringify({ number: 151 }), { status: 201 });
     const removed: string[] = [];
+    let clock = new Date("2026-11-14T23:00:00Z").getTime();
+    let pr: { state: string; merged_at: string | null } = { state: "open", merged_at: null };
     const run: RunOut = async (_c, args) => {
       git.push(args.join(" "));
       if (args[0] === "log") return { code: 0, stdout: "abc1234 refactor(finances): move the ledger\n" };
@@ -166,8 +168,9 @@ describe("the task list", () => {
       maxUsd: 3,
       maxTurns: 80,
       newId: () => "a1b2c3d4",
-      now: () => new Date("2026-11-14T23:00:00Z"),
+      now: () => new Date(clock),
       fetch: (async (url: string, init: RequestInit = {}) => {
+        if (init.method !== "POST" && url.includes("/pulls/")) return new Response(JSON.stringify(pr), { status: 200 });
         if (init.method !== "POST") {
           // An existing issue: #7 is open, #8 is closed.
           const n = Number(url.split("/").pop());
@@ -181,7 +184,7 @@ describe("the task list", () => {
     const settle = async () => {
       for (let i = 0; i < 50; i += 1) await new Promise((r) => setTimeout(r, 2));
     };
-    return { tasks, kept: () => kept, prompts, git, posted, removed, settle, failIssues: () => void (issueReply = () => new Response("{}", { status: 403 })) };
+    return { tasks, kept: () => kept, prompts, git, posted, removed, settle, later: (minutes: number) => void (clock += minutes * 60_000), setPr: (p: typeof pr) => void (pr = p), failIssues: () => void (issueReply = () => new Response("{}", { status: 403 })) };
   };
   const start = { owner: "noisysource", name: "noisysource", title: "Restructure FinHub", goal: "Continue the repo restructure from PR #143, FinHub first." };
 
@@ -231,6 +234,24 @@ describe("the task list", () => {
     if (!again.ok) throw new Error("no card");
     expect((await s.tasks.decide(again.value.card, "yes")).text).toContain("is updated");
     expect(s.posted).toHaveLength(2);
+  });
+
+  it("a task whose pull request was merged or closed on GitHub closes itself (#224)", async () => {
+    const s = setup();
+    await s.tasks.decide(s.tasks.proposeStart(start), "yes");
+    await s.settle();
+    const p = await s.tasks.proposePublish("a1b2c3d4");
+    if (!p.ok) throw new Error("no card");
+    await s.tasks.decide(p.value.card, "yes");
+    s.later(3);
+    expect(await s.tasks.list()).toHaveLength(1);
+    s.setPr({ state: "closed", merged_at: null });
+    // Checked at most every two minutes.
+    expect(await s.tasks.list()).toHaveLength(1);
+    s.later(3);
+    expect(await s.tasks.list()).toEqual([]);
+    expect(s.kept()[0]).toMatchObject({ status: "closed", ended: "closed" });
+    expect(s.removed).toEqual(["/data/tasks/a1b2c3d4"]);
   });
 
   it("publishing closes the issue he named, if it's open", async () => {
