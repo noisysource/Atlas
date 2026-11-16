@@ -13,7 +13,8 @@ import type { Precheck } from "../types.js";
 export const EC_EVENT = "EC work, handled by Kiro";
 
 /** At most this many days in one read. */
-export const MAX_READ_DAYS = 14;
+/** #230: a month per read (14 was too short: "the rest of the month" was refused). */
+export const MAX_READ_DAYS = 31;
 /** How far back and ahead a read may go, in days from today. */
 export const MAX_DAYS_BACK = 31;
 export const MAX_DAYS_AHEAD = 366;
@@ -71,7 +72,7 @@ export const CALENDAR_REQUEST_SCHEMA: JsonObjectSchema = {
 export const CALENDAR_READ_TOOL: LlmTool = {
   name: "calendar_read",
   description:
-    'Read their Google Calendars (read-only) for a range of days, inclusive. Use it whenever answering needs what\'s on their calendar: what\'s on, whether they\'re free or busy, their plans, meetings or appointments. At most 14 days per call. Without account it reads every connected calendar: "personal" (Renato\'s own) and "noisysource" (his company Noisy Source\'s); each event says which. Give account only when they ask about one.',
+    'Read their Google Calendars (read-only) for a range of days, inclusive. Use it whenever answering needs what\'s on their calendar: what\'s on, whether they\'re free or busy, their plans, meetings or appointments. At most 31 days per call; for longer, read it in parts. Without account it reads every connected calendar: "personal" (Renato\'s own) and "noisysource" (his company Noisy Source\'s); each event says which. Give account only when they ask about one.',
   inputSchema: {
     type: "object",
     properties: {

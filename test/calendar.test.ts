@@ -92,7 +92,7 @@ describe("checking the brain's request in code (#100)", () => {
     [{ tool: "calendar_read", from: "tomorrow", to: "2026-11-11" }, "dates aren't YYYY-MM-DD"],
     [{ tool: "calendar_read", from: "2026-02-30", to: "2026-02-30" }, "not real dates"],
     [{ tool: "calendar_read", from: "2026-11-12", to: "2026-11-11" }, "ends before it starts"],
-    [{ tool: "calendar_read", from: "2026-11-10", to: "2026-11-30" }, "too many days"],
+    [{ tool: "calendar_read", from: "2026-11-10", to: "2026-12-20" }, "too many days"],
     [{ tool: "calendar_read", from: "2028-01-01", to: "2028-01-01" }, "too far from today"],
     [{ tool: "calendar_read", from: "2026-09-01", to: "2026-09-01" }, "too far from today"],
     ["calendar_read", "not an object"],

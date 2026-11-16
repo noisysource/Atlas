@@ -109,7 +109,8 @@ export const traceTree = (trace) => {
   const branches = [...byTool].map(([tool, calls]) => ({
     tool,
     service: calls[0]?.service ?? "Unknown",
-    status: worst(calls),
+    // #230: a call that failed and was then retried successfully stays red on its leaf, not on the branch.
+    status: worst(calls.filter((c, i) => !(c.status === "failed" && calls.slice(i + 1).some((d) => d.status === "used" || d.status === "waiting")))),
     leaves: calls.map((c) => ({ label: [c.target, c.detail].filter(Boolean).join(" · "), result: c.result, status: c.status })),
   }));
   const offered = trace.offered?.length;
@@ -121,7 +122,7 @@ export const traceTree = (trace) => {
         : branches.length === 0
           ? `${offered} ${offered === 1 ? "tool" : "tools"} offered, none used`
           : `Tools · ${offered}`;
-  return { hub, status: branches.length === 0 ? "idle" : worst(trace.calls), branches, handoff: trace.handoff };
+  return { hub, status: branches.length === 0 ? "idle" : branches.reduce((w, b) => (weight[b.status] > weight[w] ? b.status : w), /** @type {CallStatus} */ ("used")), branches, handoff: trace.handoff };
 };
 
 /**
