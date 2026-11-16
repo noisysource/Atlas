@@ -120,9 +120,11 @@ export const reachView = async (input: ReachInput): Promise<readonly ReachNode[]
               { name: "gmail_draft_delete", does: "delete a draft he wrote, after your OK" },
             ]
           : []),
+        // #214: triage, tidied after "Tidy it".
+        ...(config.gmail.tidy ? [{ name: "gmail_tidy", does: "archive and label, after your OK (never deletes)" }] : []),
       ],
       accounts: gmailAccounts,
-      ...(config.gmail.enabled ? {} : { hint: "GMAIL=on in .env" }),
+      ...(config.gmail.enabled ? (config.gmail.tidy ? {} : { hint: "For inbox triage: GMAIL_TIDY=on in .env, after GMAIL_WRITE=on GMAIL_TIDY=on npm run gmail:connect -- <account>" }) : { hint: "GMAIL=on in .env" }),
     },
     {
       id: "github",
