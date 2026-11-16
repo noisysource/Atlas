@@ -173,8 +173,18 @@ export type LiveError = { readonly kind: "connect" | "setup" | "closed" | "timeo
 export type LiveSession = {
   /** One checked sentence: its 16 kHz PCM. Resolves when Gemini is done with it. */
   readonly turn: (pcm: Uint8Array, h: TurnHandlers, signal?: AbortSignal) => Promise<Result<TurnOutcome, LiveError>>;
+  /**
+   * Something that happened on the screen (he tapped a card), for Gemini's
+   * context only: no answer is asked for. Skipped when no session is open.
+   */
+  readonly note: (text: string) => void;
   readonly close: () => void;
 };
+
+/** A note for Gemini's context, as Live's client content (no reply asked for). */
+export const noteMessage = (text: string) => ({
+  clientContent: { turns: [{ role: "user", parts: [{ text: `[On the screen, not said aloud] ${text}` }] }], turnComplete: false },
+});
 
 const textOf = async (data: unknown): Promise<string> =>
   typeof data === "string" ? data : data instanceof ArrayBuffer ? new TextDecoder().decode(data) : data instanceof Blob ? await data.text() : Buffer.isBuffer(data) ? data.toString("utf8") : "";
@@ -339,6 +349,9 @@ export const makeLiveSession = (deps: {
 
   return {
     turn,
+    note: (text) => {
+      if (socket && ready) void ready.then((r) => r.ok && r.value === socket && r.value.send(JSON.stringify(noteMessage(text))));
+    },
     close: () => {
       endCurrent?.();
       socket?.close();

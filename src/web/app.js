@@ -449,7 +449,11 @@ const confirmCard = (proposal) => {
       markDecided(card, outcome);
       addMessage(result.ok ? "answer" : "error", text);
       // #224: in a spoken conversation, what happened is said aloud too, then the mic listens again.
-      if (state.voiceSession) speakNote(text);
+      // #250: with Gemini Live, no second voice (the mic would take it for him): Gemini is told quietly.
+      if (state.voiceSession && state.brain === "google" && liveOn) {
+        void fetch("/live/note", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ session: liveSession, text }) }).catch(() => undefined);
+        if (session) reopenMicSoon();
+      } else if (state.voiceSession) speakNote(text);
       // What the app did on his OK is marked as such, so the model never takes its own "waiting for your OK" as the last word (#212).
       state.history = appendTurn(state.history, "assistant", text, typeof result.tool === "string" ? [`${result.tool} ${CARD_DONE}`] : []);
       void refreshReach();

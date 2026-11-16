@@ -47,6 +47,8 @@ export const answerForLive = (r: AskResponse): string =>
 
 export type LiveSessions = {
   readonly get: (id: string) => LiveSession;
+  /** A note to that page's session, if it has one (never opens one). */
+  readonly note: (id: string, text: string) => void;
   readonly end: (id: string) => void;
 };
 
@@ -77,6 +79,7 @@ export const makeLiveSessions = (deps: { readonly create: () => LiveSession; rea
       open.set(id, { session, used: now() });
       return session;
     },
+    note: (id, text) => open.get(id)?.session.note(text),
     end,
     sweep,
   };
@@ -160,6 +163,17 @@ export const registerLiveRoutes = (
       }
       await writes;
     });
+  });
+
+  // He tapped a card: Gemini's context gets what happened, without answering (no second voice).
+  app.post("/live/note", bodyLimit({ maxSize: 2048 }), async (c) => {
+    const body = z
+      .object({ session: z.string().regex(/^[A-Za-z0-9-]{8,64}$/), text: z.string().min(1).max(1000) })
+      .strict()
+      .safeParse(await c.req.json().catch(() => undefined));
+    if (!body.success) return c.json({ ok: false }, 400);
+    deps.sessions.note(body.data.session, body.data.text);
+    return c.json({ ok: true });
   });
 
   app.post("/live/end", bodyLimit({ maxSize: 256 }), async (c) => {

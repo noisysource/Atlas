@@ -2,7 +2,7 @@
 
 import { Hono } from "hono";
 import { describe, expect, it } from "vitest";
-import { liveInstruction, liveSetup, liveUsage, makeLiveSession, parseLive, pcmChunks, type LiveSession, type LiveSocket } from "../src/live/live.js";
+import { liveInstruction, liveSetup, liveUsage, makeLiveSession, noteMessage, parseLive, pcmChunks, type LiveSession, type LiveSocket } from "../src/live/live.js";
 import { answerForLive, makeLiveSessions, registerLiveRoutes } from "../src/live/routes.js";
 import { makeJsonLogger } from "../src/log.js";
 import { ok } from "../src/result.js";
@@ -173,6 +173,23 @@ describe("a session", () => {
     expect((await third).ok).toBe(true);
   });
 
+  it("a tapped card goes to Gemini's context quietly (no reply asked); no session, nothing opened", async () => {
+    const g = fakeSocket();
+    const session = makeLiveSession({ apiKey: "k", model: "m", instruction: "x", connect: g.connect });
+    session.note("Okay, I left your calendar alone.");
+    await tick();
+    expect(g.sockets).toHaveLength(0);
+    const turn = session.turn(new Uint8Array(100), handlers());
+    await tick();
+    await g.reply({ setupComplete: {} });
+    await g.reply({ serverContent: { turnComplete: true } });
+    await turn;
+    session.note("Okay, I left your calendar alone.");
+    await tick();
+    expect(g.sent.at(-1)).toEqual(noteMessage("Okay, I left your calendar alone."));
+    expect(noteMessage("x")).toEqual({ clientContent: { turns: [{ role: "user", parts: [{ text: "[On the screen, not said aloud] x" }] }], turnComplete: false } });
+  });
+
   it("closed during setup (no billing, wrong model): says so", async () => {
     const g = fakeSocket();
     const session = makeLiveSession({ apiKey: "k", model: "m", instruction: "x", connect: g.connect });
@@ -214,12 +231,13 @@ describe("the route", () => {
         await h.ask("What's on today?", new AbortController().signal);
         return ok({ said: "You have the dentist.", asks: 1, interrupted: false });
       },
+      note: () => {},
       close: () => {},
     };
     const stt: SttProvider = { id: "whisper", transcribe: async () => ok({ text: heard }), status: async () => ok(true) };
     const app = new Hono<ServerEnv>();
     registerLiveRoutes(app, {
-      sessions: { get: () => session, end: () => {} },
+      sessions: { get: () => session, note: () => {}, end: () => {} },
       stt,
       precheck: (q): Precheck => (/\bHRT\b/.test(q) ? { kind: "handoff", context: EC } : { kind: "none" }),
       ask: async (_q, _h, meta) => {
@@ -267,7 +285,7 @@ describe("the route", () => {
       now: () => t,
       create: () => {
         const id = n++;
-        return { turn: async () => ok({ said: "", asks: 0, interrupted: false }), close: () => closed.push(id) };
+        return { turn: async () => ok({ said: "", asks: 0, interrupted: false }), note: () => {}, close: () => void closed.push(id) };
       },
     });
     const a = sessions.get("page-a");
