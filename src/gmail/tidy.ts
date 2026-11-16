@@ -172,6 +172,8 @@ export const makeGmailTidier = (deps: {
 export type InboxTidy = {
   readonly propose: (v: Record<string, unknown>) => Promise<Result<{ readonly id: string; readonly label: string; readonly leftOut: number }, string>>;
   readonly decide: (id: string, decision: "yes" | "no") => Promise<{ readonly ok: boolean; readonly text: string; readonly tool?: string }>;
+  /** #216: how much was tidied since a moment (this run of Atlas), for the morning brief. */
+  readonly tidied?: (sinceMs: number) => { readonly archived: number; readonly labelled: number };
 };
 
 const short = (s: string, n: number): string => (s.length > n ? `${s.slice(0, n - 1)}…` : s);
@@ -180,7 +182,12 @@ const sender = (from: string): string => short((/^\s*"?([^"<]+?)"?\s*</.exec(fro
 export const makeInboxTidy = (deps: { readonly tidier: GmailTidier; readonly isEc: (text: string) => boolean; readonly now?: () => number; readonly log?: Logger }): InboxTidy => {
   const now = deps.now ?? Date.now;
   const pending = new Map<string, { plan: TidyPlan; until: number }>();
+  const log: { at: number; archived: number; labelled: number }[] = [];
   return {
+    tidied: (sinceMs) => {
+      while (log.length > 0 && (log[0]?.at ?? 0) < now() - 7 * 24 * 3600_000) log.shift();
+      return log.filter((e) => e.at >= sinceMs).reduce((s, e) => ({ archived: s.archived + e.archived, labelled: s.labelled + e.labelled }), { archived: 0, labelled: 0 });
+    },
     propose: async (v) => {
       const checked = checkTidy(v);
       if (!checked.ok) return checked;
@@ -236,6 +243,7 @@ export const makeInboxTidy = (deps: { readonly tidier: GmailTidier; readonly isE
         return { ok: false, text: `The inbox wasn't tidied: ${done.error.message}.` };
       }
       deps.log?.info("inbox tidied", { account: p.plan.account, archived: done.value.archived, labelled: done.value.labelled });
+      log.push({ at: now(), archived: done.value.archived, labelled: done.value.labelled });
       const said = [
         ...(done.value.archived > 0 ? [`archived ${done.value.archived}`] : []),
         ...(done.value.labelled > 0 ? [`labelled ${done.value.labelled}`] : []),

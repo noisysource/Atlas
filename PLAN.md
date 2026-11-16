@@ -1107,6 +1107,11 @@ Confirmed (2026-11-12):
   himself aren't picked up yet: the handoff between them is the branch,
   the PR and STATUS.md.
 
+- **The brief's inbox part (#216):** with drafts on, the brief also
+  reads `in:drafts newer_than:3d` per account and lists them (who,
+  subject; EC never named) as waiting for his Send it; with triage on,
+  how much Atlas tidied in the last day (`InboxTidy.tidied`, kept in
+  memory while Atlas runs). "Waiting on others" comes with follow-ups (#217).
 - **Reply drafts (#215):** in triage, with GMAIL_WRITE, Claude reads
   each needs-him email where a person waits on his reply and drafts a
   reply (`gmail_draft` with `reply_to_id`), most urgent first; at most
