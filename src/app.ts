@@ -15,6 +15,7 @@ import { makeGaps } from "./gaps/gaps.js";
 import { makeWebSearch } from "./web-search.js";
 import { makeCalendarChanger, makeCalendarChanges } from "./calendar/change.js";
 import { makeReminders, reminderLine } from "./reminders/reminders.js";
+import { makeTalkStore } from "./talk.js";
 import { makeGmailTidier, makeInboxTidy } from "./gmail/tidy.js";
 import { availableSwitches, makeSettings, makeSwitchedAnswerer, type BareDeps } from "./switches.js";
 import { makeBlinds, makeCallable, readFirebaseUser } from "./house/blinds.js";
@@ -391,6 +392,8 @@ export const buildDeps = async (inputs: AppInputs): Promise<Result<Deps, string>
     : undefined;
   // #218: his reminders, in data/reminders.json.
   const todayHere = () => new Intl.DateTimeFormat("en-CA", { timeZone: config.timeZone }).format(new Date());
+  // #68: how he wants Atlas to talk, in data/talk.json; every answer, Claude or local.
+  const talk = makeTalkStore({ path: "data/talk.json" });
   const reminders = config.toolCalling ? { store: makeReminders({ path: "data/reminders.json", isEc: isEcText, today: todayHere }), today: todayHere } : undefined;
   // #138: what Atlas couldn't do, and issues for it in his own repo after Renato's OK (with the write token).
   const gaps = config.toolCalling ? makeGaps({ path: "data/gaps.json", repo: "noisysource/Atlas", isEc: isEcText, writeToken: writeTokens.token, today: () => new Intl.DateTimeFormat("en-CA", { timeZone: config.timeZone }).format(new Date()), log }) : undefined;
@@ -628,6 +631,7 @@ export const buildDeps = async (inputs: AppInputs): Promise<Result<Deps, string>
     ...(gaps ? { gapIssue: gaps } : {}),
     ...(calendarChanges ? { calendarChange: calendarChanges } : {}),
     ...(reminders ? { reminders } : {}),
+    talk,
     ...(inboxTidy ? { gmailTidy: inboxTidy } : {}),
     classify: makeClassifier({ contexts: contexts.value, llm: classifierLlm.value, log, thinking: config.turn.classifierThinking }),
     stickyContext: config.turn.stickyContext,
@@ -659,6 +663,7 @@ export const buildDeps = async (inputs: AppInputs): Promise<Result<Deps, string>
               ...(decisions ? { decisions } : {}),
               ...(gaps ? { gaps } : {}),
               ...(reminders ? { reminders } : {}),
+              talk,
               ...(webSearch ? { webSearch } : {}),
               ...(code && config.toolCalling ? { code } : {}),
               // #161: errors and logs in his Google Cloud environments, read-only, with tools (Claude).
@@ -693,6 +698,7 @@ export const buildDeps = async (inputs: AppInputs): Promise<Result<Deps, string>
               pauses: config.turn.punctuationStyle,
               ...(config.bareProfile ? { profile } : {}),
               ...(calendar ? { calendar } : {}),
+              talk,
               log,
             }),
           }),

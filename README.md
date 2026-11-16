@@ -392,6 +392,15 @@ Requires Node 22.13 or later (the memory store uses `node:sqlite`, which needs a
        never inventing what only you know: those are listed as needing
        your input. The morning brief lists drafts still waiting for your
        Send it, and how much Atlas tidied the day before.
+     - **How Atlas talks.** "From now on answer me in English", "keep it
+       short", "be a bit more formal": three settings (language: the one
+       you write in, English or Portuguese (Portugal); length: as it is,
+       short or more detail; tone: as it is, casual or more formal) that
+       apply to every answer in every context, Claude or local. Change
+       them by saying so or in the Profile panel of the brain view. A
+       one-off ("answer this one in Portuguese") changes nothing. Email
+       drafts for others keep the email's language; spoken answers keep
+       their own length. Kept in `data/talk.json`.
      - **Reminders.** "Remind me Thursday at 3 to call the accountant",
        "lembra-me amanhã de…": Atlas keeps it (what, the day, a time if
        you gave one) and confirms. Today's and overdue reminders show in

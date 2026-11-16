@@ -16,6 +16,7 @@ import { Hono, type Context } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import { streamSSE } from "hono/streaming";
 import { z } from "zod";
+import { checkTalkChange, TALK_LABELS, TALK_OPTIONS } from "./talk.js";
 import { handleAsk } from "./ask.js";
 import { withLogFields } from "./log.js";
 import { registerMemoryRoutes } from "./memory-routes.js";
@@ -389,6 +390,23 @@ export const makeServer = (
       if (!body.success) return c.json(errorBody("Send { id }."), 400);
       const got = await reminders.store.done(body.data.id);
       return got.ok ? c.json({ ok: true }) : c.json(errorBody(got.error), 404);
+    });
+  }
+
+  // #68: how he wants Atlas to talk (Profile panel). The next question goes by them.
+  const talk = deps.talk;
+  if (talk) {
+    app.get("/talk", async (c) => {
+      c.header("Cache-Control", "no-store");
+      return c.json({ talk: await talk.get(), options: TALK_OPTIONS, labels: TALK_LABELS });
+    });
+    app.post("/talk", bodyLimit({ maxSize: 512, onError: (c) => c.json(errorBody("The request is too large."), 413) }), async (c) => {
+      if (!isJson(c.req.header("content-type"))) return c.json(errorBody("POST /talk needs Content-Type: application/json."), 415);
+      const change = checkTalkChange(await c.req.json().catch(() => undefined));
+      if (!change.ok) return c.json(errorBody(`Send { language?, length?, tone? }: ${change.error}.`), 400);
+      const next = await talk.set(change.value);
+      deps.log?.info("talk set", change.value);
+      return c.json({ ok: true, talk: next });
     });
   }
 

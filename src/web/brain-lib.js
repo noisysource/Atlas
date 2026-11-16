@@ -35,6 +35,7 @@ export const nodeOfTool = (tool) => {
   if (tool.startsWith("gmail_")) return "gmail";
   if (tool.startsWith("memory_") || tool.startsWith("decision_")) return "memory";
   if (tool.startsWith("reminder_")) return "calendar";
+  if (tool === "talk_set") return "profile";
   if (tool === "web_search") return "web";
   if (tool.startsWith("skill_")) return "skills";
   if (tool.startsWith("github_") || tool.startsWith("plan_") || tool.startsWith("gap_")) return "github";

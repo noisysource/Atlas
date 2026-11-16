@@ -1107,6 +1107,17 @@ Confirmed (2026-11-12):
   himself aren't picked up yet: the handoff between them is the branch,
   the PR and STATUS.md.
 
+- **How Atlas talks (#68):** the memory tools already cross contexts, so
+  instead of a global memory kind this is a closed set of three settings
+  in `src/talk.ts` (`language` theirs|en|pt-PT, `length`
+  default|short|detailed, `tone` default|casual|formal), in
+  `data/talk.json` (mode 600, gitignored). `talkLines` goes in every
+  answer's per-turn suffix (not the cached prompt), after the fixed "How
+  to talk" lines it overrides; spoken answers skip length (their limit is
+  code's). Tool `talk_set` (with tools; one-offs aren't settings), `GET
+  /talk` / `POST /talk` for the Profile panel's selects. The local model
+  gets the lines too (no tool). Speech stays English: a pt-PT answer is
+  read by the English voice until local speech (#54).
 - **Web search (#220):** Anthropic's server tool
   `web_search_20250305`, added by `buildParams` when the request carries
   `webSearch {maxUses, country, city, timezone}`; `mapResponse` returns

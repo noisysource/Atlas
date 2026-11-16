@@ -11,6 +11,7 @@ import type { PrCloser } from "./github/pr-close.js";
 import type { Blinds } from "./house/blinds.js";
 import type { Gaps } from "./gaps/gaps.js";
 import type { Reminders } from "./reminders/reminders.js";
+import type { TalkStore } from "./talk.js";
 import type { CalendarChanges } from "./calendar/change.js";
 import type { InboxTidy } from "./gmail/tidy.js";
 import type { CodeMapView, Studies } from "./code/study.js";
@@ -357,6 +358,8 @@ export type Deps = {
   readonly calendarChange?: Pick<CalendarChanges, "decide">;
   /** #218: his reminders, for the page (GET /reminders, POST /reminders/done). */
   readonly reminders?: { readonly store: Reminders; readonly today: () => string };
+  /** #68: how he wants Atlas to talk: GET /talk, POST /talk. */
+  readonly talk?: TalkStore;
   /** #138: his answer to opening an issue for a gap (POST /gaps/issue). Only "yes" opens it. */
   readonly gapIssue?: Pick<Gaps, "decide">;
   /** #166: his answer to moving the blinds (POST /house/blinds). Only "yes" moves them. */

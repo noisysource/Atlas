@@ -218,6 +218,27 @@ const brainView = makeBrainView(byId("brain-view"), {
     code: { label: "Open code maps", run: () => void codeMapView.open() },
   },
   onMap: (key) => void codeMapView.open(key),
+  // #68: how Atlas talks, in the Profile panel.
+  talk: {
+    get: async () => {
+      try {
+        const res = await fetch("/talk", { cache: "no-store" });
+        return res.ok ? await res.json() : undefined;
+      } catch {
+        return undefined;
+      }
+    },
+    set: async (key, value) => {
+      try {
+        const res = await fetch("/talk", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ [key]: value }) });
+        setStatus(res.ok ? "Changed from the next question." : "Couldn't change that.");
+        return res.ok;
+      } catch {
+        setStatus("Couldn't reach Atlas to change that.");
+        return false;
+      }
+    },
+  },
   // #151: a switch in a node's panel; the next question goes by it.
   onSwitch: async (id, on) => {
     try {
