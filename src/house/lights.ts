@@ -44,7 +44,7 @@ const arr = (v: unknown): unknown[] => (Array.isArray(v) ? v : []);
 const str = (v: unknown): string | undefined => (typeof v === "string" && v.trim() !== "" ? v.trim() : undefined);
 
 /** Legrand light modules: switches, dimmers, micromodules, teleruptors. */
-const LIGHT_TYPES = new Set(["NLF", "NLFN", "NLFE", "NLL", "NLM", "NLIS", "NLPT"]);
+export const LIGHT_TYPES: ReadonlySet<string> = new Set(["NLF", "NLFN", "NLFE", "NLL", "NLM", "NLIS", "NLPT"]);
 const DIMMER_TYPES = new Set(["NLFN"]);
 
 /** The lights in Netatmo's homesdata, with their rooms; on/off and brightness from homestatus. */
