@@ -18,7 +18,11 @@ import { makeReminders, reminderLine } from "./reminders/reminders.js";
 import { makeTalkStore } from "./talk.js";
 import { makeGmailTidier, makeInboxTidy } from "./gmail/tidy.js";
 import { availableSwitches, makeSettings, makeSwitchedAnswerer, omit, type BareDeps } from "./switches.js";
-import { makeBlinds, makeCallable, readFirebaseUser } from "./house/blinds.js";
+import { makeBlinds, makeLegrand, readFirebaseUser } from "./house/blinds.js";
+import { domoticsDb, makeDomotics } from "./house/domotics.js";
+import { makeHouseChanges } from "./house/house-changes.js";
+import { readHouse } from "./house/house-data.js";
+import { makeLights } from "./house/lights.js";
 import { makeVendusGet, type VendusGet } from "./vendus/vendus.js";
 import { makeCodeRefresh } from "./code/freshness.js";
 import { briefSources } from "./brief.js";
@@ -480,7 +484,15 @@ export const buildDeps = async (inputs: AppInputs): Promise<Result<Deps, string>
         }))
       : undefined;
   // #166: the blinds, after his OK, through the domotics app's functions as Atlas's own Firebase user.
-  const blinds = config.house.control.enabled && config.toolCalling ? makeBlinds({ call: makeCallable({ user: () => readFirebaseUser(config.house.control.userPath) }), log }) : undefined;
+  // #211: the lights through the same functions, sharing one cached Netatmo read with the blinds.
+  // #166: one identity for the whole house: Atlas's own domotics user, for the callables and Firestore alike.
+  const domotics = config.house.control.enabled && config.toolCalling ? makeDomotics({ user: () => readFirebaseUser(config.house.control.userPath) }) : undefined;
+  const legrand = domotics ? makeLegrand({ call: domotics.call }) : undefined;
+  const blinds = legrand ? makeBlinds({ legrand, log }) : undefined;
+  const lights = legrand ? makeLights({ legrand, log }) : undefined;
+  const houseChanges = domotics ? makeHouseChanges({ domotics, log }) : undefined;
+  // The live state through the same user; without it, read-only from HOUSE_ENV's database (GCLOUD).
+  const houseDb = domotics ? domoticsDb(domotics) : gcloud?.db;
   // #183: closing pull requests after his OK, with the same write token (on with CODE_FIX).
   const prs = fixes ? makePrCloser({ writeToken: writeTokens.token, isEc: isEcText, log }) : undefined;
   // #126: a code agent (Claude Code, read-only) on local copies of the repos GitHub reaches.
@@ -650,6 +662,8 @@ export const buildDeps = async (inputs: AppInputs): Promise<Result<Deps, string>
     ...(codeRefresh ? { codeRefresh } : {}),
     ...(prs ? { prClose: prs } : {}),
     ...(blinds && config.house.enabled ? { houseBlinds: blinds } : {}),
+    ...(lights && config.house.enabled ? { houseLights: lights } : {}),
+    ...(houseChanges && config.house.enabled ? { houseChanges } : {}),
     ...(gaps ? { gapIssue: gaps } : {}),
     ...(calendarChanges ? { calendarChange: calendarChanges } : {}),
     ...(reminders ? { reminders } : {}),
@@ -710,7 +724,9 @@ export const buildDeps = async (inputs: AppInputs): Promise<Result<Deps, string>
               // #9: KidClub's invoices in Vendus, GET only, with tools (Claude).
               ...(vendusGet && config.toolCalling ? { vendus: { get: vendusGet, timeZone: config.timeZone } } : {}),
               // #166: the house now, read-only, from the domotics bridge's state document.
-              ...(gcloud && config.house.enabled && config.toolCalling ? { house: { db: gcloud.db, env: config.house.env, timeZone: config.timeZone, ...(blinds ? { blinds } : {}) } } : {}),
+              ...(houseDb && config.house.enabled && config.toolCalling
+                ? { house: { db: houseDb, env: domotics ? "domotics" : config.house.env, timeZone: config.timeZone, ...(blinds ? { blinds } : {}), ...(lights ? { lights } : {}), ...(domotics ? { read: readHouse(domotics) } : {}), ...(houseChanges ? { changes: houseChanges } : {}) } }
+                : {}),
               // #175: only the tool groups a question needs; the classifier model (Haiku) helps pick.
               // #49: "what's on my plate?" in one read of everything connected.
               ...(calendar && config.toolCalling ? { brief: true } : {}),

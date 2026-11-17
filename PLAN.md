@@ -1044,8 +1044,33 @@ Confirmed (2026-11-12):
   Atlas coding task, lets in the owner and Atlas only). `house_blinds`
   proposes; a card ("Move them" / "Leave them") moves them, one
   `legrandSetState` call for all, 0 closed and 100 open; an OK lasts ten
-  minutes; at most 20 moves an hour in code. Lights and heating next, the
-  same way.
+  minutes; at most 20 moves an hour in code.
+- **The lights, after an OK (#211):** `src/house/lights.ts`, the blinds'
+  path: Legrand light modules (NLF, NLFN, NLFE, NLL, NLM, NLIS, NLPT; not
+  sockets) from homesdata, on/off and brightness from homestatus;
+  `house_lights` proposes on, off or a level (to dimmers only; NLFN or any
+  light Netatmo reports a brightness for); a "lights" card ("Do it" /
+  "Leave them") sends one `legrandSetState` with `on` (and `brightness`);
+  30 changes an hour in code. Blinds and lights share one cached Netatmo
+  read (`makeLegrand`: homesdata a day, homestatus 30 s, dropped after a
+  change). Since the restructure (2026-11-16) the domotics project is
+  `noisysource-prod`: the bridge's state is there (`HOUSE_ENV=nsprod`, read
+  with a read-only `atlas-read` account), and the Legrand functions let in
+  the owner and Atlas's verified `atlas@kidclub.pt` (the monorepo's change).
+- **The whole house, after an OK (#166, part 3):** one identity,
+  `atlas@kidclub.pt`, for everything: `src/house/domotics.ts` signs in once
+  (ID token cached) and with that token calls the callables and reads and
+  writes Firestore over REST, so the rules decide (no service account,
+  no admin SDK). `house-data.ts` reads: `domotics_energy/{date}` (or the
+  `domoticsEnergyBill` callable, for euros, when it exists),
+  `domotics_climate/{date}`, `domotics_incidents`, `domotics_config/*`.
+  `house-changes.ts` builds each change as a pure value (label + one
+  patch, one `domotics_commands` entry with `createdAt` set by the server,
+  or one callable) and applies it only from a "house-change" card; an OK
+  lasts ten minutes, 30 changes an hour. `domotics_admin` (the bridge's
+  remote execution) and the vendor secrets stay out, in the rules too.
+  `HOUSE_CONTROL=on` alone is enough; `house_now` then reads through the
+  same user.
 
 - **Google Cloud (#161):** Atlas (not the code agent) reads errors and
   logs, read-only, from Cloud Logging. Each environment is a project and a

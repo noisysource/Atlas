@@ -165,10 +165,30 @@ export const reachView = async (input: ReachInput): Promise<readonly ReachNode[]
     {
       id: "house",
       status: config.house.enabled ? onOff(true) : "soon",
-      about: `Sees the house right now, read-only: the heating automation and why, temperatures, the heat pump, solar, battery and energy, from the domotics bridge's state in ${config.house.env}. He can't change anything in the house yet.`,
-      tools: [{ name: "house_now", does: "the house right now" }],
+      about: config.house.control.enabled
+        ? "The whole house as his own domotics user: right now, energy and the bill, climate per room, the heat pump's faults and switching, and the settings; and, each time after your OK on a card, blinds, lights, the heating automation, warm-by, thermostats, the heat pump, the E13 guard and the tariff."
+        : `Sees the house right now, read-only: the heating automation and why, temperatures, the heat pump, solar, battery and energy, from the domotics bridge's state in ${config.house.env}. HOUSE_CONTROL=on (and npm run house:connect) lets him move the blinds and switch the lights.`,
+      tools: [
+        { name: "house_now", does: "the house right now" },
+        ...(config.house.control.enabled
+          ? [
+              { name: "house_energy", does: "electricity over days, kWh and euros" },
+              { name: "house_climate", does: "a day's climate per room, the heat pump's hours" },
+              { name: "house_incidents", does: "the heat pump's faults and switching" },
+              { name: "house_settings", does: "the heating, guard, warm-by and tariff settings" },
+              { name: "house_blinds", does: "move the blinds, after your OK" },
+              { name: "house_lights", does: "switch or dim the lights, after your OK" },
+              { name: "house_heating", does: "the heating automation's settings, after your OK" },
+              { name: "house_warm_by", does: "warm the house by a time, after your OK" },
+              { name: "house_thermostat", does: "a room's thermostat, after your OK" },
+              { name: "house_heat_pump", does: "the heat pump on or off, after your OK" },
+              { name: "house_guard", does: "the E13 guard, after your OK" },
+              { name: "house_tariff", does: "the electricity tariff, after your OK" },
+            ]
+          : []),
+      ],
       accounts: [],
-      ...(config.house.enabled ? {} : { hint: "HOUSE=on in .env (with GCLOUD=on)" }),
+      ...(config.house.enabled ? {} : { hint: "HOUSE=on and HOUSE_CONTROL=on in .env (after npm run house:connect)" }),
     },
     {
       id: "cloud",

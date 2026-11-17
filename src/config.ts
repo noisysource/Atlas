@@ -156,19 +156,20 @@ export type Config = {
    */
   readonly vendus: { readonly enabled: boolean; readonly keyPath: string };
   /**
-   * HOUSE=on (#166): Claude can read the house's live state, published by the
-   * domotics bridge to the database of HOUSE_ENV (default dev, where the
-   * bridge runs today). Needs GCLOUD=on, with that environment's database
-   * readable. Read-only.
+   * HOUSE=on (#166): Claude can read the house's live state. With
+   * HOUSE_CONTROL=on everything goes through Atlas's own domotics user (the
+   * whole house, changes after his OK); without it, read-only from the
+   * database of HOUSE_ENV through GCLOUD=on.
    */
   readonly house: {
     readonly enabled: boolean;
     readonly env: string;
     /**
-     * HOUSE_CONTROL=on (#166): Claude can move the blinds, each time after his
-     * OK on a card, through the domotics app's functions, signed in as Atlas's
-     * own Firebase Auth user (npm run house:connect, data/house/firebase.json).
-     * Local only for now.
+     * HOUSE_CONTROL=on (#166): Atlas signs in to the domotics project as its
+     * own Firebase Auth user (npm run house:connect, data/house/firebase.json)
+     * and sees the whole house (energy, climate, incidents, settings), and
+     * changes lights, blinds, heating, thermostats, the heat pump, the guard
+     * and the tariff, each time after his OK on a card. Local only for now.
      */
     readonly control: { readonly enabled: boolean; readonly userPath: string };
   };
@@ -598,7 +599,7 @@ export const loadConfig = (given: Env): Result<Config, string> => {
     if (raw("CODE_AGENT") !== "on") errors.push("CODE_FIX: needs CODE_AGENT=on (the code agent makes the fix)");
     if (production) errors.push("CODE_FIX: local only for now (its write tokens are files on this Mac)");
   }
-  if (raw("HOUSE") === "on" && raw("GCLOUD") !== "on") errors.push("HOUSE: needs GCLOUD=on (the house's state is in an environment's database)");
+  if (raw("HOUSE") === "on" && raw("GCLOUD") !== "on" && raw("HOUSE_CONTROL") !== "on") errors.push("HOUSE: needs HOUSE_CONTROL=on (Atlas's domotics user) or GCLOUD=on (read-only, from an environment's database)");
   if (raw("HOUSE_CONTROL") === "on") {
     if (raw("HOUSE") !== "on") errors.push("HOUSE_CONTROL: needs HOUSE=on");
     if (production) errors.push("HOUSE_CONTROL: local only for now (Atlas's domotics user is a file on this Mac, not in Secret Manager)");
@@ -665,9 +666,9 @@ export const loadConfig = (given: Env): Result<Config, string> => {
     gcloud: { enabled: e.GCLOUD === "on", keysPath: "data/gcloud" },
     vendus: { enabled: e.VENDUS === "on", keyPath: "data/vendus.json" },
     house: {
-      enabled: e.HOUSE === "on" && e.GCLOUD === "on",
+      enabled: e.HOUSE === "on" && (e.GCLOUD === "on" || e.HOUSE_CONTROL === "on"),
       env: e.HOUSE_ENV,
-      control: { enabled: e.HOUSE === "on" && e.GCLOUD === "on" && e.HOUSE_CONTROL === "on", userPath: "data/house/firebase.json" },
+      control: { enabled: e.HOUSE === "on" && e.HOUSE_CONTROL === "on", userPath: "data/house/firebase.json" },
     },
     codeAgent: { enabled: e.GITHUB === "on" && e.CODE_AGENT === "on", maxUsd: e.CODE_AGENT_MAX_USD, maxTurns: e.CODE_AGENT_MAX_TURNS, reposPath: "data/repos", auth: e.CODE_AGENT_AUTH, model: e.CODE_AGENT_MODEL, study: { maxUsd: e.CODE_STUDY_MAX_USD, maxTurns: e.CODE_STUDY_MAX_TURNS, notesPath: "data/code" }, refresh: { mode: e.CODE_REFRESH, maxStudies: e.CODE_REFRESH_MAX }, tasks: { enabled: e.GITHUB === "on" && e.CODE_AGENT === "on" && e.CODE_TASKS === "on", maxUsd: e.CODE_TASK_MAX_USD, maxTurns: e.CODE_TASK_MAX_TURNS, path: "data/tasks" }, fix: { enabled: e.GITHUB === "on" && e.CODE_AGENT === "on" && e.CODE_FIX === "on", maxUsd: e.CODE_FIX_MAX_USD, maxTurns: e.CODE_FIX_MAX_TURNS, writeTokensPath: "data/github-write-tokens.json", fixesPath: "data/fixes" } },
     ollamaThink: e.OLLAMA_THINK === "on",
