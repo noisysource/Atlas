@@ -24,8 +24,8 @@ import { chmod, mkdir, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import { Writable } from "node:stream";
 import { loadConfig } from "../src/config.js";
-import { blindsOf, checkFirebaseUser, makeCallable } from "../src/house/blinds.js";
-import { lightsOf } from "../src/house/lights.js";
+import { BLIND_TYPES, blindsOf, checkFirebaseUser, makeCallable } from "../src/house/blinds.js";
+import { LIGHT_TYPES, lightsOf } from "../src/house/lights.js";
 
 const fail = (message: string): never => {
   console.error(`✗ ${message}`);
@@ -72,5 +72,12 @@ await writeFile(path, JSON.stringify(user), { mode: 0o600 });
 await chmod(path, 0o600);
 console.log(`✓ Atlas sees ${blinds.length} blinds: ${blinds.map((b) => b.name).join(", ")}.`);
 console.log(`  and ${lights.length} lights: ${lights.map((l) => l.name).join(", ")}.`);
+const others = new Map<string, number>();
+const homeModules = (homeData as { body?: { homes?: { modules?: { type?: unknown }[] }[] } }).body?.homes?.[0]?.modules ?? [];
+for (const m of homeModules) {
+  const t = String(m.type ?? "?");
+  if (!BLIND_TYPES.has(t) && !LIGHT_TYPES.has(t)) others.set(t, (others.get(t) ?? 0) + 1);
+}
+if (others.size > 0) console.log(`  Other modules, not blinds or lights: ${[...others].map(([t, n]) => `${t} ×${n}`).join(", ")}.`);
 console.log(`  Saved to ${path} (only you can read it; gitignored).`);
 console.log("\nPut HOUSE_CONTROL=on in .env (with HOUSE=on) and restart Atlas. Every change asks for your OK.");

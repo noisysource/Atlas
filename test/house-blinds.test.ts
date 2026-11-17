@@ -23,9 +23,9 @@ const HOME = {
         ],
         modules: [
           { id: "g1", type: "NLG", name: "Gateway" },
-          { id: "b1", type: "NBR", name: "Persiana TV", room_id: "r1", bridge: "g1" },
-          { id: "b2", type: "NBR", name: "Persiana Sala", room_id: "r1", bridge: "g1" },
-          { id: "b3", type: "NBR", name: "Persiana Duarte", room_id: "r2", bridge: "g1" },
+          { id: "b1", type: "NLV", name: "Persiana TV", room_id: "r1", bridge: "g1" },
+          { id: "b2", type: "NLLV", name: "Persiana Sala", room_id: "r1", bridge: "g1" },
+          { id: "b3", type: "NLIV", name: "Persiana Duarte", room_id: "r2", bridge: "g1" },
           { id: "b4", type: "NBR", name: "Persiana Jantar", room_id: "r3", bridge: "g1" },
           { id: "l1", type: "NLF", name: "Luz Sala 1", room_id: "r1", bridge: "g1" },
         ],

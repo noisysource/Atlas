@@ -114,8 +114,8 @@ const obj = (v: unknown): O | undefined => (typeof v === "object" && v !== null 
 const arr = (v: unknown): unknown[] => (Array.isArray(v) ? v : []);
 const str = (v: unknown): string | undefined => (typeof v === "string" && v.trim() !== "" ? v.trim() : undefined);
 
-/** Legrand/Netatmo shutter module types. */
-const BLIND_TYPES = new Set(["NBR", "NBO", "NBS"]);
+/** Shutter module types in Netatmo: Legrand's shutter switches (NLV, with a level NLLV, the micro-module NLIV) and Bubendorff's (NBR, NBO, NBS). */
+export const BLIND_TYPES: ReadonlySet<string> = new Set(["NLV", "NLLV", "NLIV", "NBR", "NBO", "NBS"]);
 
 /** The blinds in Netatmo's homesdata, with their rooms; positions from homestatus. */
 export const blindsOf = (home: unknown, status: unknown): Blind[] => {
