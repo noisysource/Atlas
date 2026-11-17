@@ -65,6 +65,9 @@ export const VENDOR_FILES: readonly { path: string; file: string; contentType: s
   },
   { path: "/vendor/ort/ort-wasm-simd-threaded.wasm", file: "node_modules/onnxruntime-web/dist/ort-wasm-simd-threaded.wasm", contentType: "application/wasm" },
   { path: "/vendor/silero_vad_v5.onnx", file: "node_modules/@ricky0123/vad-web/dist/silero_vad_v5.onnx", contentType: "application/octet-stream" },
+  // The Noisy Source look: JetBrains Mono for text, Oxanium for the name. Served from here, never a font CDN.
+  ...(["400", "600"] as const).map((w) => ({ path: `/vendor/fonts/jetbrains-mono-${w}.woff2`, file: `node_modules/@fontsource/jetbrains-mono/files/jetbrains-mono-latin-${w}-normal.woff2`, contentType: "font/woff2" })),
+  { path: "/vendor/fonts/oxanium-500.woff2", file: "node_modules/@fontsource/oxanium/files/oxanium-latin-500-normal.woff2", contentType: "font/woff2" },
 ];
 
 /** Dev-only pages (#73): never served in production. */
@@ -82,7 +85,7 @@ export const DEV_FILES: readonly { path: string; file: string; contentType: stri
  */
 export const WEB_SECURITY_HEADERS: Readonly<Record<string, string>> = {
   "Content-Security-Policy":
-    "default-src 'none'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self'; connect-src 'self'; img-src 'self'; " +
+    "default-src 'none'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self'; font-src 'self'; connect-src 'self'; img-src 'self'; " +
     "base-uri 'none'; form-action 'self'; frame-ancestors 'none'",
   "X-Content-Type-Options": "nosniff",
   "Referrer-Policy": "no-referrer",

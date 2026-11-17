@@ -2252,3 +2252,210 @@ footer,
   color: var(--muted);
   margin-top: 0.25rem;
 }
+
+/* ---- The Noisy Source look (noisysource.com) ----
+   Dark and sober: near-black with a faint blue halo, JetBrains Mono for text,
+   Oxanium for the name, blue for what's alive. Always dark, like the site.
+   The fonts come from this server (see VENDOR_FILES), never a font CDN. */
+
+@font-face {
+  font-family: "JetBrains Mono";
+  font-weight: 400;
+  font-display: swap;
+  src: url("/vendor/fonts/jetbrains-mono-400.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "JetBrains Mono";
+  font-weight: 600 700;
+  font-display: swap;
+  src: url("/vendor/fonts/jetbrains-mono-600.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: Oxanium;
+  font-weight: 500;
+  font-display: swap;
+  src: url("/vendor/fonts/oxanium-500.woff2") format("woff2");
+}
+
+:root,
+:root:not([data-theme="light"]) {
+  color-scheme: dark;
+  --bg: #03040a;
+  --surface: #0a0d18;
+  --text: #c9d1e6;
+  --muted: #6b7590;
+  --border: #1d2438;
+  --accent: #4a7bff;
+  --accent-text: #cfe0ff;
+  --error-text: #ff9b9b;
+  /* The tagline's colours: human white, artificial blue. */
+  --prompt-user: #e6ecff;
+  --prompt-atlas: #4a7bff;
+  --handoff-text: #b9a8ff;
+  --reach: #9fb8ff;
+  --wait: #e0b04a;
+  --fail: #ff6b6b;
+  --quiet: #1d2438;
+  --ns-glow: #cfe0ff;
+  --ns-line: #2a3a6a;
+  --ns-press: #0f1a3a;
+  --ns-mono: "JetBrains Mono", ui-monospace, Menlo, monospace;
+  --mono: var(--ns-mono);
+}
+
+html {
+  background:
+    radial-gradient(ellipse 40% 30% at 50% 0%, rgb(60 110 255 / 0.1), transparent 70%),
+    radial-gradient(ellipse at center, transparent 45%, rgb(3 4 10 / 0.9) 100%),
+    var(--bg);
+  background-attachment: fixed;
+}
+
+body {
+  background: transparent;
+  font: 13.5px/1.55 var(--ns-mono);
+  -webkit-font-smoothing: antialiased;
+}
+
+::selection {
+  background: rgb(74 123 255 / 0.35);
+  color: #fff;
+}
+
+/* The name, as on the site: machine lettering, a photon before it. */
+h1 {
+  font-family: Oxanium, var(--ns-mono);
+  font-weight: 500;
+  font-size: 1.35rem;
+  letter-spacing: 0.22em;
+  text-transform: lowercase;
+  color: var(--ns-glow);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+h1::before {
+  content: "";
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 50%;
+  background: var(--ns-glow);
+  box-shadow:
+    0 0 6px 2px rgb(74 123 255 / 0.6),
+    0 0 18px 6px rgb(74 123 255 / 0.2);
+}
+
+h2,
+h3 {
+  font-family: Oxanium, var(--ns-mono);
+  font-weight: 500;
+  letter-spacing: 0.04em;
+}
+
+/* Controls: outlined, quiet until touched (the site's run button). */
+button,
+select {
+  font: inherit;
+  font-size: 0.85rem;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: #9aa4bd;
+  transition:
+    background 0.2s,
+    border-color 0.2s,
+    color 0.2s;
+}
+
+select {
+  background: var(--surface);
+}
+
+button:hover:not(:disabled),
+select:hover {
+  border-color: var(--accent);
+  background: var(--ns-press);
+  color: var(--ns-glow);
+}
+
+button[aria-pressed="true"] {
+  border-color: var(--ns-line);
+  color: var(--ns-glow);
+}
+
+button[type="submit"],
+.choices button.picked {
+  background: var(--ns-press);
+  border-color: var(--accent);
+  color: var(--ns-glow);
+}
+
+button[aria-pressed="true"]#mic {
+  background: #240c12;
+  border-color: #6a2430;
+  color: var(--error-text);
+}
+
+button:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgb(74 123 255 / 0.2);
+}
+
+textarea {
+  background: rgb(5 7 14 / 0.94);
+  border-radius: 8px;
+  caret-color: var(--accent);
+}
+
+textarea::placeholder {
+  color: #4c5570;
+}
+
+/* The conversation stays lines, not bubbles (#195); a card gets a faint blue. */
+.message .confirm {
+  border-color: var(--ns-line);
+  background: rgb(15 26 58 / 0.35);
+}
+
+.tag {
+  color: #5f7cc4;
+}
+
+footer {
+  background: linear-gradient(to bottom, transparent, var(--bg) 1.2rem);
+}
+
+.phase[data-phase="speaking"] .dot,
+.phase[data-phase="thinking"] .dot {
+  color: var(--accent);
+  box-shadow: 0 0 8px rgb(74 123 255 / 0.7);
+}
+
+dialog,
+dialog#memories-panel {
+  background: rgb(5 7 14 / 0.97);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 30px 80px rgb(0 0 0 / 0.6);
+}
+
+dialog::backdrop,
+dialog#memories-panel::backdrop {
+  background: rgb(3 4 10 / 0.7);
+  backdrop-filter: blur(2px);
+}
+
+a {
+  color: #9fb8ff;
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
