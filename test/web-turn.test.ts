@@ -110,6 +110,7 @@ const run = (over: Partial<Parameters<typeof makeSpeaker>[0]> = {}, ms = 20) => 
         result = r;
         resolve(r);
       },
+      mergeWaitMs: 5,
       ...over,
     });
     ctx.speaker = speaker;
@@ -122,18 +123,49 @@ const run = (over: Partial<Parameters<typeof makeSpeaker>[0]> = {}, ms = 20) => 
 };
 
 describe("makeSpeaker (#82)", () => {
-  it("plays sentences in order as they stream in, fetching ahead, then reports played to the end", async () => {
+  it("says the first sentence alone, then two at a time, fetching ahead, and reports every sentence played", async () => {
     const r = run();
     const sp = r.speaker();
     sp.say("One.");
     sp.say("Two.");
-    expect(r.fetches).toEqual(["One.", "Two."]); // the first two straight away
+    expect(r.fetches).toEqual(["One."]); // the first straight away; the second waits for a partner
     sp.say("Three.");
-    expect(r.fetches).toEqual(["One.", "Two."]); // the third waits for playback to reach it
+    expect(r.fetches).toEqual(["One.", "Two. Three."]); // a full piece is fetched at once
+    sp.say("Four.");
+    sp.say("Five.");
     sp.finish();
-    expect(await r.done).toEqual({ interrupted: false, spoken: "One. Two. Three.", sentences: 3, fellBack: false, reason: "finished", played: 3, voiceErrors: 0 });
-    expect(r.log).toEqual(["play One.", "play Two.", "play Three."]);
-    expect(r.fetches).toEqual(["One.", "Two.", "Three."]);
+    expect(await r.done).toEqual({ interrupted: false, spoken: "One. Two. Three. Four. Five.", sentences: 5, fellBack: false, reason: "finished", played: 5, voiceErrors: 0 });
+    expect(r.log).toEqual(["play One.", "play Two. Three.", "play Four. Five."]);
+  });
+
+  it("doesn't hold a sentence back for long: alone after the wait, and the end of the reply sends it at once", async () => {
+    const slow = run({ mergeWaitMs: 15 }, 60);
+    slow.speaker().say("One.");
+    slow.speaker().say("Two.");
+    await new Promise((x) => setTimeout(x, 40)); // One is playing; the wait for Two's partner is over
+    expect(slow.fetches).toEqual(["One.", "Two."]);
+    slow.speaker().say("Three."); // too late to join Two: a piece of its own
+    slow.speaker().finish();
+    await slow.done;
+    expect(slow.log).toEqual(["play One.", "play Two.", "play Three."]);
+
+    const ended = run({ mergeWaitMs: 10_000 }, 30);
+    ended.speaker().say("One.");
+    ended.speaker().say("Two.");
+    ended.speaker().finish(); // nothing more is coming
+    expect(await ended.done).toMatchObject({ spoken: "One. Two.", played: 2 });
+    expect(ended.fetches).toEqual(["One.", "Two."]);
+  });
+
+  it("keeps a long sentence in a piece of its own", async () => {
+    const r = run();
+    const long = `${"A long sentence that goes on ".repeat(10).trim()}.`;
+    r.speaker().say("One.");
+    r.speaker().say("Two.");
+    r.speaker().say(long);
+    r.speaker().finish();
+    await r.done;
+    expect(r.log).toEqual(["play One.", "play Two.", `play ${long}`]);
   });
 
   it("stops at once, reporting what was said, synchronously", async () => {
