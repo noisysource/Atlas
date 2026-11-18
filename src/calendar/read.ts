@@ -34,8 +34,12 @@ export type CalendarEvent = {
   readonly ec: boolean;
   /** Which calendar it's from, when more than one is read (#137). */
   readonly account?: string;
-  /** #219: Google's id, to move or cancel it (never for EC events). */
+  /** #219: Google's id, to move or cancel it (never for EC events, nor for one on a shared calendar). */
   readonly id?: string;
+  /** #263: the shared or subscribed calendar it's on ("Family"); none for the primary calendar. */
+  readonly calendarName?: string;
+  /** #271: someone else organises it (he's invited), so a change to it is news to him. */
+  readonly invited?: boolean;
 };
 
 export type CalendarError = {
@@ -209,7 +213,8 @@ export const toCalendarEvents = (items: readonly GoogleEvent[], isEc: (e: Google
     const ec = isEc(item);
     const location = !ec && item.location ? clean(item.location) : "";
     const id = !ec && typeof item.id === "string" && /^[A-Za-z0-9_-]{4,1024}$/.test(item.id) ? item.id : "";
-    return [{ title: ec ? EC_EVENT : clean(item.summary ?? "") || "(no title)", start, end, allDay: item.start?.dateTime === undefined, ...(location ? { location } : {}), ec, ...(id ? { id } : {}) }];
+    const invited = item.organizer?.self === false && (item.attendees?.some((a) => a.self === true) ?? false);
+    return [{ title: ec ? EC_EVENT : clean(item.summary ?? "") || "(no title)", start, end, allDay: item.start?.dateTime === undefined, ...(location ? { location } : {}), ec, ...(id ? { id } : {}), ...(invited ? { invited } : {}) }];
   });
 
 const time = (iso: string, timeZone: string): string =>
@@ -217,17 +222,20 @@ const time = (iso: string, timeZone: string): string =>
 
 const dayOf = (iso: string, timeZone: string): string => (iso.length === 10 ? iso : localDate(new Date(iso), timeZone));
 
+/** #263: which shared calendar an event is on, so he knows whose it is. */
+const onCalendar = (e: CalendarEvent): string => (e.calendarName ? ` (on the ${e.calendarName} calendar)` : "");
+
 /** One event as a line for the brain: "Tuesday 10 November 2026, 09:00–10:00: Dentist (at Centro de Saúde)". */
 const eventLine = (e: CalendarEvent, timeZone: string): string => {
   if (e.allDay) {
     const lastDay = addDays(e.end, -1);
     const days = lastDay > e.start ? `${dayName(e.start)} to ${dayName(lastDay)}` : dayName(e.start);
-    return `- ${days}, all day: ${e.title}${e.id ? ` (id ${e.id})` : ""}`;
+    return `- ${days}, all day: ${e.title}${onCalendar(e)}${e.id ? ` (id ${e.id})` : ""}`;
   }
   const startDay = dayOf(e.start, timeZone);
   const endDay = dayOf(e.end, timeZone);
   const span = startDay === endDay ? `${time(e.start, timeZone)}–${time(e.end, timeZone)}` : `${time(e.start, timeZone)} to ${dayName(endDay)} ${time(e.end, timeZone)}`;
-  return `- ${dayName(startDay)}, ${span}: ${e.title}${e.location ? ` (at ${e.location})` : ""}${e.id ? ` (id ${e.id})` : ""}`;
+  return `- ${dayName(startDay)}, ${span}: ${e.title}${e.location ? ` (at ${e.location})` : ""}${onCalendar(e)}${e.id ? ` (id ${e.id})` : ""}`;
 };
 
 /** "[noisysource] " before an event, when more than one calendar was read. */

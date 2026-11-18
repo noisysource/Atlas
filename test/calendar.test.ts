@@ -157,6 +157,7 @@ describe("the Google Calendar reader: GET only, your primary calendar (#100)", (
   it("asks for the days in Lisbon time, with the token, and hides EC titles", async () => {
     const seen: { url: string; init: RequestInit | undefined }[] = [];
     const fakeFetch = (async (url: string | URL, init?: RequestInit) => {
+      if (String(url).includes("/calendarList")) return new Response("{}", { status: 403 });
       seen.push({ url: String(url), init });
       return new Response(JSON.stringify(items), { status: 200 });
     }) as typeof fetch;
@@ -265,6 +266,7 @@ describe("reading the calendar in bare mode, with either brain (#100)", () => {
       timeZone: TZ,
       isEc: (e) => isEcEvent(e, precheck),
       fetch: (async (u: string | URL) => {
+        if (String(u).includes("/calendarList")) return new Response("{}", { status: 403 });
         urls.push(String(u));
         return new Response(JSON.stringify({ items }), { status: 200 });
       }) as unknown as typeof fetch,

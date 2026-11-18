@@ -17,6 +17,8 @@ import type { CalendarError } from "./read.js";
 export const CALENDAR_SCOPE = "https://www.googleapis.com/auth/calendar.events.readonly";
 /** Reach 2 (CALENDAR_WRITE=on): read and add events. Still only events, never calendar settings or sharing. */
 export const CALENDAR_WRITE_SCOPE = "https://www.googleapis.com/auth/calendar.events";
+/** #263: which calendars the account shows (shared and subscribed ones too), read-only. Nothing about their events. */
+export const CALENDAR_LIST_SCOPE = "https://www.googleapis.com/auth/calendar.calendarlist.readonly";
 export const AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth";
 export const TOKEN_URL = "https://oauth2.googleapis.com/token";
 

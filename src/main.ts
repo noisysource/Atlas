@@ -1,6 +1,7 @@
 // Entry point: load config, build deps (refusing to start if anything is
 // missing), serve HTTP, and shut down gracefully on SIGTERM / SIGINT.
 
+import { execFile } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import { serve } from "@hono/node-server";
 import { buildDeps } from "./app.js";
@@ -67,6 +68,17 @@ const stopIntrospection =
 const morning = deps.ok ? deps.value.morningBrief : undefined;
 const stopMorning = morning
   ? startDailyAt(() => morning.prepare(), { timeZone: cfg.timeZone, hour: cfg.morningBrief.hour, minute: cfg.morningBrief.minute, msUntil, onError: () => log.warn("morning brief failed", { reason: "unexpected" }) })
+  : undefined;
+// #271: Atlas speaks up on his own. With the page open it chimes and speaks there; with none, on a Mac,
+// a notification and the Mac's voice (quiet hours: the notification only).
+const proactive = deps.ok ? deps.value.proactive : undefined;
+const stopProactive = proactive
+  ? proactive.start((n) => {
+      if (proactive.notices.pageOpen() || process.platform !== "darwin") return;
+      const text = [...n.text].map((c) => (c.charCodeAt(0) < 32 ? " " : c)).join("").slice(0, 300);
+      execFile("osascript", ["-e", `display notification ${JSON.stringify(text)} with title "Atlas"`], () => undefined);
+      if (n.speak) execFile("say", [text], () => undefined);
+    })
   : undefined;
 // #128: every night at 04:00, what changed since each code study (and, with CODE_REFRESH=study, a few re-studies).
 const refresh = deps.ok ? deps.value.codeRefresh : undefined;
@@ -195,6 +207,7 @@ const shutdown = (signal: string): void => {
       stopPurge?.();
       stopIntrospection?.();
       stopMorning?.();
+      stopProactive?.stop();
       stopRefresh?.();
       if (sqlite?.ok) sqlite.value.close();
       log.info("stopped");

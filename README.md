@@ -307,6 +307,14 @@ Requires Node 22.13 or later (the memory store uses `node:sqlite`, which needs a
         (Marisa's), each signed in by that account (#245).
      5. Put `CALENDAR=on` in `.env` and restart.
 
+     Atlas reads every calendar an account shows in Google Calendar (the
+     ticked ones: shared calendars like Family, subscribed ones like
+     holidays), not just its main one, and says which calendar an event is
+     on (#263). Untick a calendar in Google Calendar to keep it out. Moving
+     and cancelling still work only on the main calendar. An account
+     connected before this reads only its main calendar until you run its
+     `calendar:connect` again.
+
      How it works:
      - **With ☁️ Claude, Claude decides (#104).** Claude gets a
        `calendar_read` tool and calls it itself when your question needs
