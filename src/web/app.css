@@ -3185,3 +3185,48 @@ body[data-phase="speaking"] .brain-star {
   content: "◆ ";
   color: var(--accent);
 }
+
+/* #280: the trace folds, and open it scrolls inside a capped height: the galaxy and the chat stay in view. */
+button.trace-head,
+button.trace-head:hover:not(:disabled) {
+  display: block;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  text-align: left;
+  font-size: 0.72rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+button.trace-head:hover:not(:disabled) {
+  color: var(--ns-glow);
+}
+
+.trace[data-open="false"] {
+  padding-block: 0.45rem;
+}
+
+.trace-scroll {
+  max-height: 38vh;
+  overflow: auto;
+  margin-top: 0.5rem;
+}
+
+.trace-scroll[hidden] {
+  display: none;
+}
+
+@media (min-width: 68.01rem) {
+  /* Open, the trace scrolls with the galaxy in its own column; the chat never moves. */
+  .brain {
+    max-height: calc(100vh - 5.1rem);
+    overflow-x: hidden;
+    overflow-y: auto;
+    scrollbar-width: none;
+  }
+}
