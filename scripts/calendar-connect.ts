@@ -26,7 +26,7 @@ import { randomBytes } from "node:crypto";
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import { makeGoogleCalendarReader } from "../src/calendar/google.js";
-import { authorizationUrl, CALENDAR_SCOPE, CALENDAR_WRITE_SCOPE, exchangeCode, makeAccessTokens, makePkce, nodeTokenFiles, parseClientFile } from "../src/calendar/oauth.js";
+import { authorizationUrl, CALENDAR_LIST_SCOPE, CALENDAR_SCOPE, CALENDAR_WRITE_SCOPE, exchangeCode, makeAccessTokens, makePkce, nodeTokenFiles, parseClientFile } from "../src/calendar/oauth.js";
 import { localDate } from "../src/calendar/read.js";
 import { CALENDAR_ACCOUNTS, calendarTokensPath, isCalendarAccount } from "../src/calendar/accounts.js";
 import { loadConfig } from "../src/config.js";
@@ -59,10 +59,11 @@ const server = createServer();
 await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
 const redirectUri = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
 const write = process.env.CALENDAR_WRITE === "on";
-const scope = write ? CALENDAR_WRITE_SCOPE : CALENDAR_SCOPE;
+// #263: plus the list of calendars it shows, so shared ones are read too.
+const scope = `${write ? CALENDAR_WRITE_SCOPE : CALENDAR_SCOPE} ${CALENDAR_LIST_SCOPE}`;
 const url = authorizationUrl({ clientId: oauthClient.clientId, redirectUri, challenge, state, scope });
 console.log(`Connecting the "${account}" calendar. On Google's screen, pick that account.`);
-console.log(write ? "Asking for read and add access to its events (Atlas adds only after your OK).\n" : "Asking for read-only access to its events.\n");
+console.log(write ? "Asking for read and add access to its events (Atlas adds only after your OK), and to see which calendars it shows.\n" : "Asking for read-only access to its events, and to see which calendars it shows.\n");
 
 console.log("Opening Google's sign-in in your browser. If it doesn't open, visit:\n");
 console.log(`  ${url}\n`);

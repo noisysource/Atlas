@@ -530,6 +530,7 @@ export const buildDeps = async (inputs: AppInputs): Promise<Result<Deps, string>
       timeZone: config.timeZone,
       isEc: (event) => isEcEvent(event, precheck),
       account,
+      log: (line) => log.info(line),
     });
   const calendar = config.calendar.enabled
     ? {

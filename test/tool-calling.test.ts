@@ -65,6 +65,8 @@ const googleWith = (items: GoogleEvent[]) => {
     timeZone: TZ,
     isEc: (e) => isEcEvent(e, precheck),
     fetch: (async (u: string | URL) => {
+      // An account connected before #263: no calendar list, the primary alone.
+      if (String(u).includes("/calendarList")) return new Response("{}", { status: 403 });
       urls.push(String(u));
       return new Response(JSON.stringify({ items }), { status: 200 });
     }) as unknown as typeof fetch,
