@@ -2,7 +2,7 @@
 // node Atlas reaches for in the current answer. States come from brain-lib.js;
 // this file only draws them.
 
-import { EMPTY, NODES, NODE_TAGS, applyReach, applyStep, connectCommand, isReaching, lineGeometry, mesh, nodePosition, offeredNodes, restOf, settle, stateOfPath } from "./brain-lib.js";
+import { EMPTY, NODES, NODE_TAGS, applyReach, applyStep, connectCommand, galaxyDust, galaxyLine, galaxyPosition, isReaching, mesh, offeredNodes, restOf, settle, stateOfPath } from "./brain-lib.js";
 
 /** @typedef {import("./brain-lib.js").BrainState} BrainState */
 /** @typedef {import("./chat.js").PathStep} PathStep */
@@ -79,7 +79,8 @@ export const makeBrainView = (root, options = {}) => {
   lines.setAttribute("aria-hidden", "true");
 
   const core = el("div", "brain-core");
-  core.append(el("span", "brain-ring"), el("span", "brain-ring brain-ring-outer"));
+  // The star (the Noisy Source look): one bright point where it all begins.
+  core.append(el("span", "brain-ring"), el("span", "brain-ring brain-ring-outer"), el("span", "brain-star"));
   const face = el("div", "brain-face");
   const name = el("span", "brain-name");
   const sub = el("span", "brain-sub");
@@ -89,10 +90,11 @@ export const makeBrainView = (root, options = {}) => {
   /** @type {Map<string, { box: HTMLButtonElement, tag: HTMLElement, badge: HTMLElement, rest: import("./brain-lib.js").Rest }>} */
   const nodes = new Map();
   const list = el("ul", "brain-nodes");
-  for (const n of NODES) {
+  for (const [index, n] of NODES.entries()) {
     const item = el("li", "brain-node-item");
-    const pos = nodePosition(n.angle);
-    item.style.cssText = `left:${pos.left}%;top:${pos.top}%`;
+    const pos = galaxyPosition(n.id);
+    // --i staggers each icon's gentle float.
+    item.style.cssText = `left:${pos.left}%;top:${pos.top}%;--i:${index}`;
     const box = document.createElement("button");
     box.type = "button";
     box.className = "brain-node";
@@ -120,7 +122,22 @@ export const makeBrainView = (root, options = {}) => {
   panel.id = "brain-panel";
   panel.hidden = true;
 
-  stage.append(net, lines, core, list);
+  // The galaxy: a haze of stars along its two arms, the tools on them, all turning very slowly around the star.
+  const galaxy = el("div", "brain-galaxy");
+  const dust = document.createElementNS(SVG_NS, "svg");
+  dust.setAttribute("class", "brain-dust");
+  dust.setAttribute("viewBox", "0 0 100 100");
+  dust.setAttribute("aria-hidden", "true");
+  for (const d of galaxyDust(220)) {
+    const c = document.createElementNS(SVG_NS, "circle");
+    c.setAttribute("cx", String(d.left));
+    c.setAttribute("cy", String(d.top));
+    c.setAttribute("r", String(d.size / 10));
+    c.setAttribute("opacity", String(d.alpha));
+    dust.append(c);
+  }
+  galaxy.append(dust, lines, list);
+  stage.append(net, galaxy, core);
   // #143: the reasoning trace goes between the brain and the node panel.
   const traceSlot = el("div", "");
   // #156: what's being studied in the background.
@@ -297,14 +314,55 @@ export const makeBrainView = (root, options = {}) => {
     }
   };
 
+  /** Puts the open panel beside its icon, inside the brain, growing out of the icon. @param {string} id */
+  const placePanel = (id) => {
+    const box = nodes.get(id)?.box;
+    if (!box) return;
+    const area = root.getBoundingClientRect();
+    const at = box.getBoundingClientRect();
+    const cx = at.left + at.width / 2 - area.left;
+    const cy = at.top + at.height / 2 - area.top;
+    const pw = panel.offsetWidth;
+    const ph = Math.min(panel.scrollHeight, area.height - 16);
+    const left = Math.max(8, Math.min(area.width - pw - 8, cx - pw / 2));
+    const below = cy < area.height / 2;
+    const top = Math.max(8, Math.min(area.height - ph - 8, below ? cy + at.height / 2 + 6 : cy - at.height / 2 - ph - 6));
+    panel.style.left = `${left}px`;
+    panel.style.top = `${top}px`;
+    panel.style.maxHeight = `${area.height - 16}px`;
+    panel.style.transformOrigin = `${cx - left}px ${cy - top}px`;
+  };
+
+  /** @type {ReturnType<typeof setTimeout> | undefined} */
+  let fading;
+  /** Bumped by every replay and question, so an older replay stops. */
+  let replays = 0;
   /** @param {string} id */
   const togglePanel = (id) => {
-    shown = shown === id ? undefined : id;
+    const closing = shown === id;
+    shown = closing ? undefined : id;
     for (const [nid, node] of nodes) node.box.setAttribute("aria-expanded", String(nid === shown));
+    clearTimeout(fading);
+    if (closing) {
+      // It fades back into its icon, then goes.
+      panel.dataset.state = "closing";
+      fading = setTimeout(() => {
+        panel.dataset.state = "";
+        drawPanel();
+      }, 220);
+      return;
+    }
     drawPanel();
-    // #253: the panel opens under the ring, often below the fold: bring it into view.
-    if (shown) requestAnimationFrame(() => panel.scrollIntoView({ block: "nearest", behavior: "smooth" }));
+    panel.dataset.state = "";
+    placePanel(id);
+    // A photon bursts out of the icon, and the panel opens from it.
+    requestAnimationFrame(() => {
+      panel.dataset.state = "open";
+    });
   };
+  root.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && shown) togglePanel(shown);
+  });
 
   /** @type {BrainState} */
   let state = EMPTY;
@@ -327,7 +385,7 @@ export const makeBrainView = (root, options = {}) => {
       node.box.dataset.offered = offered === undefined ? "" : notOffered ? "no" : "yes";
       node.tag.textContent = notOffered && (shown === "idle" || shown === "off") ? "not offered" : !state[n.id] && background.has(n.id) ? "studying…" : NODE_TAGS[shown];
       if (!reach) continue;
-      const g = lineGeometry(n.angle, reach);
+      const g = galaxyLine(n.id, reach);
       const line = el("span", `brain-line brain-line-${reach}`);
       line.style.cssText = `left:${g.left}%;top:${g.top}%;width:${g.length}%;transform:rotate(${g.angle}deg)`;
       lines.append(line);
@@ -387,8 +445,45 @@ export const makeBrainView = (root, options = {}) => {
       pendingCards = counts;
       drawBadges();
     },
-    /** A new question: the lines of the last answer go. */
+    /**
+     * Replays an answer's path on the galaxy (#262): the star thinks again,
+     * and photons go out to each tool in order, each lighting up with how it
+     * went. `onStep(i)` says which step is showing (-1 when done). A real
+     * question (`begin`) stops a replay at once.
+     * @param {readonly PathStep[]} path @param {(i: number) => void} [onStep]
+     */
+    replay: async (path, onStep) => {
+      const mine = ++replays;
+      const wait = (/** @type {number} */ ms) => new Promise((r) => setTimeout(r, ms));
+      const live = () => mine === replays;
+      state = EMPTY;
+      offered = undefined;
+      working = true;
+      draw();
+      for (const [i, step] of path.entries()) {
+        await wait(i === 0 ? 350 : 650);
+        if (!live()) return;
+        onStep?.(i);
+        if (step.kind === "tool" || step.kind === "skill") {
+          state = applyReach(state, step.name);
+          draw();
+          await wait(900);
+          if (!live()) return;
+        }
+        if (step.kind === "tools") offered = offeredNodes(step.offered);
+        state = applyStep(state, step);
+        draw();
+      }
+      await wait(600);
+      if (!live()) return;
+      working = false;
+      state = stateOfPath(path);
+      draw();
+      onStep?.(-1);
+    },
+    /** A new question: the lines of the last answer go (and a replay stops). */
     begin: () => {
+      replays++;
       state = EMPTY;
       offered = undefined;
       working = true;

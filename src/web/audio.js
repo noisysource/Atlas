@@ -5,6 +5,7 @@
 // turn manager.
 
 import { pcm16ToFloat32, readAudioFormat } from "./pcm-lib.js";
+import { voiceOut } from "./voice-level.js";
 
 export { pcm16ToFloat32, readAudioFormat };
 
@@ -58,7 +59,7 @@ export const playSpeech = async ({ ctx, response, signal, onFirstAudio, tracker 
     buffer.getChannelData(0).set(samples);
     const source = ctx.createBufferSource();
     source.buffer = buffer;
-    source.connect(ctx.destination);
+    source.connect(voiceOut(ctx));
     const when = Math.max(nextTime, ctx.currentTime + 0.02);
     if (sources.length === 0) {
       startAt = when;

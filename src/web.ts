@@ -20,6 +20,7 @@ export const FILES: readonly { path: string; file: string; contentType: string }
   { path: "/app.js", file: "app.js", contentType: "text/javascript; charset=utf-8" },
   { path: "/chat.js", file: "chat.js", contentType: "text/javascript; charset=utf-8" },
   { path: "/brain.js", file: "brain.js", contentType: "text/javascript; charset=utf-8" },
+  { path: "/universe.js", file: "universe.js", contentType: "text/javascript; charset=utf-8" },
   { path: "/brain-lib.js", file: "brain-lib.js", contentType: "text/javascript; charset=utf-8" },
   { path: "/trace.js", file: "trace.js", contentType: "text/javascript; charset=utf-8" },
   { path: "/studies.js", file: "studies.js", contentType: "text/javascript; charset=utf-8" },
@@ -33,6 +34,7 @@ export const FILES: readonly { path: string; file: string; contentType: string }
   { path: "/terminal-lib.js", file: "terminal-lib.js", contentType: "text/javascript; charset=utf-8" },
   { path: "/app.css", file: "app.css", contentType: "text/css; charset=utf-8" },
   { path: "/audio.js", file: "audio.js", contentType: "text/javascript; charset=utf-8" },
+  { path: "/voice-level.js", file: "voice-level.js", contentType: "text/javascript; charset=utf-8" },
   { path: "/pcm-lib.js", file: "pcm-lib.js", contentType: "text/javascript; charset=utf-8" },
   { path: "/mic.js", file: "mic.js", contentType: "text/javascript; charset=utf-8" },
   { path: "/mic-lib.js", file: "mic-lib.js", contentType: "text/javascript; charset=utf-8" },
@@ -65,6 +67,9 @@ export const VENDOR_FILES: readonly { path: string; file: string; contentType: s
   },
   { path: "/vendor/ort/ort-wasm-simd-threaded.wasm", file: "node_modules/onnxruntime-web/dist/ort-wasm-simd-threaded.wasm", contentType: "application/wasm" },
   { path: "/vendor/silero_vad_v5.onnx", file: "node_modules/@ricky0123/vad-web/dist/silero_vad_v5.onnx", contentType: "application/octet-stream" },
+  // The Noisy Source look: JetBrains Mono for text, Oxanium for the name. Served from here, never a font CDN.
+  ...(["400", "600"] as const).map((w) => ({ path: `/vendor/fonts/jetbrains-mono-${w}.woff2`, file: `node_modules/@fontsource/jetbrains-mono/files/jetbrains-mono-latin-${w}-normal.woff2`, contentType: "font/woff2" })),
+  { path: "/vendor/fonts/oxanium-500.woff2", file: "node_modules/@fontsource/oxanium/files/oxanium-latin-500-normal.woff2", contentType: "font/woff2" },
 ];
 
 /** Dev-only pages (#73): never served in production. */
@@ -82,7 +87,7 @@ export const DEV_FILES: readonly { path: string; file: string; contentType: stri
  */
 export const WEB_SECURITY_HEADERS: Readonly<Record<string, string>> = {
   "Content-Security-Policy":
-    "default-src 'none'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self'; connect-src 'self'; img-src 'self'; " +
+    "default-src 'none'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self'; font-src 'self'; connect-src 'self'; img-src 'self'; " +
     "base-uri 'none'; form-action 'self'; frame-ancestors 'none'",
   "X-Content-Type-Options": "nosniff",
   "Referrer-Policy": "no-referrer",
