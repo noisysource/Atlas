@@ -39,7 +39,8 @@ export const groupOfTool = (name: string): ToolGroup | undefined => {
   if (name.startsWith("calendar_") || name === "day_brief") return "calendar";
   if (name.startsWith("gmail_")) return "gmail";
   if (name.startsWith("github_") || name.startsWith("plan_")) return "github";
-  if (name.startsWith("code_")) return "code";
+  // #273: the coding tasks are code tools too, so "open the PR" after "any news?" still has task_publish.
+  if (name.startsWith("code_") || name.startsWith("task_")) return "code";
   if (name.startsWith("gcloud_")) return "cloud";
   if (name.startsWith("vendus_")) return "invoices";
   if (name.startsWith("house_")) return "house";
@@ -97,7 +98,8 @@ const RULES: readonly { readonly pattern: RegExp; readonly groups: readonly Tool
   {
     pattern: words(`
       code, codebase, coding, architectur*, module*, function*, file*, folder*, implement*, refactor*, stud*, how does,
-      how do, where is, bug*, feature*, endpoint*, component*, api, apis, monorepo, codigo*, arquitetura, funcionalidade*, estudar, estuda*`),
+      how do, where is, bug*, feature*, endpoint*, component*, api, apis, monorepo, codigo*, arquitetura, funcionalidade*, estudar, estuda*,
+      task, tasks, coding task*, publish*, push*, pr, prs, pull request*, branch*, tarefa*, publica*`),
     groups: ["code"],
   },
   {
