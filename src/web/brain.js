@@ -2,7 +2,7 @@
 // node Atlas reaches for in the current answer. States come from brain-lib.js;
 // this file only draws them.
 
-import { EMPTY, NODES, NODE_TAGS, applyReach, applyStep, connectCommand, galaxyDust, galaxyLine, galaxyPosition, isReaching, mesh, offeredNodes, restOf, settle, stateOfPath } from "./brain-lib.js";
+import { EMPTY, NODES, NODE_TAGS, applyReach, applyStep, connectCommand, driftsOf, galaxyDust, galaxyLine, galaxyPosition, isReaching, mesh, nodeOfTool, offeredNodes, recentUses, restOf, settle, stateOfPath, withUse } from "./brain-lib.js";
 
 /** @typedef {import("./brain-lib.js").BrainState} BrainState */
 /** @typedef {import("./chat.js").PathStep} PathStep */
@@ -88,12 +88,26 @@ export const makeBrainView = (root, options = {}) => {
   face.append(name, sub);
   core.append(face);
 
+  // #282: tools drift closer to the star with their use in the last 30 days.
+  // Kept on this device: node and time only, never what was asked.
+  const USES_KEY = "atlas.toolUses";
+  /** @type {import("./brain-lib.js").Uses} */
+  let uses = {};
+  try {
+    uses = recentUses(JSON.parse(localStorage.getItem(USES_KEY) ?? "{}"), Date.now());
+  } catch {
+    uses = {};
+  }
+  let drifts = driftsOf(uses, Date.now());
+  /** @type {Map<string, HTMLElement>} */
+  const items = new Map();
+
   /** @type {Map<string, { box: HTMLButtonElement, tag: HTMLElement, badge: HTMLElement, rest: import("./brain-lib.js").Rest }>} */
   const nodes = new Map();
   const list = el("ul", "brain-nodes");
   for (const [index, n] of NODES.entries()) {
     const item = el("li", "brain-node-item");
-    const pos = galaxyPosition(n.id);
+    const pos = galaxyPosition(n.id, drifts[n.id]);
     // --i staggers each icon's gentle float.
     item.style.cssText = `left:${pos.left}%;top:${pos.top}%;--i:${index}`;
     const box = document.createElement("button");
@@ -117,6 +131,7 @@ export const makeBrainView = (root, options = {}) => {
     item.append(box);
     list.append(item);
     nodes.set(n.id, { box, tag, badge, rest: n.rest });
+    items.set(n.id, item);
   }
 
   const panel = el("section", "brain-panel");
@@ -386,7 +401,7 @@ export const makeBrainView = (root, options = {}) => {
       node.box.dataset.offered = offered === undefined ? "" : notOffered ? "no" : "yes";
       node.tag.textContent = notOffered && (shown === "idle" || shown === "off") ? "not offered" : !state[n.id] && background.has(n.id) ? "studying…" : NODE_TAGS[shown];
       if (!reach) continue;
-      const g = galaxyLine(n.id, reach);
+      const g = galaxyLine(n.id, reach, drifts[n.id]);
       const line = el("span", `brain-line brain-line-${reach}`);
       line.style.cssText = `left:${g.left}%;top:${g.top}%;width:${g.length}%;transform:rotate(${g.angle}deg)`;
       lines.append(line);
@@ -492,6 +507,24 @@ export const makeBrainView = (root, options = {}) => {
     },
     /** A tool call started. @param {string} tool */
     reach: (tool) => {
+      const node = nodeOfTool(tool);
+      if (node) {
+        uses = withUse(uses, node, Date.now());
+        drifts = driftsOf(uses, Date.now());
+        try {
+          localStorage.setItem(USES_KEY, JSON.stringify(uses));
+        } catch {
+          // storage blocked or full: the drift lasts until the page closes
+        }
+        // The CSS transition on left/top makes the move slow and smooth.
+        for (const n of NODES) {
+          const item = items.get(n.id);
+          if (!item) continue;
+          const p = galaxyPosition(n.id, drifts[n.id]);
+          item.style.left = `${p.left}%`;
+          item.style.top = `${p.top}%`;
+        }
+      }
       state = applyReach(state, tool);
       draw();
     },

@@ -189,22 +189,78 @@ const GALAXY_R = 44;
 const STAR_EDGE = 7;
 const DISC_GAP = 4.5;
 
-/** Where a node sits in the galaxy, in % of the stage. @param {NodeId} id */
-export const galaxyPosition = (id) => {
+/** #282: tools drift closer to the star with their use in the last 30 days, by at most this share of their distance. */
+export const USAGE_DAYS = 30;
+export const MAX_DRIFT = 0.15;
+/** Uses at which a tool has drifted about 63% of the way to the most it can. */
+const DRIFT_USES = 15;
+const DAY_MS = 86_400_000;
+
+/**
+ * How far a tool has drifted, 0..MAX_DRIFT, from its uses in the window.
+ * Smooth and saturating: each use pulls a little less than the last, and it
+ * never passes MAX_DRIFT.
+ * @param {number} uses
+ */
+export const driftOf = (uses) => fx(MAX_DRIFT * (1 - Math.exp(-Math.max(0, uses) / DRIFT_USES)));
+
+/** @typedef {Partial<Record<NodeId, number[]>>} Uses The times (ms) each node was reached. Content-free. */
+
+/**
+ * The uses inside the last 30 days.
+ * @param {Uses} uses @param {number} now @returns {Uses}
+ */
+export const recentUses = (uses, now) => {
+  /** @type {Uses} */
+  const out = {};
+  for (const n of NODES) {
+    const list = (Array.isArray(uses[n.id]) ? uses[n.id] ?? [] : []).filter((t) => Number.isFinite(t) && t <= now && now - t < USAGE_DAYS * DAY_MS);
+    if (list.length > 0) out[n.id] = list;
+  }
+  return out;
+};
+
+/** @param {Uses} uses @param {NodeId} node @param {number} now @returns {Uses} */
+export const withUse = (uses, node, now) => {
+  const recent = recentUses(uses, now);
+  return { ...recent, [node]: [...(recent[node] ?? []), now] };
+};
+
+/**
+ * The drift of every tool. Atlas's own parts (the core) stay where they are.
+ * @param {Uses} uses @param {number} now @returns {Partial<Record<NodeId, number>>}
+ */
+export const driftsOf = (uses, now) => {
+  const recent = recentUses(uses, now);
+  /** @type {Partial<Record<NodeId, number>>} */
+  const out = {};
+  for (const n of NODES) if (GALAXY[n.id].arm !== "core") out[n.id] = driftOf(recent[n.id]?.length ?? 0);
+  return out;
+};
+
+/** @param {number} drift */
+const clampDrift = (drift) => Math.min(Math.max(drift, 0), MAX_DRIFT);
+
+/**
+ * Where a node sits in the galaxy, in % of the stage.
+ * @param {NodeId} id @param {number} [drift] 0..MAX_DRIFT, closer to the star
+ */
+export const galaxyPosition = (id, drift = 0) => {
   const g = GALAXY[id];
   const a = (g.angle * Math.PI) / 180;
-  return { left: fx(50 + Math.cos(a) * g.r * GALAXY_R), top: fx(50 + Math.sin(a) * g.r * GALAXY_R) };
+  const r = g.r * (1 - clampDrift(drift)) * GALAXY_R;
+  return { left: fx(50 + Math.cos(a) * r), top: fx(50 + Math.sin(a) * r) };
 };
 
 /**
  * A beam from the star to a node in the galaxy. A failed reach stops short.
- * @param {NodeId} id @param {Reach} reach
+ * @param {NodeId} id @param {Reach} reach @param {number} [drift]
  * @returns {{ left: number, top: number, length: number, angle: number, end: { left: number, top: number } }}
  */
-export const galaxyLine = (id, reach) => {
+export const galaxyLine = (id, reach, drift = 0) => {
   const g = GALAXY[id];
   const a = (g.angle * Math.PI) / 180;
-  const far = g.r * GALAXY_R - DISC_GAP;
+  const far = g.r * (1 - clampDrift(drift)) * GALAXY_R - DISC_GAP;
   const to = reach === "failed" ? STAR_EDGE + (far - STAR_EDGE) * 0.7 : far;
   return {
     left: fx(50 + Math.cos(a) * STAR_EDGE),

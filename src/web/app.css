@@ -2689,6 +2689,10 @@ body[data-phase="speaking"] .brain-star {
 
 /* The tools: icons floating gently around the star. */
 .brain-node-item {
+  /* #282: a tool used more drifts closer to the star, slowly */
+  transition:
+    left 2.4s ease-in-out,
+    top 2.4s ease-in-out;
   animation: ns-float 9s ease-in-out infinite;
   animation-delay: calc(var(--i, 0) * -1.37s);
 }
