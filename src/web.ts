@@ -34,6 +34,7 @@ export const FILES: readonly { path: string; file: string; contentType: string }
   { path: "/terminal-lib.js", file: "terminal-lib.js", contentType: "text/javascript; charset=utf-8" },
   { path: "/app.css", file: "app.css", contentType: "text/css; charset=utf-8" },
   { path: "/audio.js", file: "audio.js", contentType: "text/javascript; charset=utf-8" },
+  { path: "/voice-level.js", file: "voice-level.js", contentType: "text/javascript; charset=utf-8" },
   { path: "/pcm-lib.js", file: "pcm-lib.js", contentType: "text/javascript; charset=utf-8" },
   { path: "/mic.js", file: "mic.js", contentType: "text/javascript; charset=utf-8" },
   { path: "/mic-lib.js", file: "mic-lib.js", contentType: "text/javascript; charset=utf-8" },

@@ -5,6 +5,7 @@
 
 import { parseSse } from "./turn-lib.js";
 import { base64Of, LIVE_RATE, pcmFromBase64 } from "./live-lib.js";
+import { voiceOut } from "./voice-level.js";
 
 /**
  * Plays Gemini's voice as it arrives. `finish()` says no more is coming;
@@ -35,7 +36,7 @@ export const makeLivePlayer = (ctx, hooks = {}) => {
       buffer.getChannelData(0).set(samples);
       const source = ctx.createBufferSource();
       source.buffer = buffer;
-      source.connect(ctx.destination);
+      source.connect(voiceOut(ctx));
       const at = Math.max(ctx.currentTime + 0.02, next);
       next = at + buffer.duration;
       pending += 1;

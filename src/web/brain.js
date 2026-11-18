@@ -2,7 +2,7 @@
 // node Atlas reaches for in the current answer. States come from brain-lib.js;
 // this file only draws them.
 
-import { EMPTY, NODES, NODE_TAGS, applyReach, applyStep, connectCommand, isReaching, lineGeometry, mesh, nodePosition, offeredNodes, restOf, settle, stateOfPath } from "./brain-lib.js";
+import { EMPTY, NODES, NODE_TAGS, applyReach, applyStep, connectCommand, galaxyDust, galaxyLine, galaxyPosition, isReaching, mesh, offeredNodes, restOf, settle, stateOfPath } from "./brain-lib.js";
 
 /** @typedef {import("./brain-lib.js").BrainState} BrainState */
 /** @typedef {import("./chat.js").PathStep} PathStep */
@@ -92,7 +92,7 @@ export const makeBrainView = (root, options = {}) => {
   const list = el("ul", "brain-nodes");
   for (const [index, n] of NODES.entries()) {
     const item = el("li", "brain-node-item");
-    const pos = nodePosition(n.angle);
+    const pos = galaxyPosition(n.id);
     // --i staggers each icon's gentle float.
     item.style.cssText = `left:${pos.left}%;top:${pos.top}%;--i:${index}`;
     const box = document.createElement("button");
@@ -122,7 +122,22 @@ export const makeBrainView = (root, options = {}) => {
   panel.id = "brain-panel";
   panel.hidden = true;
 
-  stage.append(net, lines, core, list);
+  // The galaxy: a haze of stars along its two arms, the tools on them, all turning very slowly around the star.
+  const galaxy = el("div", "brain-galaxy");
+  const dust = document.createElementNS(SVG_NS, "svg");
+  dust.setAttribute("class", "brain-dust");
+  dust.setAttribute("viewBox", "0 0 100 100");
+  dust.setAttribute("aria-hidden", "true");
+  for (const d of galaxyDust(220)) {
+    const c = document.createElementNS(SVG_NS, "circle");
+    c.setAttribute("cx", String(d.left));
+    c.setAttribute("cy", String(d.top));
+    c.setAttribute("r", String(d.size / 10));
+    c.setAttribute("opacity", String(d.alpha));
+    dust.append(c);
+  }
+  galaxy.append(dust, lines, list);
+  stage.append(net, galaxy, core);
   // #143: the reasoning trace goes between the brain and the node panel.
   const traceSlot = el("div", "");
   // #156: what's being studied in the background.
@@ -368,7 +383,7 @@ export const makeBrainView = (root, options = {}) => {
       node.box.dataset.offered = offered === undefined ? "" : notOffered ? "no" : "yes";
       node.tag.textContent = notOffered && (shown === "idle" || shown === "off") ? "not offered" : !state[n.id] && background.has(n.id) ? "studying…" : NODE_TAGS[shown];
       if (!reach) continue;
-      const g = lineGeometry(n.angle, reach);
+      const g = galaxyLine(n.id, reach);
       const line = el("span", `brain-line brain-line-${reach}`);
       line.style.cssText = `left:${g.left}%;top:${g.top}%;width:${g.length}%;transform:rotate(${g.angle}deg)`;
       lines.append(line);

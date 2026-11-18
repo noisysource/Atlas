@@ -11,6 +11,7 @@ import { makeCostsView } from "./costs.js";
 import { makeLivePlayer, runLiveTurn } from "./live.js";
 import { makeBrainView } from "./brain.js";
 import { startUniverse } from "./universe.js";
+import { voiceLevel } from "./voice-level.js";
 import { makeCodeMapView } from "./codemap.js";
 import { makeStudiesView } from "./studies.js";
 import { makeTraceView } from "./trace.js";
@@ -293,6 +294,21 @@ startUniverse(/** @type {HTMLCanvasElement} */ (byId("universe")), {
     return r.width > 0 ? { x: r.left + r.width / 2, y: r.top + r.height / 2 } : undefined;
   },
 });
+
+// The star pulses with Atlas's voice, like Jarvis: bigger and brighter on every word.
+{
+  let shown = 0;
+  const pulse = () => {
+    const core = /** @type {HTMLElement | null} */ (document.querySelector(".brain-core"));
+    const target = state.phase === "speaking" && !document.hidden ? voiceLevel(audioCtx) : 0;
+    // Quick to rise, a little slower to fall, so it flashes with the syllables.
+    shown += (target - shown) * (target > shown ? 0.55 : 0.18);
+    if (shown < 0.002) shown = 0;
+    if (core) core.style.setProperty("--voice", shown.toFixed(3));
+    requestAnimationFrame(pulse);
+  };
+  requestAnimationFrame(pulse);
+}
 
 // Settings: the controls live in a panel behind the gear, out of the way.
 const settingsToggle = /** @type {HTMLButtonElement} */ (byId("settings-toggle"));

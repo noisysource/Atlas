@@ -160,6 +160,86 @@ export const lineGeometry = (angle, reach) => {
   };
 };
 
+/**
+ * The galaxy (the Noisy Source look): Atlas's own parts close to the core,
+ * then two spiral arms, life and work, the tools further out along them.
+ * `r` is the share of the galaxy's radius, `angle` degrees (0 = right, clockwise).
+ * @type {Record<NodeId, { r: number, angle: number, arm: "core" | "life" | "work" }>}
+ */
+export const GALAXY = {
+  profile: { r: 0.36, angle: -105, arm: "core" },
+  memory: { r: 0.38, angle: 15, arm: "core" },
+  skills: { r: 0.36, angle: 135, arm: "core" },
+  calendar: { r: 0.55, angle: 45, arm: "life" },
+  gmail: { r: 0.67, angle: 82, arm: "life" },
+  house: { r: 0.79, angle: 118, arm: "life" },
+  vendus: { r: 0.9, angle: 152, arm: "life" },
+  web: { r: 0.98, angle: 188, arm: "life" },
+  github: { r: 0.55, angle: 225, arm: "work" },
+  code: { r: 0.67, angle: 262, arm: "work" },
+  cloud: { r: 0.79, angle: 298, arm: "work" },
+  kiro: { r: 0.92, angle: 334, arm: "work" },
+};
+
+/** The galaxy's radius, in % of the stage, and where lines leave the star. */
+const GALAXY_R = 44;
+const STAR_EDGE = 7;
+const DISC_GAP = 4.5;
+
+/** Where a node sits in the galaxy, in % of the stage. @param {NodeId} id */
+export const galaxyPosition = (id) => {
+  const g = GALAXY[id];
+  const a = (g.angle * Math.PI) / 180;
+  return { left: fx(50 + Math.cos(a) * g.r * GALAXY_R), top: fx(50 + Math.sin(a) * g.r * GALAXY_R) };
+};
+
+/**
+ * A beam from the star to a node in the galaxy. A failed reach stops short.
+ * @param {NodeId} id @param {Reach} reach
+ * @returns {{ left: number, top: number, length: number, angle: number, end: { left: number, top: number } }}
+ */
+export const galaxyLine = (id, reach) => {
+  const g = GALAXY[id];
+  const a = (g.angle * Math.PI) / 180;
+  const far = g.r * GALAXY_R - DISC_GAP;
+  const to = reach === "failed" ? STAR_EDGE + (far - STAR_EDGE) * 0.7 : far;
+  return {
+    left: fx(50 + Math.cos(a) * STAR_EDGE),
+    top: fx(50 + Math.sin(a) * STAR_EDGE),
+    length: fx(to - STAR_EDGE),
+    angle: g.angle,
+    end: { left: fx(50 + Math.cos(a) * to), top: fx(50 + Math.sin(a) * to) },
+  };
+};
+
+/**
+ * The haze of stars tracing the two arms: points along two spirals, a little
+ * scattered, brighter near the core. Seeded, so it's the same every time.
+ * @param {number} count
+ * @returns {{ left: number, top: number, size: number, alpha: number }[]}
+ */
+export const galaxyDust = (count) => {
+  let seed = 11;
+  const rand = () => {
+    seed = (seed * 16807) % 2147483647;
+    return seed / 2147483647;
+  };
+  return Array.from({ length: count }, (_, i) => {
+    const arm = i % 2; // life starts at 45°, work at 225°
+    const t = rand();
+    const r = 0.18 + t * 0.85;
+    const angle = (arm === 0 ? 20 : 200) + t * 175 + (rand() - 0.5) * 34 * (1 - t * 0.4);
+    const a = (angle * Math.PI) / 180;
+    const rr = r * GALAXY_R * (1 + (rand() - 0.5) * 0.12);
+    return {
+      left: fx(50 + Math.cos(a) * rr),
+      top: fx(50 + Math.sin(a) * rr),
+      size: fx(0.6 + rand() * 1.6),
+      alpha: fx((0.15 + rand() * 0.5) * (1 - t * 0.55)),
+    };
+  });
+};
+
 /** The words under a node. @type {Record<Reach | Rest, string>} */
 export const NODE_TAGS = {
   reaching: "reaching…",
