@@ -1279,6 +1279,13 @@ Confirmed (2026-11-12):
   needs BARE_MODE=on, local only. Drive is a node in the galaxy (a
   drive icon on the life arm, between Gmail and House) and has its own
   Reach entry with accounts and tools. Not yet: a page switch for Drive.
+- **Tool drift in the galaxy (#282):** a tool node sits closer to the star
+  the more it was reached in the last 30 days: up to 15% of its distance,
+  saturating (`1 - exp(-uses/15)`), moved slowly by a CSS transition. The
+  uses (node + time only, never content) are kept in this browser's
+  localStorage (`atlas.toolUses`) from the live reach events; replays
+  don't count. Atlas's own parts (profile, memory, skills) don't drift.
+  Not yet: usage shared across devices (it'd need a server-side log).
 - **Cards by voice, and steps that follow the answer (#224):**
   `card-lib.js` `cardAnswer` reads a short reply (at most five words: yes
   / no in English and Portuguese, or the card's own button words) as the

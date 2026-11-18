@@ -1,7 +1,7 @@
 // The galaxy (the Noisy Source look) and the star pulsing with Atlas's voice.
 
 import { describe, expect, it } from "vitest";
-import { GALAXY, NODES, galaxyDust, galaxyLine, galaxyPosition } from "../src/web/brain-lib.js";
+import { GALAXY, MAX_DRIFT, NODES, driftOf, driftsOf, galaxyDust, galaxyLine, galaxyPosition, recentUses, withUse } from "../src/web/brain-lib.js";
 import { levelOf } from "../src/web/voice-level.js";
 
 describe("the galaxy", () => {
@@ -58,5 +58,50 @@ describe("the star's pulse", () => {
     expect(levelOf(speech)).toBeGreaterThan(0.4);
     const loud = Array.from({ length: 512 }, (_, i) => (i % 2 ? 0 : 255));
     expect(levelOf(loud)).toBe(1);
+  });
+});
+
+describe("tool drift (#282)", () => {
+  const DAY = 86_400_000;
+  const now = Date.UTC(2026, 10, 18);
+
+  it("no use, no drift; more use drifts closer, smoothly, and never past 15%", () => {
+    expect(driftOf(0)).toBe(0);
+    let last = 0;
+    for (const n of [1, 2, 5, 10, 30, 100]) {
+      const d = driftOf(n);
+      expect(d).toBeGreaterThan(last);
+      expect(d).toBeLessThanOrEqual(MAX_DRIFT);
+      last = d;
+    }
+    expect(driftOf(10_000)).toBeLessThanOrEqual(MAX_DRIFT);
+    expect(driftOf(1)).toBeLessThan(0.02);
+  });
+
+  it("only the last 30 days count", () => {
+    const uses = { house: [now - 31 * DAY, now - 29 * DAY, now - DAY], web: [now + DAY] };
+    expect(recentUses(uses, now)).toEqual({ house: [now - 29 * DAY, now - DAY] });
+    expect(withUse(uses, "gmail", now).gmail).toEqual([now]);
+  });
+
+  it("a used tool sits closer to the star, along the same direction; Atlas's own parts stay", () => {
+    const far = galaxyPosition("house");
+    const near = galaxyPosition("house", MAX_DRIFT);
+    expect(Math.hypot(near.left - 50, near.top - 50)).toBeCloseTo(Math.hypot(far.left - 50, far.top - 50) * 0.85, 0);
+    expect(galaxyPosition("house", 5)).toEqual(near);
+    expect(galaxyLine("house", "used", MAX_DRIFT).length).toBeLessThan(galaxyLine("house", "used").length);
+    const drifts = driftsOf({ memory: [now], house: [now] }, now);
+    expect(drifts.memory).toBeUndefined();
+    expect(drifts.house).toBeGreaterThan(0);
+  });
+
+  it("even fully drifted, no two tools crowd each other", () => {
+    const at = NODES.map((n) => galaxyPosition(n.id, GALAXY[n.id].arm === "core" ? 0 : MAX_DRIFT));
+    for (let i = 0; i < at.length; i++)
+      for (let j = i + 1; j < at.length; j++) {
+        const a = at[i];
+        const b = at[j];
+        if (a && b) expect(Math.hypot(a.left - b.left, a.top - b.top)).toBeGreaterThan(9);
+      }
   });
 });
