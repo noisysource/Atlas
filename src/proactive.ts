@@ -17,7 +17,7 @@ import type { LlmCall } from "./llm/types.js";
 import type { Result } from "./result.js";
 import type { Logger } from "./types.js";
 
-export type NoticeKind = "house" | "leave" | "email" | "calendar";
+export type NoticeKind = "house" | "leave" | "email" | "calendar" | "task";
 
 export type Notice = {
   readonly id: string;
@@ -175,6 +175,56 @@ export const emailNotice = async (
 const senderName = (from: string): string => (from.replace(/<[^>]*>/g, "").replace(/"/g, "").trim() || from).slice(0, 40);
 const listOf = (xs: readonly string[]): string => (xs.length <= 1 ? (xs[0] ?? "") : `${xs.slice(0, -1).join(", ")} and ${xs.at(-1)}`);
 
+// ---- coding tasks (#276) ----
+
+/** What the watcher needs of a coding task. */
+export type TaskLook = {
+  readonly id: string;
+  readonly title: string;
+  readonly status: string;
+  readonly report?: string;
+  readonly message?: string;
+  readonly prNumber?: number;
+  readonly ended?: "merged" | "closed";
+};
+
+const BUSY = new Set(["preparing", "queued", "working"]);
+const firstSentence = (text: string | undefined): string => {
+  const t = (text ?? "").replace(/[*_`#>]/g, "").replace(/\s+/g, " ").trim();
+  const m = /^(.{10,220}?[.!?])(\s|$)/.exec(t);
+  return (m?.[1] ?? t.slice(0, 200)).trim();
+};
+
+/** A task that stopped working: done, a question for him, or failed. Told once per change. */
+export const taskNotices = (before: readonly TaskLook[], after: readonly TaskLook[]): Candidate[] => {
+  const was = new Map(before.map((t) => [t.id, t.status]));
+  return after.flatMap((t) => {
+    const prev = was.get(t.id);
+    if (prev === undefined || !BUSY.has(prev) || BUSY.has(t.status)) return [];
+    const key = `task:${t.id}:${t.status}:${(t.report ?? t.message ?? "").length}`;
+    const said = firstSentence(t.report);
+    if (t.status === "waiting") return [{ key, kind: "task" as const, text: `The coding task “${t.title}” has a question for you${said ? `: ${said}` : "."}` }];
+    if (t.status === "failed") return [{ key, kind: "task" as const, text: `The coding task “${t.title}” stopped${t.message ? `: ${firstSentence(t.message)}` : "."}` }];
+    const next = t.prNumber ? `Say “publish it” to update pull request #${t.prNumber}.` : "Say “open the PR” to push it.";
+    return [{ key, kind: "task" as const, text: `The coding task “${t.title}” is done${said ? `: ${said}` : "."} ${next}` }];
+  });
+};
+
+/** A task's pull request finished its checks: ready to review, or what failed. Told once per outcome. */
+export const checkNotice = (t: TaskLook, checks: readonly { readonly name: string; readonly status: string; readonly conclusion: string }[]): Candidate | undefined => {
+  if (!t.prNumber || t.ended || checks.length === 0 || checks.some((c) => c.status !== "completed")) return undefined;
+  const failed = checks.filter((c) => !["success", "skipped", "neutral"].includes(c.conclusion));
+  const outcome = failed.length === 0 ? "passed" : `failed:${failed.map((c) => c.name).sort().join(",")}`;
+  return {
+    key: `checks:${t.id}:${t.prNumber}:${outcome}:${checks.length}`,
+    kind: "task",
+    text:
+      failed.length === 0
+        ? `Pull request #${t.prNumber}, “${t.title}”, passed its checks and is ready for you. Ask me what you need to do for it, and I'll walk you through it.`
+        : `Pull request #${t.prNumber}, “${t.title}”, failed its checks: ${listOf(failed.map((c) => c.name).slice(0, 3))}. Want me to have the task fix it?`,
+  };
+};
+
 // ---- keeping and telling ----
 
 const hhmm = (ms: number, timeZone: string): string => new Intl.DateTimeFormat("en-GB", { timeZone, hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(new Date(ms));
@@ -243,6 +293,9 @@ export type ProactiveSources = {
   readonly house?: () => Promise<Result<HouseLook, string>>;
   readonly calendar?: (range: DayRange) => Promise<readonly CalendarEvent[]>;
   readonly email?: () => Promise<readonly (GmailMessage & { readonly account: string })[]>;
+  /** #276: the coding tasks, and the checks on a task's pull request. */
+  readonly tasks?: () => Promise<readonly TaskLook[]>;
+  readonly checks?: (t: TaskLook) => Promise<readonly { readonly name: string; readonly status: string; readonly conclusion: string }[]>;
 };
 
 /**
@@ -266,6 +319,7 @@ export const startProactive = (deps: {
   let minute = 0;
   let events: readonly CalendarEvent[] = [];
   let seenEmail = new Set<string>();
+  let tasks: readonly TaskLook[] | undefined;
   let firstEmail = true;
   const say = (candidates: readonly Candidate[]) => {
     for (const n of deps.notices.add(candidates)) {
@@ -293,6 +347,18 @@ export const startProactive = (deps: {
         void deps.drive.learn(next.filter((e) => e.location && !e.ec).map((e) => e.location ?? ""));
       });
     if (events.length > 0) say(leaveNotices(events, t, deps.drive.get, deps.timeZone));
+    if (deps.sources.tasks)
+      await safely("tasks", async () => {
+        const next = (await deps.sources.tasks?.()) ?? [];
+        if (tasks) say(taskNotices(tasks, next));
+        tasks = next;
+        // The checks on open pull requests, every 5 minutes.
+        if (deps.sources.checks && m % 5 === 0)
+          for (const t of next.filter((x) => x.prNumber && !x.ended && !BUSY.has(x.status)).slice(0, 5)) {
+            const n = checkNotice(t, await deps.sources.checks(t));
+            if (n) say([n]);
+          }
+      });
     if (deps.sources.email && m % 60 === 0 && !inQuiet(deps.quiet, t, deps.timeZone))
       await safely("email", async () => {
         const mail = (await deps.sources.email?.()) ?? [];

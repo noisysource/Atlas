@@ -90,3 +90,20 @@ describe("telling once, and quietly at night", () => {
     expect(n.pageOpen()).toBe(true);
   });
 });
+
+describe("coding tasks (#276)", () => {
+  const busy = { id: "t1", title: "Google Drive access", status: "working" };
+  it("done, a question, failed: told when it stops working, once", async () => {
+    const { taskNotices, checkNotice } = await import("../src/proactive.js");
+    expect(taskNotices([busy], [{ ...busy, status: "idle", report: "DONE: Atlas can now list and read Drive. Lint passes." }])[0]?.text).toBe("The coding task “Google Drive access” is done: DONE: Atlas can now list and read Drive. Say “open the PR” to push it.");
+    expect(taskNotices([busy], [{ ...busy, status: "waiting", report: "Should folders be per account? More text." }])[0]?.text).toBe("The coding task “Google Drive access” has a question for you: Should folders be per account?");
+    expect(taskNotices([busy], [{ ...busy, status: "idle", prNumber: 275 }])[0]?.text).toContain("update pull request #275");
+    expect(taskNotices([{ ...busy, status: "idle" }], [{ ...busy, status: "idle" }])).toEqual([]);
+    expect(taskNotices([], [{ ...busy, status: "idle" }])).toEqual([]); // seen for the first time: nothing to tell
+    const pr = { ...busy, status: "idle", prNumber: 275 };
+    expect(checkNotice(pr, [{ name: "ci", status: "in_progress", conclusion: "" }])).toBeUndefined();
+    expect(checkNotice(pr, [{ name: "ci", status: "completed", conclusion: "success" }])?.text).toContain("passed its checks and is ready for you");
+    expect(checkNotice(pr, [{ name: "Lint, typecheck, test", status: "completed", conclusion: "failure" }])?.text).toContain("failed its checks: Lint, typecheck, test");
+    expect(checkNotice({ ...pr, ended: "merged" }, [{ name: "ci", status: "completed", conclusion: "success" }])).toBeUndefined();
+  });
+});

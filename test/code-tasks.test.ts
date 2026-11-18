@@ -234,6 +234,10 @@ describe("the task list", () => {
     if (!again.ok) throw new Error("no card");
     expect((await s.tasks.decide(again.value.card, "yes")).text).toContain("is updated");
     expect(s.posted).toHaveLength(2);
+    // #276: what was pushed to the branch on GitHub meanwhile comes in first, so the push isn't refused.
+    const fetchAt = s.git.lastIndexOf("fetch --quiet origin refs/heads/agent/restructure-finhub-a1b2c3d4");
+    expect(fetchAt).toBeGreaterThan(-1);
+    expect(s.git.slice(fetchAt).some((g) => g.includes("merge --no-edit --quiet FETCH_HEAD"))).toBe(true);
   });
 
   it("a task whose pull request was merged or closed on GitHub closes itself (#224)", async () => {
