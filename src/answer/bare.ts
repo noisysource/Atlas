@@ -81,6 +81,50 @@ import { historyMessages, profileName } from "./personal.js";
 /** Room for one round: thinking, the words, and every tool call in it (nine calendar cards at once need it). */
 const BARE_MAX_TOKENS = 6000;
 
+/**
+ * #278: the tools that put a card in front of him. Each takes an optional
+ * `then`: the next step of his request once he says yes (save the invoice
+ * into the folder this creates), so the app carries on by itself after the
+ * OK instead of waiting to be asked again.
+ */
+export const CARD_TOOLS: ReadonlySet<string> = new Set([
+  "calendar_create",
+  "calendar_change",
+  "drive_create_folder",
+  "drive_save_attachment",
+  "gmail_draft",
+  "gmail_tidy",
+  "house_blinds",
+  "house_lights",
+  "house_heating",
+  "house_warm_by",
+  "house_thermostat",
+  "house_heat_pump",
+  "house_guard",
+  "house_tariff",
+  "task_start",
+  "task_publish",
+  "code_fix",
+]);
+const THEN_PROP = {
+  type: "string",
+  description: "Only when his request needs another step after his OK on this (e.g. save the invoice into the folder this creates): that next step, in a few words. The app carries it out by itself once he says yes. Leave it out otherwise.",
+};
+/** The tools as offered: the card tools gain `then`. */
+export const withThen = (tools: readonly LlmTool[] | undefined): LlmTool[] | undefined =>
+  tools?.map((t) => {
+    const schema = t.inputSchema as { properties?: Record<string, unknown> };
+    return CARD_TOOLS.has(t.name) && schema.properties ? { ...t, inputSchema: { ...t.inputSchema, properties: { ...schema.properties, then: THEN_PROP } } } : t;
+  });
+/** A call's `then`, checked, and the call without it (so each tool's own checks see what they expect). */
+export const takeThen = (call: LlmToolCall, isEc: (text: string) => boolean = () => false): { readonly call: LlmToolCall; readonly then?: string } => {
+  const input = call.input as Record<string, unknown> | null;
+  if (!CARD_TOOLS.has(call.name) || !input || typeof input !== "object" || !("then" in input)) return { call };
+  const { then, ...rest } = input;
+  const text = typeof then === "string" ? then.replace(/\s+/g, " ").trim().slice(0, 300) : "";
+  return { call: { ...call, input: rest }, ...(text !== "" && !isEc(text) ? { then: text } : {}) };
+};
+
 /** #269: what the brain is told when the app does a small change without a card. */
 const AUTO_SAY = (label: string): string => `The app is doing this now, without a card (small and undoable): ${label}. Say in one short sentence what you're doing; don't ask for an OK, and don't claim it worked: the app says so.`;
 /** #268: a round cut off before anything was shown is tried once more with this much room. */
@@ -918,7 +962,12 @@ export const makeBareAnswerer = (deps: {
                   : [HOUSE_NOW_TOOL, ...(deps.house?.blinds ? [HOUSE_BLINDS_TOOL] : []), ...(deps.house?.lights ? [HOUSE_LIGHTS_TOOL] : []), ...(deps.house?.read ? HOUSE_READ_TOOLS : []), ...(deps.house?.changes ? HOUSE_CHANGE_TOOLS : [])];
   const routing = deps.tools === true && deps.route !== undefined && deps.route.mode !== "all";
 
-  return async ({ question, history, onText, signal, spoken, onStep, onReach, onOffered, now, remember, onToolSucceeded }) => {
+  return async ({ question, history, onText, signal, spoken, onStep: onStepAsked, onReach, onOffered, now, remember, onToolSucceeded }) => {
+    /** #278: the current call's next step, put on any card it shows. */
+    let thenOfCall: string | undefined;
+    const onStep = onStepAsked
+      ? (step: PathStep): void => onStepAsked(step.kind === "tool" && step.confirm && thenOfCall ? { ...step, confirm: { ...step.confirm, then: thenOfCall } } : step)
+      : undefined;
     // #175: the small model's pick runs while the rest of the turn gets ready.
     const routeStarted = performance.now();
     const routerSaid =
@@ -1051,7 +1100,11 @@ export const makeBareAnswerer = (deps: {
     const used = new Set<ToolGroup>();
     /** The tools that ran this turn, by name, for an honest line if no answer comes. */
     const ran: string[] = [];
-    const runTool = async (call: LlmToolCall): Promise<LlmToolResult> => {
+    const runTool = async (asked: LlmToolCall): Promise<LlmToolResult> => {
+      // #278: the step after his OK rides on the card this call puts up.
+      const taken = takeThen(asked, deps.calendar?.create?.isEc);
+      const call = taken.call;
+      thenOfCall = taken.then;
       ran.push(call.name);
       // The page's brain view (#130): only names Atlas offered, never the model's free text.
       if (offered.has(call.name)) onReach?.(call.name);
@@ -1991,7 +2044,7 @@ export const makeBareAnswerer = (deps: {
       const baseRequest: LlmRequest = {
         ...request,
         messages,
-        tools: last ? undefined : currentTools,
+        tools: last ? undefined : withThen(currentTools),
         ...(!last && searchesLeft > 0 && deps.webSearch ? { webSearch: { maxUses: searchesLeft, ...deps.webSearch.location } } : {}),
       };
       let shown = "";
