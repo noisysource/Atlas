@@ -87,7 +87,10 @@ const BARE_MAX_TOKENS = 2000;
 export const NARRATION_HOLD = 160;
 
 /** Native tool calling (#104): at most this many rounds of tool calls in one answer. */
-export const MAX_TOOL_ROUNDS = 5;
+export const MAX_TOOL_ROUNDS = 8;
+
+/** #266: added to the tool results before the last round, which has no tools, so the brain answers instead of reaching again. */
+export const LAST_STEP_NOTE = "[Atlas: that was your last tool step. Answer now from what you have, and say plainly what you couldn't find or do.]";
 
 /** Spoken replies (#92): at most this many sentences after the opening reaction, unless they ask for detail. */
 export const DEFAULT_SPOKEN_SENTENCES = 2;
@@ -1974,6 +1977,9 @@ export const makeBareAnswerer = (deps: {
       for (const call of response.calls) results.push(await runTool(call));
       if (response.calls.length > 0 && response.calls.every((c) => c.name === TOOLS_MORE) && free < TOOL_GROUPS.length) free += 1;
       if (signal?.aborted) return err({ code: "cancelled", message: "Cancelled." });
+      // #266: the next round is the last: tell the brain, or it asks for a tool it can't have and says nothing.
+      const tail = results.at(-1);
+      if (round + 1 - free >= MAX_TOOL_ROUNDS && tail) results[results.length - 1] = { ...tail, content: `${tail.content}\n\n${LAST_STEP_NOTE}` };
       messages = [...messages, { role: "assistant", text: response.text, toolCalls: response.calls, payload: response.payload }, { role: "user", toolResults: results }];
     }
     if (!cut && strip && pass(strip.flush())) cut = true;
