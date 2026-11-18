@@ -3149,3 +3149,39 @@ body[data-phase="speaking"] .brain-star {
   color: var(--ns-glow);
   text-shadow: 0 0 10px rgb(74 123 255 / 0.6);
 }
+
+/* #269: a change done without a card: one quiet line, with Undo when it can be taken back. */
+.message .confirm.auto {
+  display: flex;
+  align-items: baseline;
+  gap: 0.6rem;
+  padding: 0.15rem 0;
+  border: 0;
+  background: none;
+  color: #8a94b0;
+}
+
+.message .confirm.auto p {
+  margin: 0;
+}
+
+.message .confirm.auto p::before {
+  content: "✓ ";
+  color: var(--accent);
+}
+
+.message .confirm.auto[data-outcome="failed"] p::before {
+  content: "✗ ";
+  color: var(--fail);
+}
+
+.message .confirm.auto .undo {
+  padding: 0 0.45rem;
+  font-size: 11px;
+}
+
+/* #271: a line Atlas said on his own. */
+#transcript .message.notice::before {
+  content: "◆ ";
+  color: var(--accent);
+}

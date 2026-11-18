@@ -3,6 +3,7 @@
 // Contexts are not hard-coded: they're read from contexts.md (#22), so a
 // context id is a branded string that only the contexts parser should create.
 
+import type { Notice, Notices } from "./proactive.js";
 import type { Fixes } from "./code/fix.js";
 import type { Tasks } from "./code/tasks.js";
 import type { MorningBriefs } from "./morning.js";
@@ -151,7 +152,7 @@ export type PathStep =
        * card with "Add it" / "Don't add", and POSTs `id` to /calendar/confirm.
        * Page only: the path is never logged.
        */
-      readonly confirm?: { readonly id: string; readonly label: string; readonly kind?: "calendar" | "skill" | "email" | "draft-delete" | "fix" | "pr-close" | "task-start" | "task-publish" | "task-close" | "house" | "lights" | "house-change" | "gap-issue" | "gmail-tidy" | "calendar-change" };
+      readonly confirm?: { readonly id: string; readonly label: string; /** #269: small and undoable: the page does it at once, no card. */ readonly auto?: boolean; readonly kind?: "calendar" | "skill" | "email" | "draft-delete" | "fix" | "pr-close" | "task-start" | "task-publish" | "task-close" | "house" | "lights" | "house-change" | "gap-issue" | "gmail-tidy" | "calendar-change" };
     }
   | {
       readonly kind: "guard";
@@ -173,6 +174,8 @@ export type CalendarConfirmResult = {
   readonly text: string;
   /** For the page's history record (#104), when something was added: "calendar_create Wed 11 Nov 21:00–22:00 → added". */
   readonly tool?: string;
+  /** #269: a token to undo it (remove the event just added), for a while. */
+  readonly undo?: string;
 };
 
 export type AskResponse =
@@ -347,6 +350,8 @@ export type Deps = {
    * Google's answer; "no" drops it. Unknown or expired ids create nothing.
    */
   readonly calendarConfirm?: (id: string, decision: "yes" | "no") => Promise<CalendarConfirmResult>;
+  /** #269: removes an event Atlas just added without a card, by its undo token. */
+  readonly calendarUndo?: (token: string) => Promise<CalendarConfirmResult>;
   /** #120: his answer to an email draft (POST /gmail/send). "yes" sends it; "no" keeps it as a draft. */
   readonly gmailSend?: (id: string, decision: "yes" | "no") => Promise<CalendarConfirmResult>;
   /** #156: studies under way and finished, for the page (GET /code/studies), and stopping them (POST /code/studies/stop). Names, counts and file paths only. */
@@ -391,6 +396,11 @@ export type Deps = {
   readonly introspect?: () => Promise<IntrospectionReport>;
   /** #177: the morning brief, prepared at BRIEF_AT and shown on the page (GET /brief/today). */
   readonly morningBrief?: MorningBriefs;
+  /** #271 PROACTIVE=on: Atlas speaks up on his own. main.ts starts the watchers; the page asks GET /notices. */
+  readonly proactive?: {
+    readonly notices: Notices;
+    readonly start: (tell: (n: Notice) => void) => { readonly stop: () => void };
+  };
   /** #128: the nightly check that keeps the code notes current. */
   readonly codeRefresh?: CodeRefresh;
   /** STICKY_CONTEXT=on (#76): spoken follow-ups skip the classifier and stay in the last answered context. */

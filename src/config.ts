@@ -47,6 +47,8 @@ export type TurnConfig = {
   readonly stickyContext: boolean;
   /** Latency (#76, opt-in): the personal answer starts while the classifier runs, and is thrown away if it disagrees. */
   readonly speculativeAnswer: boolean;
+  /** #269: small, undoable changes (his own calendar with no guests, lights, blinds, a thermostat) are done without a card. On by default; ASK_SMALL=on brings the cards back. */
+  readonly autoSmall?: boolean;
   /** Latency (#76): a long first sentence is cut at a clause once it's this long (characters). */
   readonly firstChunkChars: number;
   /** Spoken bare replies (#92): sentences allowed after the opening reaction, unless detail is asked for. */
@@ -236,6 +238,13 @@ export type Config = {
    * (Claude) in bare mode; BRIEF_SCHEDULE=off turns it off.
    */
   readonly morningBrief: { readonly enabled: boolean; readonly hour: number; readonly minute: number; readonly path: string };
+  /**
+   * #271 PROACTIVE=on: Atlas speaks up on his own about the house, time to
+   * leave, email that needs him and calendar clashes or changes.
+   * PROACTIVE_FROM: where he leaves from, for drive times (empty: told 10
+   * minutes before). PROACTIVE_QUIET (default 22:30-08:00): shown, not spoken.
+   */
+  readonly proactive?: { readonly enabled: boolean; readonly from: string; readonly quiet: string };
   /** TOOL_CALLING (#104, default on): Claude decides itself when to use a tool; code validates each call. Off: code decides, as for the local brain. */
   readonly toolCalling: boolean;
   /**
@@ -472,6 +481,9 @@ const EnvSchema = z.object({
   MEMORY: onOff,
   INTROSPECTION: onOff,
   BRIEF_SCHEDULE: onOff,
+  PROACTIVE: onOff,
+  PROACTIVE_FROM: z.string().max(200).default(""),
+  PROACTIVE_QUIET: z.string().regex(/^\d{2}:\d{2}-\d{2}:\d{2}$/, "must be HH:MM-HH:MM").default("22:30-08:00"),
   BRIEF_AT: z.preprocess(
     (v) => (typeof v === "string" && v.trim() === "" ? undefined : v),
     z.string().regex(/^([01]?\d|2[0-3]):([0-5]\d)$/, { error: 'must be a time like "07:30"' }).default("07:30"),
@@ -492,6 +504,7 @@ const EnvSchema = z.object({
   CLASSIFIER_THINKING: onOff,
   STICKY_CONTEXT: onOff,
   SPECULATIVE_ANSWER: onOff,
+  ASK_SMALL: onOff,
   VOICE_PUNCTUATION_STYLE: onOff,
   VOICE_MAX_SENTENCES: z.preprocess(
     (v) => (typeof v === "string" && v.trim() === "" ? undefined : v),
@@ -657,6 +670,7 @@ export const loadConfig = (given: Env): Result<Config, string> => {
       path: "data/brief",
     },
     costs: { subscriptions: parseSubscriptions(e.COST_SUBSCRIPTIONS) ?? [], path: "data/costs.jsonl" },
+    proactive: { enabled: e.PROACTIVE === "on" && e.BARE_MODE === "on", from: e.PROACTIVE_FROM.trim(), quiet: e.PROACTIVE_QUIET },
     gemini: { enabled: e.GEMINI === "on", model: { provider: "google", model: e.GEMINI_MODEL }, router: { provider: "google", model: e.GEMINI_ROUTER_MODEL }, secretName: e.GEMINI_SECRET_NAME, live: { enabled: e.GEMINI === "on" && e.GEMINI_LIVE === "on", model: e.GEMINI_LIVE_MODEL, ...(e.GEMINI_LIVE_VOICE ? { voice: e.GEMINI_LIVE_VOICE } : {}) } },
     webSearch: { enabled: e.WEB_SEARCH === "on", perQuestion: e.WEB_SEARCH_PER_QUESTION, perDay: e.WEB_SEARCH_PER_DAY, country: e.WEB_SEARCH_COUNTRY, city: e.WEB_SEARCH_CITY.trim() },
     gmail: { enabled: e.GMAIL === "on", write: e.GMAIL === "on" && e.GMAIL_WRITE === "on", tidy: e.GMAIL === "on" && e.GMAIL_TIDY === "on",
@@ -681,6 +695,7 @@ export const loadConfig = (given: Env): Result<Config, string> => {
       classifierThinking: e.CLASSIFIER_THINKING ?? "off",
       stickyContext: e.STICKY_CONTEXT === "on",
       speculativeAnswer: e.SPECULATIVE_ANSWER === "on",
+      autoSmall: e.ASK_SMALL !== "on",
       firstChunkChars: e.VOICE_FIRST_CHUNK_CHARS,
       spokenSentences: e.VOICE_MAX_SENTENCES,
       punctuationStyle: e.VOICE_PUNCTUATION_STYLE === "on",
