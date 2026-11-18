@@ -1276,8 +1276,9 @@ Confirmed (2026-11-12):
   (`npm run drive:connect -- <account>`, `data/google-drive-<account>.json`);
   scope `drive.readonly`, or `drive` with DRIVE_WRITE=on (a folder he
   picked that the app didn't create needs the wider scope). DRIVE=on
-  needs BARE_MODE=on, local only. Not yet: a page switch and a Reach
-  entry for Drive.
+  needs BARE_MODE=on, local only. Drive is a node in the galaxy (a
+  drive icon on the life arm, between Gmail and House) and has its own
+  Reach entry with accounts and tools. Not yet: a page switch for Drive.
 - **Cards by voice, and steps that follow the answer (#224):**
   `card-lib.js` `cardAnswer` reads a short reply (at most five words: yes
   / no in English and Portuguese, or the card's own button words) as the

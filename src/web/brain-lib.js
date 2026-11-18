@@ -5,24 +5,25 @@
 // answer's path): nothing is drawn for show.
 
 /** @typedef {import("./chat.js").PathStep} PathStep */
-/** @typedef {"profile" | "memory" | "skills" | "calendar" | "gmail" | "web" | "vendus" | "house" | "github" | "cloud" | "code" | "kiro"} NodeId */
+/** @typedef {"profile" | "memory" | "skills" | "calendar" | "gmail" | "drive" | "web" | "vendus" | "house" | "github" | "cloud" | "code" | "kiro"} NodeId */
 /** @typedef {"reaching" | "used" | "waiting" | "failed" | "handoff"} Reach */
 /** @typedef {"idle" | "off" | "soon" | "kiro"} Rest */
 
 /** Around the core, clockwise from the top. `soon`: not connected yet. */
 export const NODES = /** @type {const} */ ([
   { id: "profile", label: "Profile", angle: -90, rest: "idle" },
-  { id: "memory", label: "Memory", angle: -60, rest: "idle" },
-  { id: "skills", label: "Skills", angle: -30, rest: "idle" },
-  { id: "calendar", label: "Calendar", angle: 0, rest: "idle" },
-  { id: "gmail", label: "Gmail", angle: 30, rest: "idle" },
-  { id: "web", label: "Web", angle: 60, rest: "soon" },
-  { id: "vendus", label: "Vendus", angle: 90, rest: "soon" },
-  { id: "house", label: "House", angle: 120, rest: "soon" },
-  { id: "github", label: "GitHub", angle: 150, rest: "soon" },
-  { id: "cloud", label: "Google Cloud", angle: 180, rest: "soon" },
-  { id: "code", label: "Code agent", angle: 210, rest: "soon" },
-  { id: "kiro", label: "Kiro", angle: 240, rest: "kiro" },
+  { id: "memory", label: "Memory", angle: -62.3, rest: "idle" },
+  { id: "skills", label: "Skills", angle: -34.6, rest: "idle" },
+  { id: "calendar", label: "Calendar", angle: -6.9, rest: "idle" },
+  { id: "gmail", label: "Gmail", angle: 20.8, rest: "idle" },
+  { id: "drive", label: "Drive", angle: 48.5, rest: "soon" },
+  { id: "web", label: "Web", angle: 76.2, rest: "soon" },
+  { id: "vendus", label: "Vendus", angle: 103.8, rest: "soon" },
+  { id: "house", label: "House", angle: 131.5, rest: "soon" },
+  { id: "github", label: "GitHub", angle: 159.2, rest: "soon" },
+  { id: "cloud", label: "Google Cloud", angle: 186.9, rest: "soon" },
+  { id: "code", label: "Code agent", angle: 214.6, rest: "soon" },
+  { id: "kiro", label: "Kiro", angle: 242.3, rest: "kiro" },
 ]);
 
 /**
@@ -33,6 +34,7 @@ export const NODES = /** @type {const} */ ([
 export const nodeOfTool = (tool) => {
   if (tool.startsWith("calendar_") || tool === "day_brief") return "calendar";
   if (tool.startsWith("gmail_")) return "gmail";
+  if (tool.startsWith("drive_")) return "drive";
   if (tool.startsWith("memory_") || tool.startsWith("decision_")) return "memory";
   if (tool.startsWith("reminder_")) return "calendar";
   if (tool === "talk_set") return "profile";
@@ -171,10 +173,11 @@ export const GALAXY = {
   memory: { r: 0.38, angle: 15, arm: "core" },
   skills: { r: 0.36, angle: 135, arm: "core" },
   calendar: { r: 0.55, angle: 45, arm: "life" },
-  gmail: { r: 0.67, angle: 82, arm: "life" },
-  house: { r: 0.79, angle: 118, arm: "life" },
-  vendus: { r: 0.9, angle: 152, arm: "life" },
-  web: { r: 0.98, angle: 188, arm: "life" },
+  gmail: { r: 0.64, angle: 78, arm: "life" },
+  drive: { r: 0.73, angle: 108, arm: "life" },
+  house: { r: 0.82, angle: 136, arm: "life" },
+  vendus: { r: 0.91, angle: 163, arm: "life" },
+  web: { r: 0.98, angle: 190, arm: "life" },
   github: { r: 0.55, angle: 225, arm: "work" },
   code: { r: 0.67, angle: 262, arm: "work" },
   cloud: { r: 0.79, angle: 298, arm: "work" },
@@ -272,6 +275,8 @@ export const connectCommand = (node, account) =>
       ? `npm run gcloud:connect -- ${account.split(" · ")[0]} <project-id>`
     : node === "gmail"
       ? `npm run gmail:connect -- ${account}`
+      : node === "drive"
+        ? `npm run drive:connect -- ${account}`
       : account === "personal"
         ? "npm run calendar:connect"
         : `npm run calendar:connect -- ${account}`;
