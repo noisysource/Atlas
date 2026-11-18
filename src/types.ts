@@ -151,7 +151,7 @@ export type PathStep =
        * card with "Add it" / "Don't add", and POSTs `id` to /calendar/confirm.
        * Page only: the path is never logged.
        */
-      readonly confirm?: { readonly id: string; readonly label: string; readonly kind?: "calendar" | "skill" | "email" | "draft-delete" | "fix" | "pr-close" | "task-start" | "task-publish" | "task-close" | "house" | "lights" | "house-change" | "gap-issue" | "gmail-tidy" | "calendar-change" };
+      readonly confirm?: { readonly id: string; readonly label: string; /** #269: small and undoable: the page does it at once, no card. */ readonly auto?: boolean; readonly kind?: "calendar" | "skill" | "email" | "draft-delete" | "fix" | "pr-close" | "task-start" | "task-publish" | "task-close" | "house" | "lights" | "house-change" | "gap-issue" | "gmail-tidy" | "calendar-change" };
     }
   | {
       readonly kind: "guard";
@@ -173,6 +173,8 @@ export type CalendarConfirmResult = {
   readonly text: string;
   /** For the page's history record (#104), when something was added: "calendar_create Wed 11 Nov 21:00–22:00 → added". */
   readonly tool?: string;
+  /** #269: a token to undo it (remove the event just added), for a while. */
+  readonly undo?: string;
 };
 
 export type AskResponse =
@@ -347,6 +349,8 @@ export type Deps = {
    * Google's answer; "no" drops it. Unknown or expired ids create nothing.
    */
   readonly calendarConfirm?: (id: string, decision: "yes" | "no") => Promise<CalendarConfirmResult>;
+  /** #269: removes an event Atlas just added without a card, by its undo token. */
+  readonly calendarUndo?: (token: string) => Promise<CalendarConfirmResult>;
   /** #120: his answer to an email draft (POST /gmail/send). "yes" sends it; "no" keeps it as a draft. */
   readonly gmailSend?: (id: string, decision: "yes" | "no") => Promise<CalendarConfirmResult>;
   /** #156: studies under way and finished, for the page (GET /code/studies), and stopping them (POST /code/studies/stop). Names, counts and file paths only. */

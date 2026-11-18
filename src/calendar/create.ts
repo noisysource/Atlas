@@ -123,6 +123,9 @@ export const checkCreateRequest = (value: unknown, today: string, isEc: (text: s
 };
 
 /** For the card and the brain: "“Work”, Wednesday 11 November, 21:00–22:00". */
+/** #269: small and undoable, so it's done without a card: on his own calendar, nobody invited. */
+export const isSmallProposal = (p: Proposal): boolean => !p.guests || p.guests.length === 0;
+
 export const proposalLabel = (p: Proposal, today: string): string =>
   `“${p.title}”, ${dayLabel(p.date, today)}, ${p.start && p.end ? `${p.start}–${p.end}` : "all day"}${p.location ? `, at ${p.location}` : ""}${p.account && p.account !== "personal" ? `, on the ${p.account} calendar` : ""}${p.guests && p.guests.length > 0 ? `, inviting ${p.guests.join(", ")} (Google emails ${p.guests.length === 1 ? "them" : "each"} an invitation)` : ""}`;
 
@@ -140,10 +143,10 @@ export const googleEventBody = (p: Proposal, timeZone: string): Record<string, u
 });
 
 /** #265: with guests, Google emails them the invitation; without, nobody is told. */
-export const createUrl = (p: Proposal): string => `${EVENTS_URL}?fields=summary,start,end,attendees(email)&sendUpdates=${p.guests && p.guests.length > 0 ? "all" : "none"}`;
+export const createUrl = (p: Proposal): string => `${EVENTS_URL}?fields=id,summary,start,end,attendees(email)&sendUpdates=${p.guests && p.guests.length > 0 ? "all" : "none"}`;
 
 /** What Google says it created. */
-export type CreatedEvent = { readonly title: string; readonly start: string; readonly end: string; readonly allDay: boolean; readonly invited?: number };
+export type CreatedEvent = { readonly title: string; readonly start: string; readonly end: string; readonly allDay: boolean; readonly invited?: number; /** #269: Google's id, to undo it. */ readonly id?: string };
 
 export type EventCreator = (p: Proposal) => Promise<Result<CreatedEvent, CalendarError>>;
 
@@ -173,12 +176,12 @@ export const makeGoogleEventCreator = (deps: {
     if (res.status === 401 || res.status === 403)
       return err({ code: "auth", message: `Google Calendar refused to add it (${res.status}): connect again with write access (CALENDAR_WRITE=on npm run calendar:connect -- ${account}), then restart Atlas` });
     if (!res.ok) return err({ code: "api", message: `Google Calendar answered ${res.status}` });
-    const body = (await res.json().catch(() => ({}))) as { summary?: unknown; start?: { date?: unknown; dateTime?: unknown }; end?: { date?: unknown; dateTime?: unknown }; attendees?: unknown };
+    const body = (await res.json().catch(() => ({}))) as { id?: unknown; summary?: unknown; start?: { date?: unknown; dateTime?: unknown }; end?: { date?: unknown; dateTime?: unknown }; attendees?: unknown };
     const start = typeof body.start?.dateTime === "string" ? body.start.dateTime : typeof body.start?.date === "string" ? body.start.date : "";
     const end = typeof body.end?.dateTime === "string" ? body.end.dateTime : typeof body.end?.date === "string" ? body.end.date : "";
     if (start === "" || end === "") return err({ code: "api", message: "Google Calendar's answer had no start or end" });
     const invited = Array.isArray(body.attendees) ? body.attendees.length : 0;
-    return ok({ title: typeof body.summary === "string" ? body.summary : p.title, start, end, allDay: typeof body.start?.dateTime !== "string", ...(invited > 0 ? { invited } : {}) });
+    return ok({ title: typeof body.summary === "string" ? body.summary : p.title, start, end, allDay: typeof body.start?.dateTime !== "string", ...(invited > 0 ? { invited } : {}), ...(typeof body.id === "string" && body.id !== "" ? { id: body.id } : {}) });
   };
 };
 
@@ -219,6 +222,26 @@ export const makePendingProposals = (deps: { readonly now?: () => number; readon
       const w = waiting.get(id);
       waiting.delete(id);
       return w?.proposal;
+    },
+  };
+};
+
+/** #269: single-use tokens for undoing what Atlas did without a card, gone after `ttlMs`. */
+export const makeUndoTokens = <T>(deps: { readonly ttlMs: number; readonly now?: () => number; readonly newId?: () => string }) => {
+  const now = deps.now ?? Date.now;
+  const newId = deps.newId ?? (() => randomBytes(12).toString("hex"));
+  const kept = new Map<string, { readonly value: T; readonly until: number }>();
+  return {
+    add: (value: T): string => {
+      for (const [k, v] of kept) if (v.until <= now()) kept.delete(k);
+      const id = newId();
+      kept.set(id, { value, until: now() + deps.ttlMs });
+      return id;
+    },
+    take: (id: string): T | undefined => {
+      const v = kept.get(id);
+      kept.delete(id);
+      return v && v.until > now() ? v.value : undefined;
     },
   };
 };

@@ -64,6 +64,7 @@ describe("loadConfig", () => {
         classifierThinking: "off",
         stickyContext: false,
         speculativeAnswer: false,
+        autoSmall: true,
         firstChunkChars: 60,
         spokenSentences: 2,
         punctuationStyle: false,

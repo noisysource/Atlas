@@ -43,7 +43,7 @@ import { cachedToken, makeGcloudCliToken, makeGcloudEnvs, makeGcloudReader, type
 import { makeDbReader, type DbReader } from "./gcloud/firestore.js";
 import { GMAIL_ACCOUNTS, makeGmailReader, type GmailAccount, type GmailReader } from "./gmail/gmail.js";
 import { makeDraftBook, makeGmailWriter, makePendingDrafts, type GmailWriter } from "./gmail/send.js";
-import { addedSentence, makeGoogleEventCreator, makePendingProposals, proposalPathLabel, type EventCreator } from "./calendar/create.js";
+import { addedSentence, isSmallProposal, makeGoogleEventCreator, makePendingProposals, makeUndoTokens, proposalPathLabel, type EventCreator } from "./calendar/create.js";
 import { makeClassifier } from "./classify.js";
 import type { Config, Env } from "./config.js";
 import { loadContexts } from "./contexts.js";
@@ -239,7 +239,10 @@ export const buildDeps = async (inputs: AppInputs): Promise<Result<Deps, string>
   const creator = config.calendar.write ? (inputs.eventCreator ?? makeGoogleEventCreator({ accessToken: calendarToken, timeZone: config.timeZone })) : undefined;
   const isEcText = (text: string): boolean => precheck(text).kind === "handoff";
   // #219: moving and cancelling events, after his OK, with the same write access.
-  const calendarChanges = config.calendar.write ? makeCalendarChanges({ changer: makeCalendarChanger({ accessToken: calendarToken, timeZone: config.timeZone }), isEc: isEcText, timeZone: config.timeZone, log }) : undefined;
+  const calendarChanger = config.calendar.write ? makeCalendarChanger({ accessToken: calendarToken, timeZone: config.timeZone }) : undefined;
+  const calendarChanges = calendarChanger ? makeCalendarChanges({ changer: calendarChanger, isEc: isEcText, timeZone: config.timeZone, log }) : undefined;
+  /** #269: events added without a card, by undo token, for 30 minutes. */
+  const undoTokens = makeUndoTokens<{ account: CalendarAccount; id: string }>({ ttlMs: 30 * 60_000 });
   // #116: skills, with memory. data/skills.json, gitignored, readable only by him.
   const skillStore = config.bareMemory
     ? (inputs.skillStore ??
@@ -559,9 +562,25 @@ export const buildDeps = async (inputs: AppInputs): Promise<Result<Deps, string>
             };
           }
           log.info("calendar create", { outcome: "added", allDay: created.value.allDay });
-          return { ok: true, text: addedSentence(created.value, config.timeZone, localDate(now(), config.timeZone)), tool: `calendar_create ${proposalPathLabel(proposal)} → added` };
+          // #269: an event added without a card can be taken back for a while.
+          const undo = created.value.id && calendarChanges && isSmallProposal(proposal) ? undoTokens.add({ account: proposal.account ?? "personal", id: created.value.id }) : undefined;
+          return { ok: true, text: addedSentence(created.value, config.timeZone, localDate(now(), config.timeZone)), tool: `calendar_create ${proposalPathLabel(proposal)} → added`, ...(undo ? { undo } : {}) };
         }
       : undefined;
+  // #269: removes an event Atlas just added (only one it added, within 30 minutes): the Undo on a no-card change.
+  const calendarUndo = calendarChanger
+    ? async (token: string) => {
+        const what = undoTokens.take(token);
+        if (!what) return { ok: false, text: "It's too late to undo that here. Ask me to cancel it instead." };
+        const gone = await calendarChanger.cancel(what.account, what.id);
+        if (!gone.ok) {
+          log.warn("calendar undo failed", { code: gone.error.code });
+          return { ok: false, text: "I couldn't remove it: Google Calendar didn't answer properly. It's still on your calendar." };
+        }
+        log.info("calendar create", { outcome: "undone" });
+        return { ok: true, text: "Undone: I've taken it off your calendar.", tool: "calendar_create → undone" };
+      }
+    : undefined;
   // #177: the morning brief, kept for the day in data/brief/<day>.json (mode 600: email senders and subjects).
   const briefStore: BriefStore = {
     read: async (day) => {
@@ -643,6 +662,7 @@ export const buildDeps = async (inputs: AppInputs): Promise<Result<Deps, string>
     ...(skillStore ? { skills: skillStore } : {}),
     nativeTools: (calendar !== undefined || gmail !== undefined || config.bareMemory) && config.toolCalling,
     ...(calendarConfirm ? { calendarConfirm } : {}),
+    ...(calendarUndo ? { calendarUndo } : {}),
     reach: async () =>
       withSwitchesView(await reachView({
         config,
@@ -700,6 +720,7 @@ export const buildDeps = async (inputs: AppInputs): Promise<Result<Deps, string>
               llm: answerLlm.value,
               // Claude decides itself when to read the calendar (#104); the local brain keeps the code-driven path.
               tools: config.toolCalling,
+              autoSmall: config.turn.autoSmall === true,
               ...(config.userName ? { userName: config.userName } : {}),
               spokenSentences: config.turn.spokenSentences,
               pauses: config.turn.punctuationStyle,

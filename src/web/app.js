@@ -465,9 +465,12 @@ const CARDS = {
  * A card for something waiting for Renato's OK: a calendar event (Reach 2), a
  * skill (#116) or an email draft (#120). Only the first button acts; the reply
  * is worded by code and goes into the history with what really ran.
- * @param {{ id: string, label: string, kind?: "calendar" | "skill" | "email" | "draft-delete" | "fix" | "pr-close" | "task-start" | "task-publish" | "task-close" | "house" | "lights" | "house-change" | "gap-issue" | "gmail-tidy" | "calendar-change" }} proposal
+ * #269: a small, undoable change (`auto`) is done at once, with no question:
+ * the card becomes one line saying what happened, with Undo for a calendar event.
+ * @param {{ id: string, label: string, auto?: boolean, kind?: "calendar" | "skill" | "email" | "draft-delete" | "fix" | "pr-close" | "task-start" | "task-publish" | "task-close" | "house" | "lights" | "house-change" | "gap-issue" | "gmail-tidy" | "calendar-change" }} proposal
  */
 const confirmCard = (proposal) => {
+  const auto = proposal.auto === true;
   const kind = proposal.kind ?? "calendar";
   const c = CARDS[kind];
   const card = document.createElement("div");
@@ -494,7 +497,7 @@ const confirmCard = (proposal) => {
       b.classList.add("picked");
       card.dataset.pending = "false";
       refreshPending();
-      /** @type {{ ok?: boolean, text?: string, tool?: string, job?: string }} */
+      /** @type {{ ok?: boolean, text?: string, tool?: string, job?: string, undo?: string }} */
       let result;
       try {
         if (kind === "skill" && decision === "no") {
@@ -516,6 +519,16 @@ const confirmCard = (proposal) => {
       const stillWaiting = [...document.querySelectorAll('.confirm[data-pending="true"]')].some((c) => NODE_OF_CARD[/** @type {keyof typeof NODE_OF_CARD} */ (/** @type {HTMLElement} */ (c).dataset.kind ?? "")] === node);
       if (node && !stillWaiting) brainView.decided(/** @type {import("./brain-lib.js").NodeId} */ (node), outcome);
       markDecided(card, outcome);
+      if (auto) {
+        // #269: no new message and nothing said aloud: the line itself says what happened.
+        what.textContent = text;
+        card.dataset.outcome = outcome;
+        if (result.ok && typeof result.undo === "string") card.append(undoButton(result.undo, what));
+        state.history = appendTurn(state.history, "assistant", text, typeof result.tool === "string" ? [`${result.tool} ${CARD_DONE}`] : []);
+        void refreshReach();
+        void remindersPanel.refresh();
+        return;
+      }
       addMessage(result.ok ? "answer" : "error", text);
       // #224: in a spoken conversation, what happened is said aloud too, then the mic listens again.
       // #250: with Gemini Live, no second voice (the mic would take it for him): Gemini is told quietly.
@@ -552,8 +565,41 @@ const confirmCard = (proposal) => {
     return b;
   };
   choices.append(button("yes", c.yes), button("no", c.no));
+  if (auto) {
+    // Done at once: no question, no buttons to tap.
+    card.classList.add("auto");
+    what.textContent = `Doing it: ${proposal.label}`;
+    card.append(what);
+    const yesButton = /** @type {HTMLButtonElement} */ (choices.querySelector("button"));
+    setTimeout(() => yesButton.click(), 0);
+    return card;
+  }
   card.append(what, choices, sayIt);
   return card;
+};
+
+/** #269: Undo for an event added without a card. @param {string} token @param {HTMLElement} line */
+const undoButton = (token, line) => {
+  const b = document.createElement("button");
+  b.type = "button";
+  b.className = "small undo";
+  b.textContent = "Undo";
+  b.addEventListener("click", async () => {
+    b.disabled = true;
+    /** @type {{ ok?: boolean, text?: string, tool?: string }} */
+    let r;
+    try {
+      const res = await fetch("/calendar/undo", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ token }) });
+      r = await res.json().catch(() => ({}));
+    } catch {
+      r = { ok: false, text: "I can't reach Atlas, so it's still on your calendar." };
+    }
+    line.textContent = typeof r.text === "string" ? r.text : "Something went wrong, so it's still on your calendar.";
+    if (r.ok) b.remove();
+    else b.disabled = false;
+    state.history = appendTurn(state.history, "assistant", line.textContent, typeof r.tool === "string" ? [`${r.tool} ${CARD_DONE}`] : []);
+  });
+  return b;
 };
 
 /**
@@ -1385,8 +1431,9 @@ const submit = (raw, how = {}) => {
   if (card && said) {
     addMessage("user", text);
     state.history = appendTurn(state.history, "user", text, []);
-    const buttons = card.querySelectorAll(".choices button");
-    /** @type {HTMLButtonElement | undefined} */ (buttons[said === "yes" ? 0 : 1])?.click();
+    // #269: one "yes" answers every card his last answer is waiting on (nine concerts, one yes).
+    const together = [...(card.closest("li")?.querySelectorAll('.confirm[data-pending="true"]') ?? [card])];
+    for (const each of together) /** @type {HTMLButtonElement | undefined} */ (each.querySelectorAll(".choices button")[said === "yes" ? 0 : 1])?.click();
     return;
   }
   const chosen = state.pending ? matchContextOption(text, state.pending.options) : undefined;

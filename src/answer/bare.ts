@@ -74,11 +74,14 @@ import { checkDraftRequest, MAX_DRAFTS_PER_ANSWER, draftLabel, GMAIL_DRAFT_DELET
 import { makeSkillTurn, SKILL_FOLLOW_TOOL, SKILL_PROPOSE_TOOL, skillsForPrompt, type SkillStore } from "../skills.js";
 import type { EcMatchers } from "../memory-rules.js";
 import { makeMemoryTurn, MEMORY_FORGET_TOOL, MEMORY_RECALL_TOOL, MEMORY_REMEMBER_TOOL, MEMORY_TOOLS, type MemoryToolDeps } from "../memory-tools.js";
-import { CALENDAR_CREATE_TOOL, checkCreateRequest, proposalLabel, proposalPathLabel, type PendingProposals } from "../calendar/create.js";
+import { CALENDAR_CREATE_TOOL, checkCreateRequest, isSmallProposal, proposalLabel, proposalPathLabel, type PendingProposals } from "../calendar/create.js";
 import { historyMessages, profileName } from "./personal.js";
 
 /** Room for one round: thinking, the words, and every tool call in it (nine calendar cards at once need it). */
 const BARE_MAX_TOKENS = 6000;
+
+/** #269: what the brain is told when the app does a small change without a card. */
+const AUTO_SAY = (label: string): string => `The app is doing this now, without a card (small and undoable): ${label}. Say in one short sentence what you're doing; don't ask for an OK, and don't claim it worked: the app says so.`;
 /** #268: a round cut off before anything was shown is tried once more with this much room. */
 const BARE_MAX_TOKENS_RETRY = 16000;
 
@@ -717,6 +720,8 @@ export const makeBareAnswerer = (deps: {
    * for brains whose provider does tools (Claude). Otherwise code decides.
    */
   readonly tools?: boolean;
+  /** #269: small, undoable changes go ahead without a card (the page does them at once). */
+  readonly autoSmall?: boolean;
   /** #146: which calendar and Gmail accounts are connected, checked each turn. */
   readonly connected?: () => Promise<Connected>;
   /** #125: his GitHub repos, read-only. With tools only. EC-looking repos are Kiro's. */
@@ -1295,6 +1300,10 @@ export const makeBareAnswerer = (deps: {
           onStep?.({ kind: "tool", name: call.name, args: asked.join(", "), by: "model", ok: false, error: `refused: ${proposed.error.slice(0, 60)}` });
           return { callId: call.id, content: `Not proposed: ${proposed.error}. Tell him plainly, or ask which blinds he means.`, isError: true };
         }
+        if (deps.autoSmall) {
+          onStep?.({ kind: "tool", name: call.name, args: asked.join(", "), by: "model", ok: true, result: "doing it now", confirm: { id: proposed.value.id, label: proposed.value.label, kind: "house", auto: true } });
+          return { callId: call.id, content: AUTO_SAY(proposed.value.label) };
+        }
         onStep?.({ kind: "tool", name: call.name, args: asked.join(", "), by: "model", ok: true, result: "waiting for your OK", confirm: { id: proposed.value.id, label: proposed.value.label, kind: "house" } });
         return { callId: call.id, content: `Not moved yet: the app is asking him "Move them" / "Leave them" for: ${proposed.value.label}. Say in one sentence that it needs his OK. Never say they've moved.` };
       }
@@ -1335,6 +1344,10 @@ export const makeBareAnswerer = (deps: {
           onStep?.({ kind: "tool", name: call.name, args: "", by: "model", ok: false, error: `refused: ${proposed.error.slice(0, 60)}` });
           return { callId: call.id, content: `Not proposed: ${proposed.error}. Tell him plainly, or ask what he means.`, isError: true };
         }
+        if (deps.autoSmall && call.name === "house_thermostat") {
+          onStep?.({ kind: "tool", name: call.name, args: "", by: "model", ok: true, result: "doing it now", confirm: { id: proposed.value.id, label: proposed.value.label, kind: "house-change", auto: true } });
+          return { callId: call.id, content: AUTO_SAY(proposed.value.label) };
+        }
         onStep?.({ kind: "tool", name: call.name, args: "", by: "model", ok: true, result: "waiting for your OK", confirm: { id: proposed.value.id, label: proposed.value.label, kind: "house-change" } });
         return { callId: call.id, content: `Not changed yet: the app is asking him "Do it" / "Leave it" for: ${proposed.value.label}. Say in one sentence that it needs his OK. Never say it's done.` };
       }
@@ -1345,6 +1358,10 @@ export const makeBareAnswerer = (deps: {
         if (!proposed.ok) {
           onStep?.({ kind: "tool", name: call.name, args: asked.join(", "), by: "model", ok: false, error: `refused: ${proposed.error.slice(0, 60)}` });
           return { callId: call.id, content: `Not proposed: ${proposed.error}. Tell him plainly, or ask which lights he means.`, isError: true };
+        }
+        if (deps.autoSmall) {
+          onStep?.({ kind: "tool", name: call.name, args: asked.join(", "), by: "model", ok: true, result: "doing it now", confirm: { id: proposed.value.id, label: proposed.value.label, kind: "lights", auto: true } });
+          return { callId: call.id, content: AUTO_SAY(proposed.value.label) };
         }
         onStep?.({ kind: "tool", name: call.name, args: asked.join(", "), by: "model", ok: true, result: "waiting for your OK", confirm: { id: proposed.value.id, label: proposed.value.label, kind: "lights" } });
         return { callId: call.id, content: `Not changed yet: the app is asking him "Do it" / "Leave them" for: ${proposed.value.label}. Say in one sentence that it needs his OK. Never say they've changed.` };
@@ -1382,6 +1399,10 @@ export const makeBareAnswerer = (deps: {
         const id = cal.create.pending.add(checked.value);
         const label = proposalLabel(checked.value, today);
         deps.log?.info("calendar create proposed", { allDay: checked.value.start === undefined });
+        if (deps.autoSmall && isSmallProposal(checked.value)) {
+          onStep?.({ kind: "tool", name: "calendar_create", args: proposalPathLabel(checked.value), by: "model", ok: true, result: "adding it now", confirm: { id, label, auto: true } });
+          return { callId: call.id, content: AUTO_SAY(label) };
+        }
         onStep?.({ kind: "tool", name: "calendar_create", args: proposalPathLabel(checked.value), by: "model", ok: true, result: "waiting for your OK", confirm: { id, label } });
         return { callId: call.id, content: `Not added yet. The app is showing them this event to confirm: ${label}. Say in one short sentence what you'd add and that it needs their OK. Never say it's added.` };
       }

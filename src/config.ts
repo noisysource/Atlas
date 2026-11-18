@@ -47,6 +47,8 @@ export type TurnConfig = {
   readonly stickyContext: boolean;
   /** Latency (#76, opt-in): the personal answer starts while the classifier runs, and is thrown away if it disagrees. */
   readonly speculativeAnswer: boolean;
+  /** #269: small, undoable changes (his own calendar with no guests, lights, blinds, a thermostat) are done without a card. On by default; ASK_SMALL=on brings the cards back. */
+  readonly autoSmall?: boolean;
   /** Latency (#76): a long first sentence is cut at a clause once it's this long (characters). */
   readonly firstChunkChars: number;
   /** Spoken bare replies (#92): sentences allowed after the opening reaction, unless detail is asked for. */
@@ -492,6 +494,7 @@ const EnvSchema = z.object({
   CLASSIFIER_THINKING: onOff,
   STICKY_CONTEXT: onOff,
   SPECULATIVE_ANSWER: onOff,
+  ASK_SMALL: onOff,
   VOICE_PUNCTUATION_STYLE: onOff,
   VOICE_MAX_SENTENCES: z.preprocess(
     (v) => (typeof v === "string" && v.trim() === "" ? undefined : v),
@@ -681,6 +684,7 @@ export const loadConfig = (given: Env): Result<Config, string> => {
       classifierThinking: e.CLASSIFIER_THINKING ?? "off",
       stickyContext: e.STICKY_CONTEXT === "on",
       speculativeAnswer: e.SPECULATIVE_ANSWER === "on",
+      autoSmall: e.ASK_SMALL !== "on",
       firstChunkChars: e.VOICE_FIRST_CHUNK_CHARS,
       spokenSentences: e.VOICE_MAX_SENTENCES,
       punctuationStyle: e.VOICE_PUNCTUATION_STYLE === "on",
