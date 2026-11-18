@@ -111,7 +111,39 @@ export const TASK_CLOSE_TOOL: LlmTool = {
   inputSchema: { type: "object", properties: { id: idProp }, required: ["id"], additionalProperties: false },
 };
 
-export const TASK_TOOLS: readonly LlmTool[] = [TASK_START_TOOL, TASK_LIST_TOOL, TASK_TELL_TOOL, TASK_PUBLISH_TOOL, TASK_CLOSE_TOOL];
+/** #286: merging a task's pull request, after his OK, only when GitHub says it's ready. */
+export const TASK_MERGE_TOOL: LlmTool = {
+  name: "task_merge",
+  description:
+    "Merge a task's pull request (squash) once its checks have passed and it has no conflicts. Nothing is merged by this call: it checks the pull request and shows him a card; only his OK merges it. If it isn't ready (checks running or failed, conflicts), it says why instead.",
+  inputSchema: { type: "object", properties: { id: idProp }, required: ["id"], additionalProperties: false },
+};
+
+export const TASK_TOOLS: readonly LlmTool[] = [TASK_START_TOOL, TASK_LIST_TOOL, TASK_TELL_TOOL, TASK_PUBLISH_TOOL, TASK_MERGE_TOOL, TASK_CLOSE_TOOL];
+
+/** What GitHub says of a pull request, enough to decide whether it can be merged. */
+export type PullReadiness = {
+  readonly state: string;
+  readonly merged: boolean;
+  readonly mergeable: boolean | null;
+  readonly mergeableState: string;
+  readonly headSha: string;
+  readonly checks: readonly { readonly name: string; readonly status: string; readonly conclusion: string }[];
+};
+
+/** Whether a pull request can be merged now, or why not, in his words. */
+export const readiness = (p: PullReadiness): Result<true, string> => {
+  if (p.merged) return err("it's already merged");
+  if (p.state !== "open") return err("its pull request is closed");
+  if (p.mergeable === false || p.mergeableState === "dirty") return err("it has conflicts with its base branch; tell the task to merge the base and fix them");
+  if (p.checks.length === 0) return err("no checks have run on it yet");
+  const running = p.checks.filter((c) => c.status !== "completed");
+  if (running.length > 0) return err(`its checks are still running (${running.map((c) => c.name).slice(0, 3).join(", ")})`);
+  const failed = p.checks.filter((c) => !["success", "skipped", "neutral"].includes(c.conclusion));
+  if (failed.length > 0) return err(`checks failed: ${failed.map((c) => c.name).slice(0, 3).join(", ")}`);
+  if (p.mergeable === null) return err("GitHub is still working out whether it merges cleanly; ask again in a minute");
+  return ok(true);
+};
 
 export type StartRequest = { readonly owner: string; readonly name: string; readonly title: string; readonly goal: string; readonly base?: string };
 
@@ -150,6 +182,8 @@ export type Tasks = {
   readonly proposeStart: (r: StartRequest) => string;
   readonly proposePublish: (id: string, issue?: number) => Promise<Result<{ readonly card: string; readonly label: string }, string>>;
   readonly proposeClose: (id: string) => Promise<Result<{ readonly card: string; readonly label: string }, string>>;
+  /** #286: checks the pull request first; a card only when it's ready. */
+  readonly proposeMerge: (id: string) => Promise<Result<{ readonly card: string; readonly label: string }, string>>;
   readonly decide: (card: string, decision: "yes" | "no") => Promise<TaskCard>;
   /** Pass his words on; the turn runs in the background. */
   readonly tell: (id: string, message: string) => Promise<Result<string, string>>;
@@ -159,7 +193,8 @@ export type Tasks = {
 type Card =
   | { readonly kind: "start"; readonly r: StartRequest; readonly until: number }
   | { readonly kind: "publish"; readonly id: string; readonly issue?: number; readonly until: number }
-  | { readonly kind: "close"; readonly id: string; readonly until: number };
+  | { readonly kind: "close"; readonly id: string; readonly until: number }
+  | { readonly kind: "merge"; readonly id: string; readonly sha: string; readonly until: number };
 
 export const makeTasks = (deps: {
   readonly runner: TaskRunner;
@@ -354,6 +389,46 @@ export const makeTasks = (deps: {
     return { ok: true, text: `Pull request opened into ${t.base}${prUrl ? `: ${prUrl}` : ""}. Nothing was merged.`, ...(prUrl ? { url: prUrl } : {}), tool: `task_publish ${t.repo} → pull request` };
   };
 
+  /** #286: the pull request and its checks, as GitHub sees them now. */
+  const pullOf = async (t: Task): Promise<Result<PullReadiness, string>> => {
+    const [owner, name] = t.repo.split("/");
+    const token = await deps.writeToken(owner ?? "");
+    if (!owner || !name || !token || !t.prNumber) return err(!t.prNumber ? "it has no pull request yet: publish it first" : `I can't write to ${t.repo}: run npm run github:connect -- ${owner} --write`);
+    const res = await doFetch(`https://api.github.com/repos/${owner}/${name}/pulls/${t.prNumber}`, { headers: gh(token) }).catch(() => undefined);
+    const pr = res?.ok ? ((await res.json().catch(() => ({}))) as { state?: unknown; merged?: unknown; mergeable?: unknown; mergeable_state?: unknown; head?: { sha?: unknown } }) : undefined;
+    if (!pr || typeof pr.head?.sha !== "string") return err(`GitHub didn't answer about pull request #${t.prNumber}${res ? ` (${res.status})` : ""}`);
+    const sha = pr.head.sha;
+    const runs = await doFetch(`https://api.github.com/repos/${owner}/${name}/commits/${encodeURIComponent(sha)}/check-runs?per_page=50`, { headers: gh(token) }).catch(() => undefined);
+    const body = runs?.ok ? ((await runs.json().catch(() => ({}))) as { check_runs?: unknown }) : undefined;
+    const checks = (Array.isArray(body?.check_runs) ? body.check_runs : []).flatMap((x) => {
+      const o = typeof x === "object" && x !== null ? (x as Record<string, unknown>) : {};
+      return typeof o.name === "string" ? [{ name: o.name, status: String(o.status ?? ""), conclusion: String(o.conclusion ?? "") }] : [];
+    });
+    if (!runs?.ok) return err("GitHub didn't let me read the checks: the write token needs Checks or Actions: Read-only");
+    return ok({ state: String(pr.state ?? ""), merged: pr.merged === true, mergeable: typeof pr.mergeable === "boolean" ? pr.mergeable : null, mergeableState: String(pr.mergeable_state ?? ""), headSha: sha, checks });
+  };
+
+  const merge = async (t: Task, sha: string): Promise<TaskCard> => {
+    const now2 = await pullOf(t);
+    if (!now2.ok) return { ok: false, text: `Nothing was merged: ${now2.error}.` };
+    // The OK was for what he saw: a new push since then means a new look.
+    if (now2.value.headSha !== sha) return { ok: false, text: "The pull request changed since you said yes (new commits), so nothing was merged. Ask again and I'll check it afresh." };
+    const ready = readiness(now2.value);
+    if (!ready.ok) return { ok: false, text: `Nothing was merged: ${ready.error}.` };
+    const [owner, name] = t.repo.split("/");
+    const token = await deps.writeToken(owner ?? "");
+    if (!owner || !name || !token) return { ok: false, text: `I can't write to ${t.repo}. Nothing was merged.` };
+    const res = await doFetch(`https://api.github.com/repos/${owner}/${name}/pulls/${t.prNumber}/merge`, {
+      method: "PUT",
+      headers: { ...gh(token), "content-type": "application/json" },
+      body: JSON.stringify({ merge_method: "squash", sha, commit_title: `${t.title} (#${t.prNumber})` }),
+    }).catch(() => undefined);
+    if (!res?.ok) return { ok: false, text: `GitHub didn't merge it${res ? ` (${res.status})` : ""}: the write token needs Pull requests: Read and write. Nothing changed.` };
+    await update(t.id, { ended: "merged" });
+    deps.log?.info("task merged", { id: t.id });
+    return { ok: true, text: `Merged pull request #${t.prNumber} into ${t.base}. ${t.issue ? `Issue #${t.issue} closes with it. ` : ""}Pull the latest on your Mac to have it.`, ...(t.prUrl ? { url: t.prUrl } : {}), tool: `task_merge ${t.repo} #${t.prNumber} → merged` };
+  };
+
   const commitsAhead = async (t: Task): Promise<string> => {
     const log = await deps.run("git", ["log", "--oneline", "--no-decorate", `origin/${t.base}..HEAD`], { cwd: dirOf(t.id), env: { PATH: process.env.PATH ?? "/usr/bin:/bin", HOME: process.env.HOME ?? "", GIT_CONFIG_NOSYSTEM: "1", GIT_CONFIG_GLOBAL: "/dev/null" } });
     const lines = log.stdout.split("\n").filter((l) => l.trim() !== "");
@@ -398,6 +473,18 @@ export const makeTasks = (deps: {
       const what = t.prUrl ? `, updating ${t.prUrl}` : `, a new pull request into ${t.base} that closes ${closes ? `#${closes}` : "a new issue"}`;
       return ok({ card: card({ kind: "publish", id, ...(issue ? { issue } : {}), until: now().getTime() + 30 * 60_000 }), label: `${t.title} (${t.repo}, ${await commitsAhead(t)})${what}` });
     },
+    proposeMerge: async (id) => {
+      const t = await find(id);
+      if (!t || t.status === "closed") return err("no such open task");
+      if (t.ended === "merged") return err("it's already merged");
+      const pr = await pullOf(t);
+      if (!pr.ok) return pr;
+      const ready = readiness(pr.value);
+      if (!ready.ok) return err(`not ready to merge: ${ready.error}`);
+      // Merging into staging in a repo that deploys from it releases the change: said on the card.
+      const deploys = t.base === "staging" ? ", which deploys it" : "";
+      return ok({ card: card({ kind: "merge", id, sha: pr.value.headSha, until: now().getTime() + 30 * 60_000 }), label: `pull request #${t.prNumber}, “${t.title}” (${t.repo}), into ${t.base}${deploys}: checks passed, no conflicts` });
+    },
     proposeClose: async (id) => {
       const t = await find(id);
       if (!t || t.status === "closed") return err("no such open task");
@@ -407,7 +494,7 @@ export const makeTasks = (deps: {
       const c = cards.get(cardId);
       cards.delete(cardId);
       if (!c || c.until <= now().getTime()) return { ok: false, text: "That request has expired or was already answered, so nothing happened." };
-      if (decision === "no") return { ok: true, text: c.kind === "start" ? "Okay, not started." : c.kind === "publish" ? "Okay, nothing was pushed." : "Okay, the task stays open." };
+      if (decision === "no") return { ok: true, text: c.kind === "start" ? "Okay, not started." : c.kind === "publish" ? "Okay, nothing was pushed." : c.kind === "merge" ? "Okay, it isn't merged." : "Okay, the task stays open." };
       if (c.kind === "start") {
         const r = c.r;
         if (deps.isEc(`${r.owner}/${r.name} ${r.title} ${r.goal}`)) return { ok: false, text: "That's EC work, which Kiro handles, so nothing was started." };
@@ -437,6 +524,7 @@ export const makeTasks = (deps: {
         if (t.status === "working" || t.status === "queued") return { ok: false, text: "It's working again; publish when it reports. Nothing was pushed." };
         return publish(t, c.issue);
       }
+      if (c.kind === "merge") return merge(t, c.sha);
       running.get(t.id)?.abort();
       await update(t.id, { status: "closed", step: undefined });
       await deps.remove(path.join(deps.root, t.id)).catch(() => undefined);

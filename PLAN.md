@@ -1132,6 +1132,13 @@ Confirmed (2026-11-12):
   himself aren't picked up yet: the handoff between them is the branch,
   the PR and STATUS.md.
 
+- **The whole loop by voice (#286):** `task_merge` merges a task's pull
+  request (squash), after a card, only when GitHub says it's open, has no
+  conflicts and every check passed; the card is for the exact head commit
+  he saw (a new push means a new look), and says when the base is
+  `staging`, which deploys. Proactive Atlas (#271/#276) tells him when the
+  task is done and when its checks pass ("say merge it"); a follow-up
+  publish first brings in what was pushed to the branch on GitHub.
 - **How Atlas talks (#68):** the memory tools already cross contexts, so
   instead of a global memory kind this is a closed set of three settings
   in `src/talk.ts` (`language` theirs|en|pt-PT, `length`

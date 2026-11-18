@@ -220,7 +220,7 @@ export const checkNotice = (t: TaskLook, checks: readonly { readonly name: strin
     kind: "task",
     text:
       failed.length === 0
-        ? `Pull request #${t.prNumber}, “${t.title}”, passed its checks and is ready for you. Ask me what you need to do for it, and I'll walk you through it.`
+        ? `Pull request #${t.prNumber}, “${t.title}”, passed its checks and is ready. Say “merge it” and I'll merge it, after your OK.`
         : `Pull request #${t.prNumber}, “${t.title}”, failed its checks: ${listOf(failed.map((c) => c.name).slice(0, 3))}. Want me to have the task fix it?`,
   };
 };

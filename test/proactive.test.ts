@@ -102,7 +102,7 @@ describe("coding tasks (#276)", () => {
     expect(taskNotices([], [{ ...busy, status: "idle" }])).toEqual([]); // seen for the first time: nothing to tell
     const pr = { ...busy, status: "idle", prNumber: 275 };
     expect(checkNotice(pr, [{ name: "ci", status: "in_progress", conclusion: "" }])).toBeUndefined();
-    expect(checkNotice(pr, [{ name: "ci", status: "completed", conclusion: "success" }])?.text).toContain("passed its checks and is ready for you");
+    expect(checkNotice(pr, [{ name: "ci", status: "completed", conclusion: "success" }])?.text).toContain("passed its checks and is ready. Say “merge it”");
     expect(checkNotice(pr, [{ name: "Lint, typecheck, test", status: "completed", conclusion: "failure" }])?.text).toContain("failed its checks: Lint, typecheck, test");
     expect(checkNotice({ ...pr, ended: "merged" }, [{ name: "ci", status: "completed", conclusion: "success" }])).toBeUndefined();
   });
