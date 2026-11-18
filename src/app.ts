@@ -655,9 +655,31 @@ export const buildDeps = async (inputs: AppInputs): Promise<Result<Deps, string>
               }
             : {}),
         };
+        // #276: the coding tasks: done, a question, failed, and their pull requests' checks.
+        const byId = new Map<string, Task>();
+        const taskSources: ProactiveSources = tasks
+          ? {
+              tasks: async () => {
+                const list = await tasks.list(false);
+                for (const t of list) byId.set(t.id, t);
+                return list.map((t) => ({ id: t.id, title: t.title, status: t.status, ...(t.report ? { report: t.report } : {}), ...(t.message ? { message: t.message } : {}), ...(t.prNumber ? { prNumber: t.prNumber } : {}), ...(t.ended ? { ended: t.ended } : {}) }));
+              },
+              ...(github
+                ? {
+                    checks: async (look) => {
+                      const t = byId.get(look.id);
+                      const [owner, name] = (t?.repo ?? "").split("/");
+                      if (!t || !owner || !name) return [];
+                      const got = await github.reader.checks({ repo: { owner, name }, ref: t.branch });
+                      return got.ok ? got.value.checks : [];
+                    },
+                  }
+                : {}),
+            }
+          : {};
         return {
           notices,
-          start: (tell: (n: Notice) => void) => startProactive({ sources, notices, drive, llm: classifierLlm.value, isEcEmail: (m) => isEcEmail(m, isEcText), timeZone: config.timeZone, quiet: p.quiet, tell, log }),
+          start: (tell: (n: Notice) => void) => startProactive({ sources: { ...sources, ...taskSources }, notices, drive, llm: classifierLlm.value, isEcEmail: (m) => isEcEmail(m, isEcText), timeZone: config.timeZone, quiet: p.quiet, tell, log }),
         };
       })()
     : undefined;

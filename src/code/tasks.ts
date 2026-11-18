@@ -311,6 +311,17 @@ export const makeTasks = (deps: {
     if (!issue.ok) return { ok: false, text: issue.error };
     const dir = dirOf(t.id);
     const env = fixGitEnv(token);
+    // #276: commits pushed to the branch on GitHub meanwhile (a merge of main, a fix by hand) come in first, so the push isn't refused.
+    if (t.prUrl) {
+      const fetched = await deps.run("git", ["fetch", "--quiet", "origin", `refs/heads/${t.branch}`], { cwd: dir, env });
+      if (fetched.code === 0) {
+        const merged = await deps.run("git", ["-c", "user.name=Atlas", "-c", "user.email=atlas@users.noreply.github.com", "merge", "--no-edit", "--quiet", "FETCH_HEAD"], { cwd: dir, env });
+        if (merged.code !== 0) {
+          await deps.run("git", ["merge", "--abort"], { cwd: dir, env });
+          return { ok: false, text: `The branch ${t.branch} changed on GitHub in a way that clashes with the task's new work, so nothing was pushed. Tell the task what to keep, or merge it by hand.` };
+        }
+      }
+    }
     // His work is committed by Claude Code; anything left uncommitted stays out.
     const push = await deps.run("git", ["push", "--quiet", "origin", `HEAD:refs/heads/${t.branch}`], { cwd: dir, env });
     if (push.code !== 0) return { ok: false, text: "GitHub refused the push (the write token needs Contents: Read and write on that repo, and the branch can't have moved on GitHub). Nothing changed." };
