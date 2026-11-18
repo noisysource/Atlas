@@ -591,6 +591,35 @@ export const makeServer = (
     );
   }
 
+  // #269: taking back an event Atlas added without a card, by its undo token.
+  const undo = deps.calendarUndo;
+  if (undo) {
+    const UndoBody = z.object({ token: z.string().regex(/^[a-f0-9]{8,64}$/) }).strict();
+    app.post(
+      "/calendar/undo",
+      async (c, next) => {
+        if (!isJson(c.req.header("content-type"))) return c.json(errorBody("POST /calendar/undo needs Content-Type: application/json."), 415);
+        await next();
+      },
+      bodyLimit({ maxSize: 1024, onError: (c) => c.json(errorBody("The request is too large."), 413) }),
+      async (c) => {
+        const body = UndoBody.safeParse(await c.req.json().catch(() => undefined));
+        if (!body.success) return c.json(errorBody("Send { token }."), 400);
+        return c.json(await undo(body.data.token));
+      },
+    );
+  }
+
+  // #271: what Atlas wants to tell him, since the last one the page has.
+  const proactive = deps.proactive;
+  if (proactive) {
+    app.get("/notices", (c) => {
+      const since = c.req.query("since");
+      proactive.notices.looked();
+      return c.json({ notices: proactive.notices.since(since && /^[a-f0-9]{8,32}$/.test(since) ? since : undefined) });
+    });
+  }
+
   // A spoken conversation is starting: warm the model connection (#76). No body, nothing returned.
   const warm = options.warm;
   if (warm) {

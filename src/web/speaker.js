@@ -1,7 +1,10 @@
 // @ts-check
-// Speaking one reply, sentence by sentence (#82). Sentences are added as they
-// stream in; each is fetched from POST /speak while the one before it plays,
-// so there's no gap. If the configured voice fails, the rest is spoken by the
+// Speaking one reply (#82), in pieces. Sentences are added as they stream in.
+// The first is spoken alone, so the first sound comes soon; after it, two
+// sentences go to the voice together when the second arrives in time (#91),
+// so the intonation carries across them instead of resetting every sentence.
+// Each piece is fetched from POST /speak while the one before it plays, so
+// there's no gap. If the configured voice fails, the rest is spoken by the
 // browser voice. Stopping (barge-in, a new question) cuts the audio at once
 // and works out what was actually said.
 //
@@ -24,8 +27,19 @@ import { spokenText } from "./turn-lib.js";
  *   onSpeaking?: () => void,
  *   beforeFirst?: () => Promise<void>,
  *   onDone: (result: PlaybackResult) => void,
+ *   mergeWaitMs?: number,
  * }} SpeakerDeps
  */
+
+/** Sentences in one piece after the first, and its length cap. */
+export const PIECE_SENTENCES = 2;
+export const PIECE_MAX_CHARS = 280;
+/**
+ * Once a piece starts playing, how long the next one may wait for its second
+ * sentence before it's fetched anyway. One sentence of speech lasts a few
+ * seconds and Kokoro renders it in well under one, so this costs no gap.
+ */
+export const MERGE_WAIT_MS = 700;
 
 /** Why /speak didn't give audio, for the fallback note. @param {Response} res */
 const problemOf = async (res) => {
@@ -42,8 +56,17 @@ const problemOf = async (res) => {
  */
 export const makeSpeaker = (deps) => {
   const controller = new AbortController();
-  /** @type {string[]} */
+  /** The pieces to say, each one or two sentences. @type {string[]} */
   const sentences = [];
+  /** Sentences in each piece. @type {number[]} */
+  const counts = [];
+  /** Pieces up to this index may be fetched now. */
+  let fetchUpTo = 0;
+  /** @type {ReturnType<typeof setTimeout> | undefined} */
+  let mergeTimer;
+  const mergeWaitMs = deps.mergeWaitMs ?? MERGE_WAIT_MS;
+  /** Sentences played in full. */
+  let playedSentences = 0;
   /** @type {(Promise<Response | Error> | undefined)[]} */
   const fetched = [];
   let fallback = deps.fetchSpeech === null;
@@ -65,22 +88,36 @@ export const makeSpeaker = (deps) => {
     deps.onDone({
       interrupted,
       spoken: interrupted ? spokenText(sentences, { full, cutFraction: currentFraction }) : sentences.join(" "),
-      sentences: sentences.length,
+      sentences: counts.reduce((a, b) => a + b, 0),
       fellBack: fallback && deps.fetchSpeech !== null,
       reason: interrupted ? reason : "finished",
-      played: full,
+      played: playedSentences,
       voiceErrors,
     });
   };
 
   /** Starts fetching sentence i, unless it's already on its way. @param {number} i */
   const prefetch = (i) => {
-    if (fallback || deps.muted || !deps.fetchSpeech || i >= sentences.length || fetched[i]) return;
+    if (fallback || deps.muted || !deps.fetchSpeech || i >= sentences.length || i > fetchUpTo || fetched[i]) return;
     const text = sentences[i] ?? "";
     fetched[i] = deps.fetchSpeech(text, controller.signal).then(
       async (res) => (res.ok ? res : new Error(await problemOf(res))),
       (e) => (e instanceof Error ? e : new Error(String(e))),
     );
+  };
+
+  /** Piece i is due: fetch it now if it's there, or as soon as it is. @param {number} i */
+  const allow = (i) => {
+    fetchUpTo = Math.max(fetchUpTo, i);
+    prefetch(i);
+  };
+
+  /** Piece i has started playing: the next one is fetched when full, when the reply ends, or after a short wait. @param {number} i */
+  const armNext = (i) => {
+    clearTimeout(mergeTimer);
+    const next = i + 1;
+    if (finished || (counts[next] ?? 0) >= PIECE_SENTENCES) return allow(next);
+    mergeTimer = setTimeout(() => allow(next), mergeWaitMs);
   };
 
   const run = async () => {
@@ -93,6 +130,7 @@ export const makeSpeaker = (deps) => {
       if (i === 0) deps.onSpeaking?.();
       if (deps.muted) {
         full = i + 1;
+        playedSentences += counts[i] ?? 0;
         continue;
       }
       const text = sentences[i] ?? "";
@@ -105,7 +143,7 @@ export const makeSpeaker = (deps) => {
         if (controller.signal.aborted) return;
       }
       if (response instanceof Response) {
-        prefetch(i + 1); // the next one is fetched while this one plays
+        armNext(i); // the next one is fetched while this one plays
         tracker = { fraction: () => 0 };
         try {
           const played = await deps.play(response, controller.signal, tracker);
@@ -135,8 +173,10 @@ export const makeSpeaker = (deps) => {
         }
       }
       full = i + 1;
+      playedSentences += counts[i] ?? 0;
       tracker = { fraction: () => 0 };
     }
+    clearTimeout(mergeTimer);
     settle(false, "finished");
   };
   void run();
@@ -146,14 +186,25 @@ export const makeSpeaker = (deps) => {
     say: (text) => {
       const t = text.trim();
       if (t === "" || finished || controller.signal.aborted) return;
-      sentences.push(t);
-      // The first two are fetched straight away; later ones as playback reaches them.
-      if (sentences.length <= 2) prefetch(sentences.length - 1);
+      const last = sentences.length - 1;
+      // After the first, a sentence joins the piece before it while that piece hasn't been fetched and has room.
+      if (last >= 1 && !fetched[last] && (counts[last] ?? 0) < PIECE_SENTENCES && (sentences[last] ?? "").length + t.length < PIECE_MAX_CHARS) {
+        sentences[last] = `${sentences[last]} ${t}`;
+        counts[last] = (counts[last] ?? 0) + 1;
+        if ((counts[last] ?? 0) >= PIECE_SENTENCES && last <= full + 1) allow(last);
+        else prefetch(last);
+      } else {
+        sentences.push(t);
+        counts.push(1);
+        prefetch(sentences.length - 1);
+      }
       wake?.();
     },
     /** No more sentences are coming. */
     finish: () => {
       finished = true;
+      // Nothing more will join the next piece: fetch it now if playback is under way.
+      allow(full + 1);
       wake?.();
     },
     /**
@@ -164,6 +215,7 @@ export const makeSpeaker = (deps) => {
       if (settled) return;
       currentFraction = currentFraction || tracker.fraction();
       controller.abort();
+      clearTimeout(mergeTimer);
       wake?.();
       settle(full < sentences.length || !finished, reason);
     },

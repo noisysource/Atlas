@@ -11,6 +11,7 @@
 import type { LlmTool } from "../llm/types.js";
 import { err, ok, type Result } from "../result.js";
 import type { Domotics } from "./domotics.js";
+import type { HouseLook } from "../proactive.js";
 
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
 const day = { type: "string", description: "YYYY-MM-DD, Lisbon" } as const;
@@ -206,3 +207,19 @@ export const readHouse = (d: Domotics) => ({
     return ok(settingsForBrain({ ...(f[0] ? { automation: f[0] } : {}), ...(f[1] ? { guard: f[1] } : {}), ...(f[2] ? { warmBy: f[2] } : {}), ...(f[3] ? { tariff: f[3] } : {}) }));
   },
 });
+
+/** #271: what the proactive watcher needs: when the bridge last reported, the inverter, the faults still open. */
+export const houseLook = async (d: Domotics, now: Date): Promise<Result<HouseLook, string>> => {
+  const [state, incidents] = await Promise.all([d.get(["domotics_state", "tuya"]), d.since("domotics_incidents", "at", new Date(now.getTime() - 3 * 86_400_000), 50)]);
+  if (!state.ok) return err(state.error.message);
+  const f = (state.value?.fields ?? {}) as O;
+  const updated = typeof f.updatedAt === "string" ? Date.parse(f.updatedAt) : Number.NaN;
+  const inverter = typeof f.inverter === "object" && f.inverter !== null ? (f.inverter as O) : undefined;
+  const openFaults = (incidents.ok ? incidents.value : []).flatMap((doc) => {
+    const x = doc.fields as O;
+    if (x.kind !== "fault" || x.status === "ended") return [];
+    const since = typeof x.at === "string" ? Date.parse(x.at) : Number.NaN;
+    return Number.isFinite(since) ? [{ id: doc.path.split("/").at(-1) ?? "", code: String(x.code ?? "?").slice(0, 12), device: String(x.deviceName ?? "heat pump").slice(0, 40), since }] : [];
+  });
+  return ok({ ...(Number.isFinite(updated) ? { updatedAt: updated } : {}), ...(inverter ? { inverterOnline: inverter.online !== false } : {}), openFaults });
+};
