@@ -20,9 +20,35 @@ const el = (tag, className, text) => {
 export const makeTraceView = (root) => {
   root.className = "trace";
   root.hidden = true;
-  const head = el("div", "trace-head", "How he got there");
+  // #280: folded by default, so a long trace never pushes the galaxy and the chat out of sight; his choice is kept.
+  const head = /** @type {HTMLButtonElement} */ (el("button", "trace-head", ""));
+  head.type = "button";
   const scroll = el("div", "trace-scroll");
   root.replaceChildren(head, scroll);
+  let open = false;
+  try {
+    open = localStorage.getItem("atlas.traceOpen") === "true";
+  } catch {
+    // No storage: folded.
+  }
+  /** How many calls the trace shows, for the folded line. */
+  let calls = 0;
+  const fold = () => {
+    root.dataset.open = String(open);
+    head.setAttribute("aria-expanded", String(open));
+    scroll.hidden = !open;
+    head.textContent = `${open ? "▾" : "▸"} How he got there${calls > 0 ? ` · ${calls} ${calls === 1 ? "step" : "steps"}` : ""}`;
+  };
+  head.addEventListener("click", () => {
+    open = !open;
+    try {
+      localStorage.setItem("atlas.traceOpen", String(open));
+    } catch {
+      // Not kept: fine.
+    }
+    fold();
+  });
+  fold();
 
   /** @type {Trace} */
   let trace = EMPTY_TRACE;
@@ -88,7 +114,9 @@ export const makeTraceView = (root) => {
       under.append(item("thinking", "reaching", el("span", "t-node t-hub", "thinking…")));
     }
     scroll.replaceChildren(top);
+    calls = trace.calls.length;
     root.hidden = false;
+    fold();
   };
 
   return {

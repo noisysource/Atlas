@@ -468,7 +468,7 @@ const CARDS = {
  * is worded by code and goes into the history with what really ran.
  * #269: a small, undoable change (`auto`) is done at once, with no question:
  * the card becomes one line saying what happened, with Undo for a calendar event.
- * @param {{ id: string, label: string, auto?: boolean, kind?: "calendar" | "skill" | "email" | "draft-delete" | "fix" | "pr-close" | "task-start" | "task-publish" | "task-close" | "house" | "lights" | "house-change" | "gap-issue" | "gmail-tidy" | "calendar-change" | "drive" }} proposal
+ * @param {{ id: string, label: string, auto?: boolean, then?: string, kind?: "calendar" | "skill" | "email" | "draft-delete" | "fix" | "pr-close" | "task-start" | "task-publish" | "task-close" | "house" | "lights" | "house-change" | "gap-issue" | "gmail-tidy" | "calendar-change" | "drive" }} proposal
  */
 const confirmCard = (proposal) => {
   const auto = proposal.auto === true;
@@ -528,6 +528,7 @@ const confirmCard = (proposal) => {
         state.history = appendTurn(state.history, "assistant", text, typeof result.tool === "string" ? [`${result.tool} ${CARD_DONE}`] : []);
         void refreshReach();
         void remindersPanel.refresh();
+        if (decision === "yes" && result.ok && proposal.then) carryOn(proposal.then);
         return;
       }
       addMessage(result.ok ? "answer" : "error", text);
@@ -542,6 +543,7 @@ const confirmCard = (proposal) => {
       void refreshReach();
       if (kind.startsWith("task-")) void tasksPanel.refresh();
       void remindersPanel.refresh();
+      if (decision === "yes" && result.ok && proposal.then) carryOn(proposal.then);
       // #162: a fix being prepared: the card follows it, then asks again before anything is pushed.
       if (kind === "fix" && result.ok && typeof result.job === "string")
         followFix(card, result.job, {
@@ -578,6 +580,30 @@ const confirmCard = (proposal) => {
   card.append(what, choices, sayIt);
   return card;
 };
+
+/**
+ * #278: after his yes, the next step of what he asked, by itself (a folder
+ * created, then the invoice saved into it). Once per step, after any answer
+ * Atlas is giving.
+ * @param {string} then
+ */
+const carryOn = (then) => {
+  const key = then.toLowerCase();
+  const now = Date.now();
+  if ((carriedOn.get(key) ?? 0) > now - 120_000) return;
+  carriedOn.set(key, now);
+  let tries = 0;
+  const go = () => {
+    if (state.busy) {
+      if (++tries < 120) setTimeout(go, 500);
+      return;
+    }
+    void ask(`(Carrying on after my OK) ${then}`, undefined, true);
+  };
+  setTimeout(go, 300);
+};
+/** @type {Map<string, number>} */
+const carriedOn = new Map();
 
 /** #269: Undo for an event added without a card. @param {string} token @param {HTMLElement} line */
 const undoButton = (token, line) => {
@@ -1137,8 +1163,9 @@ const playbackDetails = (result, streamComplete) => ({
  * at a time, so replies can't arrive out of order.
  * @param {string} question
  * @param {string} [context] set when the user picked a context after a clarify
+ * @param {boolean} [hidden] Atlas carrying on by himself after an OK (278): no line for it from him
  */
-const ask = async (question, context) => {
+const ask = async (question, context, hidden = false) => {
   const text = question.trim();
   if (text === "" || state.busy) return;
   // Latency (#76): this turn's timings; spoken turns bring theirs from the mic.
@@ -1152,7 +1179,7 @@ const ask = async (question, context) => {
   brainView.begin();
   traceView.begin(brainName(state.brain));
   renderControls();
-  const userItem = context ? undefined : addMessage("user", text);
+  const userItem = context || hidden ? undefined : addMessage("user", text);
   setStatus("");
   // A typed, text-only turn doesn't use the voice: no voice check, and no note about it (#102).
   voiceInUse = shouldSpeak({ spoken: timing.spoken, readTyped: state.readTyped, muted: state.muted });
