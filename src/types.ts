@@ -3,6 +3,7 @@
 // Contexts are not hard-coded: they're read from contexts.md (#22), so a
 // context id is a branded string that only the contexts parser should create.
 
+import type { Notice, Notices } from "./proactive.js";
 import type { Fixes } from "./code/fix.js";
 import type { Tasks } from "./code/tasks.js";
 import type { MorningBriefs } from "./morning.js";
@@ -395,6 +396,11 @@ export type Deps = {
   readonly introspect?: () => Promise<IntrospectionReport>;
   /** #177: the morning brief, prepared at BRIEF_AT and shown on the page (GET /brief/today). */
   readonly morningBrief?: MorningBriefs;
+  /** #271 PROACTIVE=on: Atlas speaks up on his own. main.ts starts the watchers; the page asks GET /notices. */
+  readonly proactive?: {
+    readonly notices: Notices;
+    readonly start: (tell: (n: Notice) => void) => { readonly stop: () => void };
+  };
   /** #128: the nightly check that keeps the code notes current. */
   readonly codeRefresh?: CodeRefresh;
   /** STICKY_CONTEXT=on (#76): spoken follow-ups skip the classifier and stay in the last answered context. */

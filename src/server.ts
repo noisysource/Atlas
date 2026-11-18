@@ -598,6 +598,16 @@ export const makeServer = (
     );
   }
 
+  // #271: what Atlas wants to tell him, since the last one the page has.
+  const proactive = deps.proactive;
+  if (proactive) {
+    app.get("/notices", (c) => {
+      const since = c.req.query("since");
+      proactive.notices.looked();
+      return c.json({ notices: proactive.notices.since(since && /^[a-f0-9]{8,32}$/.test(since) ? since : undefined) });
+    });
+  }
+
   // A spoken conversation is starting: warm the model connection (#76). No body, nothing returned.
   const warm = options.warm;
   if (warm) {

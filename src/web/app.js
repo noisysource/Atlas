@@ -2313,3 +2313,67 @@ void fetch("/brains")
     showCalendarNote();
   })
   .catch(() => undefined);
+
+// #271: Atlas speaking up on his own. The page asks every 15 seconds; a new
+// notice chimes, shows as Atlas's line and, unless muted or in quiet hours,
+// is said aloud (after any answer he's giving). What was already told today
+// shows quietly when the page opens.
+{
+  /** @type {string | undefined} */
+  let lastNotice;
+  let first = true;
+  /** @type {string[]} */
+  const queue = [];
+  const chime = () => {
+    try {
+      const ctx = audio();
+      const t = ctx.currentTime;
+      for (const [i, f] of [660, 990].entries()) {
+        const o = ctx.createOscillator();
+        const g = ctx.createGain();
+        o.frequency.value = f;
+        g.gain.setValueAtTime(0, t + i * 0.12);
+        g.gain.linearRampToValueAtTime(0.12, t + i * 0.12 + 0.02);
+        g.gain.exponentialRampToValueAtTime(0.0001, t + i * 0.12 + 0.35);
+        o.connect(g).connect(ctx.destination);
+        o.start(t + i * 0.12);
+        o.stop(t + i * 0.12 + 0.4);
+      }
+    } catch {
+      // No sound before the first tap: the line still shows.
+    }
+  };
+  const sayQueued = () => {
+    if (queue.length === 0 || state.phase !== "idle") return;
+    speakNote(/** @type {string} */ (queue.shift()));
+  };
+  const look = async () => {
+    /** @type {{ notices?: { id: string, text: string, speak: boolean }[] } | undefined} */
+    let got;
+    try {
+      const res = await fetch(`/notices${lastNotice ? `?since=${lastNotice}` : ""}`);
+      if (res.status === 404) return false; // PROACTIVE is off: stop asking
+      got = await res.json();
+    } catch {
+      return true;
+    }
+    for (const n of got?.notices ?? []) {
+      lastNotice = n.id;
+      const item = addMessage("answer", n.text);
+      item.classList.add("notice");
+      state.history = appendTurn(state.history, "assistant", n.text, []);
+      if (first) continue;
+      chime();
+      if (n.speak && !state.muted) queue.push(n.text);
+    }
+    first = false;
+    sayQueued();
+    return true;
+  };
+  const loop = async () => {
+    if (!(await look())) return;
+    setTimeout(() => void loop(), 15_000);
+  };
+  void loop();
+  setInterval(sayQueued, 2_000);
+}

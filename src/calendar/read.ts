@@ -38,6 +38,8 @@ export type CalendarEvent = {
   readonly id?: string;
   /** #263: the shared or subscribed calendar it's on ("Family"); none for the primary calendar. */
   readonly calendarName?: string;
+  /** #271: someone else organises it (he's invited), so a change to it is news to him. */
+  readonly invited?: boolean;
 };
 
 export type CalendarError = {
@@ -211,7 +213,8 @@ export const toCalendarEvents = (items: readonly GoogleEvent[], isEc: (e: Google
     const ec = isEc(item);
     const location = !ec && item.location ? clean(item.location) : "";
     const id = !ec && typeof item.id === "string" && /^[A-Za-z0-9_-]{4,1024}$/.test(item.id) ? item.id : "";
-    return [{ title: ec ? EC_EVENT : clean(item.summary ?? "") || "(no title)", start, end, allDay: item.start?.dateTime === undefined, ...(location ? { location } : {}), ec, ...(id ? { id } : {}) }];
+    const invited = item.organizer?.self === false && (item.attendees?.some((a) => a.self === true) ?? false);
+    return [{ title: ec ? EC_EVENT : clean(item.summary ?? "") || "(no title)", start, end, allDay: item.start?.dateTime === undefined, ...(location ? { location } : {}), ec, ...(id ? { id } : {}), ...(invited ? { invited } : {}) }];
   });
 
 const time = (iso: string, timeZone: string): string =>

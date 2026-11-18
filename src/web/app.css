@@ -3179,3 +3179,9 @@ body[data-phase="speaking"] .brain-star {
   padding: 0 0.45rem;
   font-size: 11px;
 }
+
+/* #271: a line Atlas said on his own. */
+#transcript .message.notice::before {
+  content: "◆ ";
+  color: var(--accent);
+}

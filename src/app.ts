@@ -21,12 +21,13 @@ import { availableSwitches, makeSettings, makeSwitchedAnswerer, omit, type BareD
 import { makeBlinds, makeLegrand, readFirebaseUser } from "./house/blinds.js";
 import { domoticsDb, makeDomotics } from "./house/domotics.js";
 import { makeHouseChanges } from "./house/house-changes.js";
-import { readHouse } from "./house/house-data.js";
+import { houseLook, readHouse } from "./house/house-data.js";
 import { makeLights } from "./house/lights.js";
 import { makeVendusGet, type VendusGet } from "./vendus/vendus.js";
 import { makeCodeRefresh } from "./code/freshness.js";
 import { briefSources } from "./brief.js";
 import { makeMorningBriefs, type BriefStore, type MorningBrief } from "./morning.js";
+import { makeDriveTimes, makeNotices, startProactive, type Notice, type ProactiveSources } from "./proactive.js";
 import { makeBareAnswerer } from "./answer/bare.js";
 import { makePersonalAnswerer } from "./answer/personal.js";
 import { makeAnswerRouter, makeBrainRouter } from "./answer/router.js";
@@ -41,7 +42,7 @@ import { makeNoteStore, makeStudies, mapViews, type NoteFiles } from "./code/stu
 import { makeGithubReader, makeGithubTokens, type GithubReader } from "./github/github.js";
 import { cachedToken, makeGcloudCliToken, makeGcloudEnvs, makeGcloudReader, type GcloudReader } from "./gcloud/gcloud.js";
 import { makeDbReader, type DbReader } from "./gcloud/firestore.js";
-import { GMAIL_ACCOUNTS, makeGmailReader, type GmailAccount, type GmailReader } from "./gmail/gmail.js";
+import { GMAIL_ACCOUNTS, isEcEmail, makeGmailReader, type GmailAccount, type GmailReader } from "./gmail/gmail.js";
 import { makeDraftBook, makeGmailWriter, makePendingDrafts, type GmailWriter } from "./gmail/send.js";
 import { addedSentence, isSmallProposal, makeGoogleEventCreator, makePendingProposals, makeUndoTokens, proposalPathLabel, type EventCreator } from "./calendar/create.js";
 import { makeClassifier } from "./classify.js";
@@ -627,6 +628,39 @@ export const buildDeps = async (inputs: AppInputs): Promise<Result<Deps, string>
           log,
         })
       : undefined;
+  // #271: Atlas speaks up on his own: the house, time to leave, email that needs him, calendar clashes and changes.
+  const proactive = config.proactive?.enabled
+    ? (() => {
+        const p = config.proactive;
+        const notices = makeNotices({ quiet: p.quiet, timeZone: config.timeZone });
+        const drive = makeDriveTimes({ llm: classifierLlm.value, from: p.from, log });
+        const readers = calendar ? Object.values(calendar.accounts ?? { personal: calendar.read }) : [];
+        const sources: ProactiveSources = {
+          ...(domotics ? { house: () => houseLook(domotics, now()) } : {}),
+          ...(readers.length > 0
+            ? {
+                calendar: async (range) => {
+                  const all = await Promise.all(readers.map((r) => r?.(range)));
+                  return all.flatMap((r) => (r?.ok ? r.value : []));
+                },
+              }
+            : {}),
+          ...(gmail
+            ? {
+                email: async () => {
+                  const accounts = GMAIL_ACCOUNTS.filter((a) => a !== "marisa");
+                  const got = await Promise.all(accounts.map(async (account) => ({ account, r: await gmail.reader.search({ account, query: "in:inbox is:unread newer_than:1d", max: 20 }) })));
+                  return got.flatMap(({ account, r }) => (r.ok ? r.value.map((m) => ({ ...m, account })) : []));
+                },
+              }
+            : {}),
+        };
+        return {
+          notices,
+          start: (tell: (n: Notice) => void) => startProactive({ sources, notices, drive, llm: classifierLlm.value, isEcEmail: (m) => isEcEmail(m, isEcText), timeZone: config.timeZone, quiet: p.quiet, tell, log }),
+        };
+      })()
+    : undefined;
   const answerers = personalWith(answerLlm.value);
   const localAnswerers = personalWith(localLlm.value);
   const background = inputs.background ?? makeBackgroundTasks({ log });
@@ -663,6 +697,7 @@ export const buildDeps = async (inputs: AppInputs): Promise<Result<Deps, string>
     nativeTools: (calendar !== undefined || gmail !== undefined || config.bareMemory) && config.toolCalling,
     ...(calendarConfirm ? { calendarConfirm } : {}),
     ...(calendarUndo ? { calendarUndo } : {}),
+    ...(proactive ? { proactive } : {}),
     reach: async () =>
       withSwitchesView(await reachView({
         config,

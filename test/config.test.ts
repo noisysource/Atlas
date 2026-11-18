@@ -37,6 +37,7 @@ describe("loadConfig", () => {
       gcloud: { enabled: false, keysPath: "data/gcloud" },
       vendus: { enabled: false, keyPath: "data/vendus.json" },
       costs: { subscriptions: [], path: "data/costs.jsonl" },
+      proactive: { enabled: false, from: "", quiet: "22:30-08:00" },
       gemini: { enabled: false, model: { provider: "google", model: "gemini-3.8-flash" }, router: { provider: "google", model: "gemini-3.5-flash-lite" }, secretName: "gemini-api-key", live: { enabled: false, model: "gemini-3.8-live" } },
       webSearch: { enabled: false, perQuestion: 3, perDay: 40, country: "PT", city: "" },
       house: { enabled: false, env: "dev", control: { enabled: false, userPath: "data/house/firebase.json" } },
