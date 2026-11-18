@@ -79,7 +79,8 @@ export const makeBrainView = (root, options = {}) => {
   lines.setAttribute("aria-hidden", "true");
 
   const core = el("div", "brain-core");
-  core.append(el("span", "brain-ring"), el("span", "brain-ring brain-ring-outer"));
+  // The star (the Noisy Source look): one bright point where it all begins.
+  core.append(el("span", "brain-ring"), el("span", "brain-ring brain-ring-outer"), el("span", "brain-star"));
   const face = el("div", "brain-face");
   const name = el("span", "brain-name");
   const sub = el("span", "brain-sub");
@@ -89,10 +90,11 @@ export const makeBrainView = (root, options = {}) => {
   /** @type {Map<string, { box: HTMLButtonElement, tag: HTMLElement, badge: HTMLElement, rest: import("./brain-lib.js").Rest }>} */
   const nodes = new Map();
   const list = el("ul", "brain-nodes");
-  for (const n of NODES) {
+  for (const [index, n] of NODES.entries()) {
     const item = el("li", "brain-node-item");
     const pos = nodePosition(n.angle);
-    item.style.cssText = `left:${pos.left}%;top:${pos.top}%`;
+    // --i staggers each icon's gentle float.
+    item.style.cssText = `left:${pos.left}%;top:${pos.top}%;--i:${index}`;
     const box = document.createElement("button");
     box.type = "button";
     box.className = "brain-node";
@@ -297,14 +299,53 @@ export const makeBrainView = (root, options = {}) => {
     }
   };
 
+  /** Puts the open panel beside its icon, inside the brain, growing out of the icon. @param {string} id */
+  const placePanel = (id) => {
+    const box = nodes.get(id)?.box;
+    if (!box) return;
+    const area = root.getBoundingClientRect();
+    const at = box.getBoundingClientRect();
+    const cx = at.left + at.width / 2 - area.left;
+    const cy = at.top + at.height / 2 - area.top;
+    const pw = panel.offsetWidth;
+    const ph = Math.min(panel.scrollHeight, area.height - 16);
+    const left = Math.max(8, Math.min(area.width - pw - 8, cx - pw / 2));
+    const below = cy < area.height / 2;
+    const top = Math.max(8, Math.min(area.height - ph - 8, below ? cy + at.height / 2 + 6 : cy - at.height / 2 - ph - 6));
+    panel.style.left = `${left}px`;
+    panel.style.top = `${top}px`;
+    panel.style.maxHeight = `${area.height - 16}px`;
+    panel.style.transformOrigin = `${cx - left}px ${cy - top}px`;
+  };
+
+  /** @type {ReturnType<typeof setTimeout> | undefined} */
+  let fading;
   /** @param {string} id */
   const togglePanel = (id) => {
-    shown = shown === id ? undefined : id;
+    const closing = shown === id;
+    shown = closing ? undefined : id;
     for (const [nid, node] of nodes) node.box.setAttribute("aria-expanded", String(nid === shown));
+    clearTimeout(fading);
+    if (closing) {
+      // It fades back into its icon, then goes.
+      panel.dataset.state = "closing";
+      fading = setTimeout(() => {
+        panel.dataset.state = "";
+        drawPanel();
+      }, 220);
+      return;
+    }
     drawPanel();
-    // #253: the panel opens under the ring, often below the fold: bring it into view.
-    if (shown) requestAnimationFrame(() => panel.scrollIntoView({ block: "nearest", behavior: "smooth" }));
+    panel.dataset.state = "";
+    placePanel(id);
+    // A photon bursts out of the icon, and the panel opens from it.
+    requestAnimationFrame(() => {
+      panel.dataset.state = "open";
+    });
   };
+  root.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && shown) togglePanel(shown);
+  });
 
   /** @type {BrainState} */
   let state = EMPTY;

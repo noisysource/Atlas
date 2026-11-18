@@ -10,6 +10,7 @@ import { startRemindersPanel } from "./reminders.js";
 import { makeCostsView } from "./costs.js";
 import { makeLivePlayer, runLiveTurn } from "./live.js";
 import { makeBrainView } from "./brain.js";
+import { startUniverse } from "./universe.js";
 import { makeCodeMapView } from "./codemap.js";
 import { makeStudiesView } from "./studies.js";
 import { makeTraceView } from "./trace.js";
@@ -281,6 +282,34 @@ byId("costs").addEventListener("click", () => costsView.open());
 
 // #143: how he got there, for the current answer, as a tree that grows while he works.
 const traceView = makeTraceView(brainView.traceSlot);
+
+// The universe behind the page: its photons follow what Atlas is doing, and stream in and out of the star while he thinks.
+startUniverse(/** @type {HTMLCanvasElement} */ (byId("universe")), {
+  state: () => ({ phase: state.phase }),
+  star: () => {
+    const core = document.querySelector(".brain-core");
+    if (!core) return undefined;
+    const r = core.getBoundingClientRect();
+    return r.width > 0 ? { x: r.left + r.width / 2, y: r.top + r.height / 2 } : undefined;
+  },
+});
+
+// Settings: the controls live in a panel behind the gear, out of the way.
+const settingsToggle = /** @type {HTMLButtonElement} */ (byId("settings-toggle"));
+const settingsPanel = byId("settings");
+/** @param {boolean} open */
+const showSettings = (open) => {
+  settingsPanel.hidden = !open;
+  settingsToggle.setAttribute("aria-expanded", String(open));
+};
+settingsToggle.addEventListener("click", () => showSettings(settingsPanel.hidden === true));
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && !settingsPanel.hidden && !document.querySelector("dialog[open]")) showSettings(false);
+});
+document.addEventListener("pointerdown", (e) => {
+  const t = /** @type {Node} */ (e.target);
+  if (!settingsPanel.hidden && !settingsPanel.contains(t) && !settingsToggle.contains(t) && !document.querySelector("dialog[open]")?.contains(t)) showSettings(false);
+});
 
 // #156: what the code agent is studying in the background, live, with Stop.
 const studiesView = makeStudiesView(brainView.studiesSlot, {
@@ -584,6 +613,9 @@ const renderControls = () => {
   micButton.title = session ? (pushToInterrupt ? "Interrupt Atlas and speak (Space)" : "End the spoken conversation (Escape)") : "";
   micButton.classList.toggle("listening", session !== null);
   phaseBanner.dataset.phase = state.phase;
+  // The page's mood: the universe's pace, and the chat fading away while you talk (voice mode).
+  document.body.dataset.phase = state.phase;
+  document.body.dataset.voice = String(session !== null);
   phaseBanner.hidden = state.phase === "idle";
   phaseText.textContent = phaseLabel(state.phase, state.language, session?.bargeIn ?? null);
   micButton.disabled = !listenAvailable() && session === null;

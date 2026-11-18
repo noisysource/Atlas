@@ -20,6 +20,7 @@ export const FILES: readonly { path: string; file: string; contentType: string }
   { path: "/app.js", file: "app.js", contentType: "text/javascript; charset=utf-8" },
   { path: "/chat.js", file: "chat.js", contentType: "text/javascript; charset=utf-8" },
   { path: "/brain.js", file: "brain.js", contentType: "text/javascript; charset=utf-8" },
+  { path: "/universe.js", file: "universe.js", contentType: "text/javascript; charset=utf-8" },
   { path: "/brain-lib.js", file: "brain-lib.js", contentType: "text/javascript; charset=utf-8" },
   { path: "/trace.js", file: "trace.js", contentType: "text/javascript; charset=utf-8" },
   { path: "/studies.js", file: "studies.js", contentType: "text/javascript; charset=utf-8" },

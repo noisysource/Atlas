@@ -7,10 +7,15 @@
     <link rel="stylesheet" href="/app.css" />
     <script type="module" src="/app.js"></script>
   </head>
-  <body>
+  <body data-phase="idle" data-voice="false">
+    <canvas id="universe" aria-hidden="true"></canvas>
     <header>
       <h1>Atlas</h1>
-      <div class="settings">
+      <button id="settings-toggle" type="button" aria-expanded="false" aria-controls="settings" title="Settings">
+        <span aria-hidden="true">⚙</span><span class="visually-hidden">Settings</span>
+      </button>
+      <div id="settings" class="settings" role="region" aria-label="Settings" hidden>
+        <p class="settings-title">settings</p>
         <label>
           <span class="visually-hidden">Language</span>
           <select id="language" aria-label="Language">
@@ -67,6 +72,7 @@
     <div class="layout">
       <section id="brain-view" class="brain" aria-label="What Atlas is reaching for" data-working="false"></section>
       <div class="chat">
+    <div class="term-bar" aria-hidden="true"><span>atlas — session</span><span class="term-dots"><i></i><i></i><i></i></span></div>
     <main>
       <ol id="transcript" aria-live="polite"></ol>
     </main>
