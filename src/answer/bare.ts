@@ -46,6 +46,7 @@ import {
 import { HOUSE_NOW_TOOL, HOUSE_STATE_PATH, houseForBrain, houseSummary } from "../house/house.js";
 import { isGmailAccount } from "../gmail/gmail.js";
 import { GMAIL_TIDY_TOOL, type InboxTidy } from "../gmail/tidy.js";
+import { checkListRequest, checkReadRequest as checkDriveRead, DRIVE_CREATE_FOLDER_TOOL, DRIVE_LIST_TOOL, DRIVE_READ_TOOL, DRIVE_SAVE_ATTACHMENT_TOOL, DRIVE_READ_TOOLS, DRIVE_WRITE_TOOLS, fileForBrain, listForBrain, type DriveClient, type DriveWrites } from "../drive.js";
 import { CALENDAR_CHANGE_TOOL, type CalendarChanges } from "../calendar/change.js";
 import type { WebSearch } from "../web-search.js";
 import { checkTalkChange, TALK_SET_TOOL, talkLines, talkSummary, type TalkStore } from "../talk.js";
@@ -705,6 +706,8 @@ export const makeBareAnswerer = (deps: {
     /** #214 (GMAIL_TIDY=on): archive and label, after "Tidy it". */
     readonly tidy?: InboxTidy;
   };
+  /** #270: Google Drive, with tools only. `writes` (DRIVE_WRITE=on): new folders and saved attachments, after "Do it". */
+  readonly drive?: { readonly client: DriveClient; readonly writes?: DriveWrites };
   /**
    * Native tool calling (#104): the brain decides itself when to read the
    * calendar, through the calendar_read tool; code checks every call. Only
@@ -884,7 +887,7 @@ export const makeBareAnswerer = (deps: {
   };
   /** #175: the groups that are connected, and each group's tools, in the order they're offered. */
   const connectedGroups: readonly ToolGroup[] = TOOL_GROUPS.filter((g) =>
-    g === "calendar" ? deps.calendar !== undefined : g === "gmail" ? deps.gmail !== undefined : g === "github" ? deps.github !== undefined : g === "code" ? deps.github !== undefined && deps.code !== undefined : g === "cloud" ? deps.gcloud !== undefined : g === "invoices" ? deps.vendus !== undefined : deps.house !== undefined,
+    g === "calendar" ? deps.calendar !== undefined : g === "gmail" ? deps.gmail !== undefined : g === "github" ? deps.github !== undefined : g === "code" ? deps.github !== undefined && deps.code !== undefined : g === "cloud" ? deps.gcloud !== undefined : g === "invoices" ? deps.vendus !== undefined : g === "drive" ? deps.drive !== undefined : deps.house !== undefined,
   );
   const toolsOf = (g: ToolGroup): readonly LlmTool[] =>
     g === "calendar"
@@ -899,7 +902,9 @@ export const makeBareAnswerer = (deps: {
               ? [...GCLOUD_TOOLS, ...(deps.gcloud?.db ? DB_TOOLS : [])]
               : g === "invoices"
                 ? VENDUS_TOOLS
-                : [HOUSE_NOW_TOOL, ...(deps.house?.blinds ? [HOUSE_BLINDS_TOOL] : []), ...(deps.house?.lights ? [HOUSE_LIGHTS_TOOL] : []), ...(deps.house?.read ? HOUSE_READ_TOOLS : []), ...(deps.house?.changes ? HOUSE_CHANGE_TOOLS : [])];
+                : g === "drive"
+                  ? [...DRIVE_READ_TOOLS, ...(deps.drive?.writes ? DRIVE_WRITE_TOOLS : [])]
+                  : [HOUSE_NOW_TOOL, ...(deps.house?.blinds ? [HOUSE_BLINDS_TOOL] : []), ...(deps.house?.lights ? [HOUSE_LIGHTS_TOOL] : []), ...(deps.house?.read ? HOUSE_READ_TOOLS : []), ...(deps.house?.changes ? HOUSE_CHANGE_TOOLS : [])];
   const routing = deps.tools === true && deps.route !== undefined && deps.route.mode !== "all";
 
   return async ({ question, history, onText, signal, spoken, onStep, onReach, onOffered, now, remember, onToolSucceeded }) => {
@@ -923,7 +928,7 @@ export const makeBareAnswerer = (deps: {
     // Native tool calling (#104): the brain reads the calendar itself, and answers "did you
     // check?" from the record of what really ran (toolsSoFar). Code only checks each call.
     // Without tools (the local brain), code decides and words the date sentence, as before.
-    const tools = deps.tools === true && (deps.calendar !== undefined || deps.gmail !== undefined || deps.memory !== undefined || deps.github !== undefined || deps.gcloud !== undefined || deps.vendus !== undefined || deps.house !== undefined || deps.decisions !== undefined || deps.gaps !== undefined || deps.reminders !== undefined || deps.webSearch !== undefined || deps.talk !== undefined);
+    const tools = deps.tools === true && (deps.calendar !== undefined || deps.gmail !== undefined || deps.memory !== undefined || deps.github !== undefined || deps.gcloud !== undefined || deps.vendus !== undefined || deps.house !== undefined || deps.drive !== undefined || deps.decisions !== undefined || deps.gaps !== undefined || deps.reminders !== undefined || deps.webSearch !== undefined || deps.talk !== undefined);
     // #107: this turn's memory: recent short-term notes go in the prompt; the rest is recalled on demand.
     const memoryTurn = tools && deps.memory ? makeMemoryTurn(deps.memory, { question, remember: remember !== false, now, ...(onStep ? { onStep } : {}) }) : undefined;
     const memoryCore = memoryTurn ? await memoryTurn.core() : undefined;
@@ -990,6 +995,7 @@ export const makeBareAnswerer = (deps: {
         ...(on.includes("cloud") ? toolsOf("cloud") : []),
         ...(on.includes("invoices") ? toolsOf("invoices") : []),
         ...(on.includes("house") ? toolsOf("house") : []),
+        ...(on.includes("drive") ? toolsOf("drive") : []),
         ...(routing && missing.length > 0 ? [toolsMoreTool(missing)] : []),
       ];
       return list;
@@ -1188,6 +1194,48 @@ export const makeBareAnswerer = (deps: {
       if (skillTurn && (call.name === SKILL_FOLLOW_TOOL.name || call.name === SKILL_PROPOSE_TOOL.name)) {
         const r = await (call.name === SKILL_FOLLOW_TOOL.name ? skillTurn.follow : skillTurn.propose)(call.input);
         return { callId: call.id, content: r.content, ...(r.isError ? { isError: true } : {}) };
+      }
+      const drive = deps.drive;
+      if (drive && (call.name === DRIVE_LIST_TOOL.name || call.name === DRIVE_READ_TOOL.name)) {
+        const refuse = (why: string): LlmToolResult => {
+          onStep?.({ kind: "tool", name: call.name, args: "", by: "model", ok: false, error: `refused: ${why.slice(0, 60)}` });
+          return { callId: call.id, content: `Refused: ${why}. Give an account and a folder or file id from drive_list.`, isError: true };
+        };
+        if (call.name === DRIVE_LIST_TOOL.name) {
+          const checked = checkListRequest(call.input);
+          if (!checked.ok) return refuse(checked.error);
+          const found = await drive.client.list(checked.value, signal);
+          if (!found.ok) {
+            onStep?.({ kind: "tool", name: call.name, args: checked.value.account, by: "model", ok: false, error: found.error.code });
+            return { callId: call.id, content: `Drive failed: ${found.error.message}. Say so plainly.`, isError: true };
+          }
+          onStep?.({ kind: "tool", name: call.name, args: checked.value.account, by: "model", ok: true, result: `${found.value.length} ${found.value.length === 1 ? "item" : "items"}` });
+          return { callId: call.id, content: listForBrain(checked.value, found.value) };
+        }
+        const checked = checkDriveRead(call.input);
+        if (!checked.ok) return refuse(checked.error);
+        const file = await drive.client.read(checked.value, signal);
+        if (!file.ok) {
+          onStep?.({ kind: "tool", name: call.name, args: checked.value.account, by: "model", ok: false, error: file.error.message.slice(0, 90) });
+          return { callId: call.id, content: `Drive failed: ${file.error.message}. Say so plainly.`, isError: true };
+        }
+        onStep?.({ kind: "tool", name: call.name, args: checked.value.account, by: "model", ok: true, result: "1 file" });
+        return { callId: call.id, content: fileForBrain(checked.value.account, checked.value.id, file.value) };
+      }
+      if (drive?.writes && (call.name === DRIVE_CREATE_FOLDER_TOOL.name || call.name === DRIVE_SAVE_ATTACHMENT_TOOL.name)) {
+        const tool = call.name === DRIVE_CREATE_FOLDER_TOOL.name ? "drive_create_folder" : "drive_save_attachment";
+        const input = typeof call.input === "object" && call.input !== null ? (call.input as Record<string, unknown>) : {};
+        const account = typeof input.account === "string" ? input.account : "";
+        const proposed = await drive.writes.propose(tool, input, signal);
+        if (!proposed.ok) {
+          onStep?.({ kind: "tool", name: call.name, args: account, by: "model", ok: false, error: `refused: ${proposed.error.slice(0, 60)}` });
+          return { callId: call.id, content: `Not proposed: ${proposed.error}. Say so plainly.`, isError: true };
+        }
+        onStep?.({ kind: "tool", name: call.name, args: account, by: "model", ok: true, result: "waiting for your OK", confirm: { id: proposed.value.id, label: proposed.value.label, kind: "drive" } });
+        return {
+          callId: call.id,
+          content: `Nothing changed in Drive yet: the app is asking him "Do it" / "Leave it" for ${proposed.value.label}. Say in one sentence that it needs his OK; never say it's done.`,
+        };
       }
       const gmail = deps.gmail;
       if (gmail?.tidy && call.name === GMAIL_TIDY_TOOL.name) {

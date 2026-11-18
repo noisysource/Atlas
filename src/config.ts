@@ -134,6 +134,8 @@ export type Config = {
     readonly archiveClears: readonly string[];
     readonly tokensPath: (account: string) => string;
   };
+  /** #270 (DRIVE=on): Claude lists and reads Drive; `write` (DRIVE_WRITE=on) also creates folders and saves email attachments, after his OK. */
+  readonly drive: { readonly enabled: boolean; readonly write: boolean; readonly tokensPath: (account: string) => string };
   /**
    * GITHUB=on (#125): Claude can read Renato's repos, read-only (GET calls
    * only): list repos, read files, issues and PRs, CI status. Tokens are
@@ -457,6 +459,8 @@ const EnvSchema = z.object({
   ),
   GMAIL_WRITE: onOff,
   GMAIL_TIDY: onOff,
+  DRIVE: onOff,
+  DRIVE_WRITE: onOff,
   WEB_SEARCH: onOff,
   WEB_SEARCH_PER_QUESTION: z.coerce.number().int().min(1).max(5).default(3),
   WEB_SEARCH_PER_DAY: z.coerce.number().int().min(1).max(500).default(40),
@@ -586,6 +590,11 @@ export const loadConfig = (given: Env): Result<Config, string> => {
   if (raw("MEMORY") === "on" && raw("BARE_MODE") !== "on") errors.push("MEMORY: needs BARE_MODE=on (without it, the older memory runs on its own)");
   if (raw("GMAIL_WRITE") === "on" && raw("GMAIL") !== "on") errors.push("GMAIL_WRITE: needs GMAIL=on");
   if (raw("GMAIL_TIDY") === "on" && raw("GMAIL") !== "on") errors.push("GMAIL_TIDY: needs GMAIL=on");
+  if (raw("DRIVE_WRITE") === "on" && raw("DRIVE") !== "on") errors.push("DRIVE_WRITE: needs DRIVE=on");
+  if (raw("DRIVE") === "on") {
+    if (production) errors.push("DRIVE: local only for now");
+    if (raw("BARE_MODE") !== "on") errors.push("DRIVE: needs BARE_MODE=on for now");
+  }
   if (raw("GMAIL") === "on") {
     if (production) errors.push("GMAIL: local only for now");
     if (raw("BARE_MODE") !== "on") errors.push("GMAIL: needs BARE_MODE=on for now");
@@ -662,6 +671,7 @@ export const loadConfig = (given: Env): Result<Config, string> => {
     gmail: { enabled: e.GMAIL === "on", write: e.GMAIL === "on" && e.GMAIL_WRITE === "on", tidy: e.GMAIL === "on" && e.GMAIL_TIDY === "on",
       archiveClears: e.GMAIL_ARCHIVE_CLEARS.split(",").map((l) => l.trim()).filter((l) => l !== "" && l.length <= 40).slice(0, 10),
       tokensPath: (account: string) => `data/google-gmail-${account}.json` },
+    drive: { enabled: e.DRIVE === "on", write: e.DRIVE === "on" && e.DRIVE_WRITE === "on", tokensPath: (account: string) => `data/google-drive-${account}.json` },
     github: { enabled: e.GITHUB === "on", tokensPath: "data/github-tokens.json" },
     gcloud: { enabled: e.GCLOUD === "on", keysPath: "data/gcloud" },
     vendus: { enabled: e.VENDUS === "on", keyPath: "data/vendus.json" },

@@ -163,12 +163,16 @@ export type GmailReader = {
   readonly read: (r: ReadRequest, signal?: AbortSignal) => Promise<Result<GmailMessage & { readonly body: string; readonly thread?: EmailThread; readonly attachments?: readonly Attachment[] }, CalendarError>>;
   /** #235: one attachment's text, with the email it came from (for the EC check). */
   readonly attachment?: (r: AttachmentRequest, signal?: AbortSignal) => Promise<Result<{ readonly message: GmailMessage; readonly attachment: AttachmentText }, CalendarError>>;
+  /** #270: one attachment's bytes, to save into Drive (after his OK), with the email it came from. */
+  readonly attachmentFile?: (r: AttachmentRequest, signal?: AbortSignal) => Promise<Result<AttachmentFile, CalendarError>>;
   /**
    * #217: emails he sent between minDays and maxDays ago whose thread got no reply since
    * (the thread's last message is still his). The last one he sent in each thread.
    */
   readonly unanswered?: (r: UnansweredRequest, signal?: AbortSignal) => Promise<Result<readonly GmailMessage[], CalendarError>>;
 };
+
+export type AttachmentFile = { readonly message: GmailMessage; readonly name: string; readonly mimeType: string; readonly size: number; readonly bytes: Uint8Array };
 
 export type UnansweredRequest = { readonly account: GmailAccount; readonly minDays: number; readonly maxDays: number; readonly max: number };
 
@@ -270,6 +274,20 @@ export const makeGmailReader = (deps: {
     if (!res.ok) return err({ code: "api", message: `Gmail answered ${res.status}` });
     return ok(await res.json().catch(() => ({})));
   };
+  const attachmentFile: NonNullable<GmailReader["attachmentFile"]> = async (r, signal) => {
+    const one = await get(r.account, `${API}/${encodeURIComponent(r.id)}?format=full`, signal);
+    if (!one.ok) return one;
+    const raw = one.value as RawMessage;
+    const list = attachmentsOf(raw.payload);
+    const a = list[r.attachment - 1];
+    if (!a) return err({ code: "api", message: list.length === 0 ? "That email has no attachments" : `That email has ${list.length} attachment(s); pick a number from gmail_read` });
+    if (a.size > MAX_ATTACHMENT_BYTES) return err({ code: "api", message: `That attachment is too big (over ${MAX_ATTACHMENT_BYTES / (1024 * 1024)} MB)` });
+    const data = await get(r.account, `${API}/${encodeURIComponent(r.id)}/attachments/${encodeURIComponent(a.attachmentId)}`, signal);
+    if (!data.ok) return data;
+    const b64 = (data.value as { data?: unknown }).data;
+    if (typeof b64 !== "string") return err({ code: "api", message: "Gmail sent no data for that attachment" });
+    return ok({ message: toMessage(raw), name: a.name, mimeType: a.mimeType, size: a.size, bytes: decodeBytes(b64) });
+  };
   const metadata = "format=metadata&metadataHeaders=From&metadataHeaders=To&metadataHeaders=Cc&metadataHeaders=Subject&metadataHeaders=Date";
   return {
     search: async (r, signal) => {
@@ -315,21 +333,13 @@ export const makeGmailReader = (deps: {
       const thread = typeof raw.threadId === "string" ? { threadId: raw.threadId, messageId: header(raw, "Message-ID") || header(raw, "Message-Id"), references: header(raw, "References") } : undefined;
       return ok({ ...toMessage(raw), body: plainText(raw.payload), attachments: attachmentsOf(raw.payload), ...(thread ? { thread } : {}) });
     },
+    attachmentFile,
     attachment: async (r, signal) => {
-      const one = await get(r.account, `${API}/${encodeURIComponent(r.id)}?format=full`, signal);
-      if (!one.ok) return one;
-      const raw = one.value as RawMessage;
-      const list = attachmentsOf(raw.payload);
-      const a = list[r.attachment - 1];
-      if (!a) return err({ code: "api", message: list.length === 0 ? "That email has no attachments" : `That email has ${list.length} attachment(s); pick a number from gmail_read` });
-      if (a.size > MAX_ATTACHMENT_BYTES) return err({ code: "api", message: `That attachment is too big to read here (over ${MAX_ATTACHMENT_BYTES / (1024 * 1024)} MB)` });
-      const data = await get(r.account, `${API}/${encodeURIComponent(r.id)}/attachments/${encodeURIComponent(a.attachmentId)}`, signal);
-      if (!data.ok) return data;
-      const b64 = (data.value as { data?: unknown }).data;
-      if (typeof b64 !== "string") return err({ code: "api", message: "Gmail sent no data for that attachment" });
-      const text = await textOf(a, decodeBytes(b64), deps.pdf ?? unpdfText);
+      const file = await attachmentFile(r, signal);
+      if (!file.ok) return file;
+      const text = await textOf(file.value, file.value.bytes, deps.pdf ?? unpdfText);
       if (!text.ok) return err({ code: "api", message: `Couldn't read it: ${text.error}` });
-      return ok({ message: toMessage(raw), attachment: text.value });
+      return ok({ message: file.value.message, attachment: text.value });
     },
   };
 };

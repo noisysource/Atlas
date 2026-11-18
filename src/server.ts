@@ -362,6 +362,18 @@ export const makeServer = (
     });
   }
 
+  // #270: his answer to a Drive change. Only "yes" creates the folder or saves the file.
+  const driveWrites = deps.driveWrites;
+  if (driveWrites) {
+    const DriveBody = z.object({ id: z.string().regex(/^[a-f0-9]{8,64}$/), decision: z.enum(["yes", "no"]) }).strict();
+    app.post("/drive/confirm", bodyLimit({ maxSize: 1024, onError: (c) => c.json(errorBody("The request is too large."), 413) }), async (c) => {
+      if (!isJson(c.req.header("content-type"))) return c.json(errorBody("POST /drive/confirm needs Content-Type: application/json."), 415);
+      const body = DriveBody.safeParse(await c.req.json().catch(() => undefined));
+      if (!body.success) return c.json(errorBody('Send { id, decision: "yes" | "no" }.'), 400);
+      return c.json(await driveWrites.decide(body.data.id, body.data.decision));
+    });
+  }
+
   // #219: his answer to moving or cancelling an event. Only "yes" changes it.
   const calendarChange = deps.calendarChange;
   if (calendarChange) {

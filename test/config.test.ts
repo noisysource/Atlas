@@ -33,6 +33,7 @@ describe("loadConfig", () => {
       toolRouter: "model",
       morningBrief: { enabled: false, hour: 7, minute: 30, path: "data/brief" },
       gmail: { enabled: false, write: false, tidy: false, archiveClears: [], tokensPath: expect.any(Function) },
+      drive: { enabled: false, write: false, tokensPath: expect.any(Function) },
       github: { enabled: false, tokensPath: "data/github-tokens.json" },
       gcloud: { enabled: false, keysPath: "data/gcloud" },
       vendus: { enabled: false, keyPath: "data/vendus.json" },
