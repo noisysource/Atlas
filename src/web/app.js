@@ -286,7 +286,8 @@ const traceView = makeTraceView(brainView.traceSlot);
 
 // The universe behind the page: its photons follow what Atlas is doing, and stream in and out of the star while he thinks.
 startUniverse(/** @type {HTMLCanvasElement} */ (byId("universe")), {
-  state: () => ({ phase: state.phase }),
+  // A replay of "How I got here" thinks again, so the photons stream then too.
+  state: () => ({ phase: state.phase === "idle" && /** @type {HTMLElement | null} */ (document.querySelector(".brain-core"))?.dataset.state === "working" ? "thinking" : state.phase }),
   star: () => {
     const core = document.querySelector(".brain-core");
     if (!core) return undefined;
@@ -666,6 +667,22 @@ const renderControls = () => {
 // Portuguese the browser voice speaks.
 
 const synth = "speechSynthesis" in window ? window.speechSynthesis : null;
+
+/**
+ * "How I got here" (#262): opening it replays the answer on the galaxy, the
+ * step showing in the list lit as it goes. Not while Atlas is busy.
+ * @param {HTMLDetailsElement} details @param {HTMLOListElement} steps @param {readonly import("./chat.js").PathStep[]} path
+ */
+const replayOnOpen = (details, steps, path) => {
+  details.title = "Replay this answer on the galaxy";
+  details.addEventListener("toggle", () => {
+    if (!details.open || state.phase !== "idle") return;
+    const items = [...steps.children];
+    void brainView.replay(path, (i) => {
+      for (const [k, li] of items.entries()) li.classList.toggle("now", k === i);
+    });
+  });
+};
 
 /** One AudioContext for Atlas's voice, made on the first tap or send so the browser lets it play. */
 /** @type {AudioContext | undefined} */
@@ -1275,6 +1292,7 @@ const ask = async (question, context) => {
     }
     details.append(summary, steps);
     item.append(details);
+    replayOnOpen(details, steps, path);
   } else if (view.kind === "answer" && (brain === "local" || brain === "claude" || brain === "google")) {
     const tag = document.createElement("span");
     tag.className = "brain-tag";

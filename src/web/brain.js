@@ -335,6 +335,8 @@ export const makeBrainView = (root, options = {}) => {
 
   /** @type {ReturnType<typeof setTimeout> | undefined} */
   let fading;
+  /** Bumped by every replay and question, so an older replay stops. */
+  let replays = 0;
   /** @param {string} id */
   const togglePanel = (id) => {
     const closing = shown === id;
@@ -443,8 +445,45 @@ export const makeBrainView = (root, options = {}) => {
       pendingCards = counts;
       drawBadges();
     },
-    /** A new question: the lines of the last answer go. */
+    /**
+     * Replays an answer's path on the galaxy (#262): the star thinks again,
+     * and photons go out to each tool in order, each lighting up with how it
+     * went. `onStep(i)` says which step is showing (-1 when done). A real
+     * question (`begin`) stops a replay at once.
+     * @param {readonly PathStep[]} path @param {(i: number) => void} [onStep]
+     */
+    replay: async (path, onStep) => {
+      const mine = ++replays;
+      const wait = (/** @type {number} */ ms) => new Promise((r) => setTimeout(r, ms));
+      const live = () => mine === replays;
+      state = EMPTY;
+      offered = undefined;
+      working = true;
+      draw();
+      for (const [i, step] of path.entries()) {
+        await wait(i === 0 ? 350 : 650);
+        if (!live()) return;
+        onStep?.(i);
+        if (step.kind === "tool" || step.kind === "skill") {
+          state = applyReach(state, step.name);
+          draw();
+          await wait(900);
+          if (!live()) return;
+        }
+        if (step.kind === "tools") offered = offeredNodes(step.offered);
+        state = applyStep(state, step);
+        draw();
+      }
+      await wait(600);
+      if (!live()) return;
+      working = false;
+      state = stateOfPath(path);
+      draw();
+      onStep?.(-1);
+    },
+    /** A new question: the lines of the last answer go (and a replay stops). */
     begin: () => {
+      replays++;
       state = EMPTY;
       offered = undefined;
       working = true;

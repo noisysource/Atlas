@@ -3127,3 +3127,25 @@ body[data-phase="speaking"] .brain-star {
   opacity: calc(0.5 + var(--voice) * 0.8);
   border-color: rgb(120 160 255 / calc(0.08 + var(--voice) * 0.22));
 }
+
+/* "How I got here" replays on the galaxy (#262): the step showing is lit. */
+.message .path summary::after {
+  content: "  ▸ replay";
+  color: #4c5570;
+  transition: color 0.2s;
+}
+
+.message .path summary:hover::after {
+  color: var(--accent);
+}
+
+.message .path li {
+  transition:
+    color 0.3s,
+    text-shadow 0.3s;
+}
+
+.message .path li.now {
+  color: var(--ns-glow);
+  text-shadow: 0 0 10px rgb(74 123 255 / 0.6);
+}
