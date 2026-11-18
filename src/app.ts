@@ -42,6 +42,7 @@ import { makeNoteStore, makeStudies, mapViews, type NoteFiles } from "./code/stu
 import { makeGithubReader, makeGithubTokens, type GithubReader } from "./github/github.js";
 import { cachedToken, makeGcloudCliToken, makeGcloudEnvs, makeGcloudReader, type GcloudReader } from "./gcloud/gcloud.js";
 import { makeDbReader, type DbReader } from "./gcloud/firestore.js";
+import { makeDriveClient, makeDriveWrites } from "./drive.js";
 import { GMAIL_ACCOUNTS, isEcEmail, makeGmailReader, type GmailAccount, type GmailReader } from "./gmail/gmail.js";
 import { makeDraftBook, makeGmailWriter, makePendingDrafts, type GmailWriter } from "./gmail/send.js";
 import { addedSentence, isSmallProposal, makeGoogleEventCreator, makePendingProposals, makeUndoTokens, proposalPathLabel, type EventCreator } from "./calendar/create.js";
@@ -279,6 +280,33 @@ export const buildDeps = async (inputs: AppInputs): Promise<Result<Deps, string>
   const gmail = config.gmail.enabled
     ? { reader: inputs.gmailReader ?? makeGmailReader({ accessToken: gmailToken }), isEc: isEcText, ...(drafts ? { writer: drafts } : {}), ...(inboxTidy ? { tidy: inboxTidy } : {}) }
     : undefined;
+  // #270 (DRIVE=on): list and read Drive; with DRIVE_WRITE=on, new folders and saved attachments after "Do it".
+  const driveTokens = new Map<GmailAccount, ReturnType<typeof makeAccessTokens>>();
+  const driveToken = (account: GmailAccount) => {
+    const existing = driveTokens.get(account);
+    if (existing) return existing();
+    const made = makeAccessTokens({
+      clientPath: config.calendar.clientPath,
+      tokensPath: config.drive.tokensPath(account),
+      what: { name: `The ${account} Drive`, connect: `npm run drive:connect -- ${account}` },
+    });
+    driveTokens.set(account, made);
+    return made();
+  };
+  const driveClient = config.drive.enabled ? makeDriveClient({ accessToken: driveToken, write: config.drive.write }) : undefined;
+  const driveReader = inputs.gmailReader ?? (config.gmail.enabled ? makeGmailReader({ accessToken: gmailToken }) : undefined);
+  const driveWrites =
+    driveClient && config.drive.write
+      ? makeDriveWrites({
+          drive: driveClient,
+          attachment: async (r, signal) =>
+            driveReader?.attachmentFile ? driveReader.attachmentFile(r, signal) : err({ code: "not_connected" as const, message: "Saving an attachment needs Gmail on (GMAIL=on)" }),
+          isEc: isEcText,
+          isEcEmail: (m) => isEcEmail(m, isEcText),
+          log,
+        })
+      : undefined;
+  const drive = driveClient ? { client: driveClient, ...(driveWrites ? { writes: driveWrites } : {}) } : undefined;
   const gmailSend = drafts
     ? async (id: string, decision: "yes" | "no") => {
         const draft = drafts.pending.take(id);
@@ -716,7 +744,7 @@ export const buildDeps = async (inputs: AppInputs): Promise<Result<Deps, string>
         }
       : {}),
     ...(skillStore ? { skills: skillStore } : {}),
-    nativeTools: (calendar !== undefined || gmail !== undefined || config.bareMemory) && config.toolCalling,
+    nativeTools: (calendar !== undefined || gmail !== undefined || drive !== undefined || config.bareMemory) && config.toolCalling,
     ...(calendarConfirm ? { calendarConfirm } : {}),
     ...(calendarUndo ? { calendarUndo } : {}),
     ...(proactive ? { proactive } : {}),
@@ -764,6 +792,7 @@ export const buildDeps = async (inputs: AppInputs): Promise<Result<Deps, string>
         }
       : {}),
     ...(inboxTidy ? { gmailTidy: inboxTidy } : {}),
+    ...(driveWrites ? { driveWrites } : {}),
     classify: makeClassifier({ contexts: contexts.value, llm: classifierLlm.value, log, thinking: config.turn.classifierThinking }),
     stickyContext: config.turn.stickyContext,
     speculativeAnswer: config.turn.speculativeAnswer,
@@ -785,6 +814,7 @@ export const buildDeps = async (inputs: AppInputs): Promise<Result<Deps, string>
               ...(calendar ? { calendar: { ...calendar, ...(pending ? { create: { pending, isEc: isEcText } } : {}), ...(calendarChanges ? { change: calendarChanges } : {}) } } : {}),
               // Gmail needs tools (Claude); the local brain doesn't get it.
               ...(gmail && config.toolCalling ? { gmail } : {}),
+              ...(drive && config.toolCalling ? { drive } : {}),
               // #107: memory across conversations, with tools (Claude); every rule enforced in code.
               ...(config.bareMemory && config.toolCalling
                 ? { memory: { store: memoryStore, contexts: contexts.value, ec: memoryEc, timeZone: config.timeZone, log } }

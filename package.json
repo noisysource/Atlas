@@ -17,6 +17,7 @@
     "eval:identity": "tsx --env-file-if-exists=.env scripts/eval-identity.ts",
     "calendar:connect": "tsx --env-file-if-exists=.env scripts/calendar-connect.ts",
     "gmail:connect": "tsx --env-file-if-exists=.env scripts/gmail-connect.ts",
+    "drive:connect": "tsx --env-file-if-exists=.env scripts/drive-connect.ts",
     "gemini:check": "tsx --env-file-if-exists=.env scripts/gemini-check.ts",
     "vendus:connect": "tsx --env-file-if-exists=.env scripts/vendus-connect.ts",
     "house:connect": "tsx --env-file-if-exists=.env scripts/house-connect.ts",

@@ -1264,6 +1264,21 @@ Confirmed (2026-11-12):
   (GMAIL_TIDY=on, reconnect). Next: reply drafts (#215), the brief's
   inbox part (#216), follow-ups (#217); then reminders (#218), calendar
   move/cancel (#219), web search (#220).
+- **Google Drive (#270):** `src/drive.ts`. Own tool group `drive`.
+  `drive_list` and `drive_read` (Docs and Sheets exported as text, PDFs
+  and text read in code) use GET calls only. `drive_create_folder` and
+  `drive_save_attachment` (a Gmail attachment, by email id and number,
+  into a folder id) only propose: code checks account, ids and names,
+  looks up the target folder for the card, refuses EC email, and only
+  "Do it" (`POST /drive/confirm`, card kind `drive`) creates or uploads;
+  the attachment bytes are fetched again at that moment, not kept.
+  Nothing is deleted, moved or shared. Each account has its own token
+  (`npm run drive:connect -- <account>`, `data/google-drive-<account>.json`);
+  scope `drive.readonly`, or `drive` with DRIVE_WRITE=on (a folder he
+  picked that the app didn't create needs the wider scope). DRIVE=on
+  needs BARE_MODE=on, local only. Drive is a node in the galaxy (a
+  drive icon on the life arm, between Gmail and House) and has its own
+  Reach entry with accounts and tools. Not yet: a page switch for Drive.
 - **Cards by voice, and steps that follow the answer (#224):**
   `card-lib.js` `cardAnswer` reads a short reply (at most five words: yes
   / no in English and Portuguese, or the card's own button words) as the

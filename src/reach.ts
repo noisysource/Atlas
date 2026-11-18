@@ -11,7 +11,7 @@ import { GMAIL_ACCOUNTS } from "./gmail/gmail.js";
 export type ReachTool = { readonly name: string; readonly does: string };
 export type ReachAccount = { readonly name: string; readonly connected: boolean };
 export type ReachNode = {
-  readonly id: "profile" | "memory" | "skills" | "calendar" | "gmail" | "web" | "vendus" | "house" | "github" | "cloud" | "code" | "kiro";
+  readonly id: "profile" | "memory" | "skills" | "calendar" | "gmail" | "drive" | "web" | "vendus" | "house" | "github" | "cloud" | "code" | "kiro";
   /** "on": in use; "off": built but switched off in .env; "soon": not built yet. */
   readonly status: "on" | "off" | "soon";
   /** One line about what it is, for the panel. */
@@ -29,7 +29,7 @@ export type ReachNode = {
 };
 
 export type ReachInput = {
-  readonly config: Pick<Config, "bareMode" | "bareProfile" | "toolCalling" | "bareMemory" | "introspection" | "calendar" | "gmail" | "github" | "gcloud" | "vendus" | "house" | "codeAgent" | "webSearch">;
+  readonly config: Pick<Config, "bareMode" | "bareProfile" | "toolCalling" | "bareMemory" | "introspection" | "calendar" | "gmail" | "drive" | "github" | "gcloud" | "vendus" | "house" | "codeAgent" | "webSearch">;
   /** Whether a token file exists: connected, as far as Atlas can tell without calling Google. */
   readonly exists: (path: string) => Promise<boolean>;
   /** How many draft skills wait for review. */
@@ -53,6 +53,7 @@ export const reachView = async (input: ReachInput): Promise<readonly ReachNode[]
     CALENDAR_ACCOUNTS.map(async (name) => ({ name, connected: await exists(calendarTokensPath(config.calendar.tokensPath, name)) })),
   );
   const gmailAccounts = await Promise.all(GMAIL_ACCOUNTS.map(async (name) => ({ name, connected: await exists(config.gmail.tokensPath(name)) })));
+  const driveAccounts = await Promise.all(GMAIL_ACCOUNTS.map(async (name) => ({ name, connected: await exists(config.drive.tokensPath(name)) })));
   const drafts = config.bareMemory && input.draftSkills ? await input.draftSkills().catch(() => 0) : 0;
   const githubOwners = config.github.enabled && input.githubOwners ? await input.githubOwners().catch(() => []) : [];
   const vendusOn = config.vendus.enabled && input.vendusConnected ? await input.vendusConnected().catch(() => false) : false;
@@ -127,6 +128,25 @@ export const reachView = async (input: ReachInput): Promise<readonly ReachNode[]
       ],
       accounts: gmailAccounts,
       ...(config.gmail.enabled ? (config.gmail.tidy ? {} : { hint: "For inbox triage: GMAIL_TIDY=on in .env, after GMAIL_WRITE=on GMAIL_TIDY=on npm run gmail:connect -- <account>" }) : { hint: "GMAIL=on in .env" }),
+    },
+    {
+      id: "drive",
+      status: onOff(config.drive.enabled),
+      about: config.drive.write
+        ? "Lists and reads your Google Drive. New folders and saved email attachments only after you press Do it; nothing is deleted, moved or shared."
+        : "Lists and reads your Google Drive, read-only.",
+      tools: [
+        { name: "drive_list", does: "list a folder or search by name" },
+        { name: "drive_read", does: "read a Doc, Sheet, PDF or text file" },
+        ...(config.drive.write
+          ? [
+              { name: "drive_create_folder", does: "create a folder, after your OK" },
+              { name: "drive_save_attachment", does: "save an email attachment into a folder, after your OK" },
+            ]
+          : []),
+      ],
+      accounts: driveAccounts,
+      ...(config.drive.enabled ? (config.drive.write ? {} : { hint: "To save into Drive: DRIVE_WRITE=on in .env, after DRIVE_WRITE=on npm run drive:connect -- <account>" }) : { hint: "DRIVE=on in .env, after npm run drive:connect -- <account>" }),
     },
     {
       id: "github",

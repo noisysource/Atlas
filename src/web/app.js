@@ -347,7 +347,7 @@ const refreshReach = async () => {
 };
 
 /** Cards still waiting for an OK, counted per node for the badges (#133). */
-const NODE_OF_CARD = { calendar: "calendar", email: "gmail", "draft-delete": "gmail", skill: "skills", fix: "code", "pr-close": "github", "task-start": "code", "task-publish": "code", "task-close": "code", house: "house", lights: "house", "house-change": "house", "gap-issue": "github", "gmail-tidy": "gmail", "calendar-change": "calendar" };
+const NODE_OF_CARD = { calendar: "calendar", email: "gmail", "draft-delete": "gmail", skill: "skills", fix: "code", "pr-close": "github", "task-start": "code", "task-publish": "code", "task-close": "code", house: "house", lights: "house", "house-change": "house", "gap-issue": "github", "gmail-tidy": "gmail", "calendar-change": "calendar", drive: "drive" };
 const refreshPending = () => {
   /** @type {Record<string, number>} */
   const counts = {};
@@ -450,6 +450,7 @@ const CARDS = {
   "draft-delete": { ask: (/** @type {string} */ l) => `Delete the draft ${l}?`, yes: "Delete it", no: "Keep it", endpoint: "/gmail/delete", failed: "nothing was deleted" },
   "calendar-change": { ask: (/** @type {string} */ l) => `${l}?`, yes: "Do it", no: "Leave it", endpoint: "/calendar/change", failed: "nothing changed" },
   "gmail-tidy": { ask: (/** @type {string} */ l) => `Tidy the inbox? ${l}. Archived email stays in All Mail; nothing is deleted.`, yes: "Tidy it", no: "Leave it", endpoint: "/gmail/tidy", failed: "nothing changed" },
+  drive: { ask: (/** @type {string} */ l) => `Change Drive? ${l}. Nothing is deleted, moved or shared.`, yes: "Do it", no: "Leave it", endpoint: "/drive/confirm", failed: "nothing changed in Drive" },
   "gap-issue": { ask: (/** @type {string} */ l) => `Open an issue ${l}? It says what I couldn't do, with no personal details.`, yes: "Open it", no: "Not now", endpoint: "/gaps/issue", failed: "no issue was opened" },
   house: { ask: (/** @type {string} */ l) => `Move the blinds? ${l}.`, yes: "Move them", no: "Leave them", endpoint: "/house/blinds", failed: "nothing moved" },
   lights: { ask: (/** @type {string} */ l) => `Change the lights? ${l}.`, yes: "Do it", no: "Leave them", endpoint: "/house/lights", failed: "nothing changed" },
@@ -467,7 +468,7 @@ const CARDS = {
  * is worded by code and goes into the history with what really ran.
  * #269: a small, undoable change (`auto`) is done at once, with no question:
  * the card becomes one line saying what happened, with Undo for a calendar event.
- * @param {{ id: string, label: string, auto?: boolean, kind?: "calendar" | "skill" | "email" | "draft-delete" | "fix" | "pr-close" | "task-start" | "task-publish" | "task-close" | "house" | "lights" | "house-change" | "gap-issue" | "gmail-tidy" | "calendar-change" }} proposal
+ * @param {{ id: string, label: string, auto?: boolean, kind?: "calendar" | "skill" | "email" | "draft-delete" | "fix" | "pr-close" | "task-start" | "task-publish" | "task-close" | "house" | "lights" | "house-change" | "gap-issue" | "gmail-tidy" | "calendar-change" | "drive" }} proposal
  */
 const confirmCard = (proposal) => {
   const auto = proposal.auto === true;
