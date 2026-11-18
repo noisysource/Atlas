@@ -5,7 +5,7 @@
 
 import { followFix } from "./fix.js";
 import { showMorningBrief } from "./morning.js";
-import { startTasksPanel } from "./tasks.js";
+import { startTasksPanel, taskGlance } from "./tasks.js";
 import { startRemindersPanel } from "./reminders.js";
 import { makeCostsView } from "./costs.js";
 import { makeLivePlayer, runLiveTurn } from "./live.js";
@@ -107,7 +107,17 @@ window.addEventListener("resize", () => toEnd());
 // #177: the morning brief, as a card above the conversation, once per day.
 void showMorningBrief(transcript);
 // #191: coding tasks, above the conversation, while any are open.
-const tasksPanel = startTasksPanel(transcript);
+// #284: a working task shows on the galaxy too: the code agent lit, with a beam, and what it's doing under it.
+/** @type {string | undefined} */
+let taskShown;
+let studying = false;
+const showCodeAgent = () => brainView.setBackground(studying || taskShown ? ["code"] : [], taskShown ? { code: taskShown } : {});
+const tasksPanel = startTasksPanel(transcript, (tasks) => {
+  const glance = taskGlance(tasks);
+  if (glance === taskShown) return;
+  taskShown = glance;
+  showCodeAgent();
+});
 // #218: today's reminders, above the conversation.
 const remindersPanel = startRemindersPanel(transcript, (text) => {
   addMessage("answer", text);
@@ -330,7 +340,10 @@ document.addEventListener("pointerdown", (e) => {
 
 // #156: what the code agent is studying in the background, live, with Stop.
 const studiesView = makeStudiesView(brainView.studiesSlot, {
-  onBusy: (busy) => brainView.setBackground(busy ? ["code"] : []),
+  onBusy: (busy) => {
+    studying = busy;
+    showCodeAgent();
+  },
   onChange: () => void refreshReach(),
 });
 

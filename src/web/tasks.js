@@ -21,8 +21,26 @@ export const taskLine = (t) => {
   return t.status === "working" && t.step ? `${s}: ${t.step}` : s;
 };
 
-/** @param {HTMLElement} before the element the panel goes above */
-export const startTasksPanel = (before) => {
+/**
+ * What the galaxy says under the code agent while a task works (#284): its
+ * step in plain words, short.
+ * @param {readonly { status: string, step?: string }[]} tasks
+ * @returns {string | undefined}
+ */
+export const taskGlance = (tasks) => {
+  const t = tasks.find((x) => x.status === "working") ?? tasks.find((x) => x.status === "preparing" || x.status === "queued");
+  if (!t) return undefined;
+  if (t.status !== "working") return t.status === "queued" ? "task waiting" : "task starting";
+  const step = String(t.step ?? "").toLowerCase();
+  const what = /bash|test|vitest|lint|tsc|typecheck/.test(step) ? "running checks" : /edit|write/.test(step) ? "writing code" : /read|grep|glob/.test(step) ? "reading code" : "working";
+  return `task: ${what}`;
+};
+
+/**
+ * @param {HTMLElement} before the element the panel goes above
+ * @param {(tasks: readonly { status: string, step?: string }[]) => void} [onTasks] each time the list is read
+ */
+export const startTasksPanel = (before, onTasks) => {
   const panel = document.createElement("section");
   panel.className = "tasks";
   panel.setAttribute("aria-label", "Coding tasks");
@@ -111,6 +129,7 @@ export const startTasksPanel = (before) => {
       tasks = [];
     }
     draw(Array.isArray(tasks) ? tasks : []);
+    onTasks?.(Array.isArray(tasks) ? tasks : []);
     const busy = tasks.some((t) => ["preparing", "queued", "working"].includes(t.status));
     timer = setTimeout(() => void refresh(), busy ? 4000 : 60_000);
   };
