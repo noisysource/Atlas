@@ -60,7 +60,7 @@ import { checkRange, HOUSE_CLIMATE_TOOL, HOUSE_ENERGY_TOOL, HOUSE_INCIDENTS_TOOL
 import { HOUSE_CHANGE_TOOLS, type HouseChanges } from "../house/house-changes.js";
 import { checkInvoicesRequest, invoiceForBrain, invoicesForBrain, listInvoices, VENDUS_INVOICES_TOOL, VENDUS_TOOLS, type VendusGet } from "../vendus/vendus.js";
 import { staleNote, staleSuffix, type CodeRefresh } from "../code/freshness.js";
-import { checkStart, TASK_LIST_TOOL, TASK_PUBLISH_TOOL, TASK_START_TOOL, TASK_TELL_TOOL, TASK_TOOLS, taskForBrain, type Tasks } from "../code/tasks.js";
+import { checkStart, TASK_LIST_TOOL, TASK_MERGE_TOOL, TASK_PUBLISH_TOOL, TASK_START_TOOL, TASK_TELL_TOOL, TASK_TOOLS, taskForBrain, type Tasks } from "../code/tasks.js";
 import { checkFixRequest, CODE_FIX_TOOL, type Fixes } from "../code/fix.js";
 import { checkPrClose, GITHUB_PR_CLOSE_TOOL, type PrCloser } from "../github/pr-close.js";
 import { attachmentForBrain } from "../gmail/attachments.js";
@@ -104,6 +104,7 @@ export const CARD_TOOLS: ReadonlySet<string> = new Set([
   "house_tariff",
   "task_start",
   "task_publish",
+  "task_merge",
   "code_fix",
 ]);
 const THEN_PROP = {
@@ -395,7 +396,7 @@ export const barePrompt = (
   const taskLines =
     options.tasks === true && options.tools === true
       ? [
-          "You manage his coding tasks like a project manager; Claude Code does the work and keeps the code's details in its own session and the repo's notes. For something bigger than a quick fix (a feature, a refactor), propose a task with task_start (a card asks him). For \"how's it going?\" read task_list; to pass on his answer, a change of plan or \"continue\", use task_tell (it carries on in the same session); to push and open its pull request, task_publish (a card asks him; it opens an issue for the pull request to close, unless he named one, so don't refuse for want of an issue). Bring him what needs him: questions, decisions, a finished task to review. Don't do the coding yourself, and never claim a task did something its report doesn't say.",
+          "You manage his coding tasks like a project manager; Claude Code does the work and keeps the code's details in its own session and the repo's notes. For something bigger than a quick fix (a feature, a refactor), propose a task with task_start (a card asks him). For \"how's it going?\" read task_list; to pass on his answer, a change of plan or \"continue\", use task_tell (it carries on in the same session); to push and open its pull request, task_publish (a card asks him; it opens an issue for the pull request to close, unless he named one, so don't refuse for want of an issue); to merge it once its checks pass, task_merge (it checks first, and a card asks him). Bring him what needs him: questions, decisions, a finished task to review. Don't do the coding yourself, and never claim a task did something its report doesn't say.",
         ]
       : [];
   const briefLines =
@@ -1694,9 +1695,9 @@ export const makeBareAnswerer = (deps: {
       }
       const issue = typeof input.issue === "number" && Number.isInteger(input.issue) && input.issue > 0 && input.issue < 1_000_000 ? input.issue : undefined;
       if (input.issue !== undefined && input.issue !== null && !issue) return refuse("issue is an issue number");
-      const proposed = call.name === TASK_PUBLISH_TOOL.name ? await tasks.proposePublish(id, issue) : await tasks.proposeClose(id);
+      const proposed = call.name === TASK_PUBLISH_TOOL.name ? await tasks.proposePublish(id, issue) : call.name === TASK_MERGE_TOOL.name ? await tasks.proposeMerge(id) : await tasks.proposeClose(id);
       if (!proposed.ok) return refuse(proposed.error);
-      const kind = call.name === TASK_PUBLISH_TOOL.name ? "task-publish" : "task-close";
+      const kind = call.name === TASK_PUBLISH_TOOL.name ? "task-publish" : call.name === TASK_MERGE_TOOL.name ? "task-merge" : "task-close";
       step({ args: id, ok: true, result: "waiting for your OK", confirm: { id: proposed.value.card, label: proposed.value.label, kind } });
       return { callId: call.id, content: `Not done yet: the app is asking him. Say in one sentence what would happen and that it needs his OK.` };
     };

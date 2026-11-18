@@ -101,7 +101,7 @@ const RULES: readonly { readonly pattern: RegExp; readonly groups: readonly Tool
     pattern: words(`
       code, codebase, coding, architectur*, module*, function*, file*, folder*, implement*, refactor*, stud*, how does,
       how do, where is, bug*, feature*, endpoint*, component*, api, apis, monorepo, codigo*, arquitetura, funcionalidade*, estudar, estuda*,
-      task, tasks, coding task*, publish*, push*, pr, prs, pull request*, branch*, tarefa*, publica*`),
+      task, tasks, coding task*, publish*, push*, pr, prs, pull request*, branch*, merge*, tarefa*, publica*`),
     groups: ["code"],
   },
   {
