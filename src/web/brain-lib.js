@@ -169,9 +169,9 @@ export const lineGeometry = (angle, reach) => {
  * @type {Record<NodeId, { r: number, angle: number, arm: "core" | "life" | "work" }>}
  */
 export const GALAXY = {
-  profile: { r: 0.36, angle: -105, arm: "core" },
-  memory: { r: 0.38, angle: 15, arm: "core" },
-  skills: { r: 0.36, angle: 135, arm: "core" },
+  profile: { r: 0.44, angle: -75, arm: "core" },
+  memory: { r: 0.45, angle: 12, arm: "core" },
+  skills: { r: 0.44, angle: 138, arm: "core" },
   calendar: { r: 0.55, angle: 45, arm: "life" },
   gmail: { r: 0.64, angle: 78, arm: "life" },
   drive: { r: 0.73, angle: 108, arm: "life" },

@@ -372,6 +372,8 @@ export const makeBrainView = (root, options = {}) => {
   let offered;
   /** #156: nodes working in the background, outside any answer (the code agent studying). @type {Set<string>} */
   let background = new Set();
+  /** #284: what a background node is doing ("task: running the tests"). @type {Record<string, string>} */
+  let backgroundLabels = {};
 
   const draw = () => {
     lines.replaceChildren();
@@ -384,7 +386,7 @@ export const makeBrainView = (root, options = {}) => {
       node.box.dataset.state = shown;
       const notOffered = offered !== undefined && !offered.has(n.id) && !reach;
       node.box.dataset.offered = offered === undefined ? "" : notOffered ? "no" : "yes";
-      node.tag.textContent = notOffered && (shown === "idle" || shown === "off") ? "not offered" : !state[n.id] && background.has(n.id) ? "studying…" : NODE_TAGS[shown];
+      node.tag.textContent = notOffered && (shown === "idle" || shown === "off") ? "not offered" : !state[n.id] && background.has(n.id) ? (backgroundLabels[n.id] ?? "studying…") : NODE_TAGS[shown];
       if (!reach) continue;
       const g = galaxyLine(n.id, reach);
       const line = el("span", `brain-line brain-line-${reach}`);
@@ -415,11 +417,13 @@ export const makeBrainView = (root, options = {}) => {
     traceSlot,
     studiesSlot,
     /**
-     * Nodes working in the background (#156), e.g. the code agent studying.
-     * @param {readonly string[]} ids
+     * Nodes working in the background (#156), e.g. the code agent studying
+     * or (#284) on a coding task; `labels` says what, under the node.
+     * @param {readonly string[]} ids @param {Record<string, string>} [labels]
      */
-    setBackground: (ids) => {
+    setBackground: (ids, labels = {}) => {
       background = new Set(ids);
+      backgroundLabels = labels;
       draw();
     },
     setBrain,

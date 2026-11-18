@@ -3106,7 +3106,7 @@ body[data-phase="speaking"] .brain-star {
 .brain-star,
 .brain-core[data-state="working"] .brain-star,
 .brain-core[data-state="waiting"] .brain-star {
-  inset: -22%;
+  inset: -14%;
   box-shadow: none;
   background: radial-gradient(circle, #fff 0 5%, #e6eeff 8%, rgb(150 182 255 / 0.85) 13%, rgb(74 123 255 / 0.4) 24%, rgb(74 123 255 / 0.14) 42%, rgb(74 123 255 / 0.05) 62%, rgb(74 123 255 / 0) 80%);
 }
