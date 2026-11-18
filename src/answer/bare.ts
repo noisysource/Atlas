@@ -77,7 +77,10 @@ import { makeMemoryTurn, MEMORY_FORGET_TOOL, MEMORY_RECALL_TOOL, MEMORY_REMEMBER
 import { CALENDAR_CREATE_TOOL, checkCreateRequest, proposalLabel, proposalPathLabel, type PendingProposals } from "../calendar/create.js";
 import { historyMessages, profileName } from "./personal.js";
 
-const BARE_MAX_TOKENS = 2000;
+/** Room for one round: thinking, the words, and every tool call in it (nine calendar cards at once need it). */
+const BARE_MAX_TOKENS = 6000;
+/** #268: a round cut off before anything was shown is tried once more with this much room. */
+const BARE_MAX_TOKENS_RETRY = 16000;
 
 /**
  * #157: how much of a round's text is held back while tools are on offer,
@@ -1916,49 +1919,60 @@ export const makeBareAnswerer = (deps: {
     for (let round = 0; ; round += 1) {
       // The last round gets no tools, so it has to answer.
       const last = round - free >= MAX_TOOL_ROUNDS;
-      const roundRequest: LlmRequest = {
+      const baseRequest: LlmRequest = {
         ...request,
         messages,
         tools: last ? undefined : currentTools,
         ...(!last && searchesLeft > 0 && deps.webSearch ? { webSearch: { maxUses: searchesLeft, ...deps.webSearch.location } } : {}),
       };
-      // #157: with tools on offer, the start of a round's text is held back. A
-      // round that ends in tool calls was the brain narrating ("I'll check my
-      // notes first"), and what it held is dropped; an answer runs past the
-      // hold and streams as usual. `shown`: this round's text that went out.
-      let held = "";
-      let holding = (roundRequest.tools?.length ?? 0) > 0;
       let shown = "";
-      const out = (text: string): boolean => {
-        shown += text;
-        return pass(strip ? strip.feed(text) : text);
-      };
-      if (onText || cap) {
-        const streamed = streamOrCall(deps.llm, roundRequest, controller.signal);
-        for await (const delta of streamed.text) {
-          if (holding) {
-            held += delta;
-            if (held.length < NARRATION_HOLD) continue;
-            holding = false;
-            if (out(held)) {
+      // #268: cut off at the token limit before a word went out (many tool calls at once): once more with more room.
+      for (let attempt = 0; attempt < 2; attempt += 1) {
+        shown = "";
+        const roundRequest: LlmRequest = attempt === 0 ? baseRequest : { ...baseRequest, maxTokens: BARE_MAX_TOKENS_RETRY };
+        // #157: with tools on offer, the start of a round's text is held back. A
+        // round that ends in tool calls was the brain narrating ("I'll check my
+        // notes first"), and what it held is dropped; an answer runs past the
+        // hold and streams as usual. `shown`: this round's text that went out.
+        let held = "";
+        let holding = (roundRequest.tools?.length ?? 0) > 0;
+        const out = (text: string): boolean => {
+          shown += text;
+          return pass(strip ? strip.feed(text) : text);
+        };
+        if (onText || cap) {
+          const streamed = streamOrCall(deps.llm, roundRequest, controller.signal);
+          for await (const delta of streamed.text) {
+            if (holding) {
+              held += delta;
+              if (held.length < NARRATION_HOLD) continue;
+              holding = false;
+              if (out(held)) {
+                cut = true;
+                controller.abort();
+                break;
+              }
+              continue;
+            }
+            if (out(delta)) {
               cut = true;
               controller.abort();
               break;
             }
-            continue;
           }
-          if (out(delta)) {
-            cut = true;
-            controller.abort();
-            break;
-          }
+          result = await streamed.result;
+          // The round is over and it's an answer: what was held goes out now.
+          if (!cut && holding && held !== "" && result.ok && result.value.kind !== "tool_calls" && out(held)) cut = true;
+        } else {
+          result = await deps.llm(roundRequest);
         }
-        result = await streamed.result;
-        // The round is over and it's an answer: what was held goes out now.
-        if (!cut && holding && held !== "" && result.ok && result.value.kind !== "tool_calls" && out(held)) cut = true;
-      } else {
-        result = await deps.llm(roundRequest);
+        if (attempt === 0 && !cut && !result.ok && result.error.kind === "max_tokens" && shown === "") {
+          deps.log?.info("round cut off at the token limit: trying once more with more room", { round });
+          continue;
+        }
+        break;
       }
+      if (result === undefined) return err({ code: "llm_failed", message: "Sorry, something went wrong answering that. Please try again." });
       // #220: searches the provider ran this round: counted against the caps, shown on the path.
       if (result.ok && result.value.web && deps.webSearch) {
         const w = result.value.web;

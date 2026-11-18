@@ -77,3 +77,25 @@ describe("the last tool step", () => {
     expect(answer).toMatchObject({ ok: true, value: { text: "I couldn't find her address." } });
   });
 });
+
+describe("a round cut off at the token limit (#268)", () => {
+  it("is tried once more with more room, and the answer goes on", async () => {
+    const usage = { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0 };
+    const common = { servedBy: "claude-test", usage, payload: { provider: "anthropic", data: "x" } };
+    const room: (number | undefined)[] = [];
+    const llm: LlmCall = async (r) => {
+      room.push(r.maxTokens);
+      if (room.length === 1) return { ok: false, error: { kind: "max_tokens", message: "Output was cut off (max_tokens)", retryable: false } } as never;
+      return ok({ ...common, kind: "text", text: "Nine concerts, all proposed." } as LlmResponse);
+    };
+    const answer = await makeBareAnswerer({ llm, tools: true, house: { db: { get: async () => ok(undefined) }, env: "dev", timeZone: "Europe/Lisbon" }, route: { mode: "rules" } })({
+      context: { id: "personal", name: "Personal" } as unknown as Context,
+      question: "is the heating on?",
+      history: [],
+      memories: [],
+      now: new Date("2026-11-18T16:00:00Z"),
+    });
+    expect(answer).toMatchObject({ ok: true, value: { text: "Nine concerts, all proposed." } });
+    expect(room).toEqual([6000, 16000]);
+  });
+});
