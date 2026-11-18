@@ -22,7 +22,7 @@ import { accountsLine, GOOGLE_ACCOUNTS } from "../google-accounts.js";
 export const CALENDAR_CREATE_TOOL: LlmTool = {
   name: "calendar_create",
   description:
-    `Propose adding one event to one of their Google Calendars (${accountsLine("calendar")}; personal by default). Nothing is added by this call: the app shows them the event and only their explicit yes adds it. Give a date and either a start and end time, or all_day.`,
+    `Propose adding one event to one of their Google Calendars (${accountsLine("calendar")}; personal by default). Nothing is added by this call: the app shows them the event and only their explicit yes adds it. Give a date and either a start and end time, or all_day. To invite people, give their email addresses in guests (Google then emails each an invitation, after the yes); if you only have a name, ask for the address, never guess one.`,
   inputSchema: {
     type: "object",
     properties: {
@@ -32,6 +32,8 @@ export const CALENDAR_CREATE_TOOL: LlmTool = {
       end: { type: "string", description: "End time, HH:MM (24-hour). Leave empty for one hour after the start." },
       all_day: { type: "boolean", description: "True for an all-day event" },
       account: { type: "string", enum: [...GOOGLE_ACCOUNTS], description: "Which calendar; personal if they don't say" },
+      guests: { type: "array", items: { type: "string" }, description: "Email addresses to invite, only ones they gave or that you know for certain" },
+      location: { type: "string", description: "Where, if they said" },
     },
     required: ["title", "date"],
     additionalProperties: false,
@@ -48,6 +50,30 @@ export type Proposal = {
   readonly end?: string;
   /** Which calendar (#137); personal when absent. */
   readonly account?: CalendarAccount;
+  /** #265: who's invited (email addresses); Google emails each an invitation once it's added. */
+  readonly guests?: readonly string[];
+  readonly location?: string;
+};
+
+/** A plain email address, nothing more (no names, no angle brackets). */
+const EMAIL = /^[A-Za-z0-9._%+-]{1,64}@[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,24}$/;
+export const MAX_GUESTS = 20;
+const MAX_LOCATION = 200;
+
+/** The guests, checked: real addresses, each once, not too many, no EC addresses. */
+export const checkGuests = (value: unknown, isEc: (text: string) => boolean): Result<string[], string> => {
+  if (value === undefined || value === null) return ok([]);
+  if (!Array.isArray(value)) return err("guests isn't a list");
+  const out: string[] = [];
+  for (const g of value) {
+    if (typeof g !== "string") return err("a guest isn't an address");
+    const email = g.trim().toLowerCase();
+    if (!EMAIL.test(email)) return err(`not an email address: ${g.slice(0, 60)}`);
+    if (isEc(email) || /(^|[.@])ec\.europa\.eu$/.test(email)) return err("EC work is for Kiro");
+    if (!out.includes(email)) out.push(email);
+  }
+  if (out.length > MAX_GUESTS) return err(`at most ${MAX_GUESTS} guests`);
+  return ok(out);
 };
 
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
@@ -63,9 +89,14 @@ const hhmm = (m: number): string => `${String(Math.floor(m / 60)).padStart(2, "0
  */
 export const checkCreateRequest = (value: unknown, today: string, isEc: (text: string) => boolean): Result<Proposal, string> => {
   if (typeof value !== "object" || value === null) return err("not an object");
-  const { title, date, start, end, all_day: allDay, account } = value as Record<string, unknown>;
+  const { title, date, start, end, all_day: allDay, account, guests, location } = value as Record<string, unknown>;
   if (account !== undefined && !isCalendarAccount(account)) return err("unknown calendar");
-  const which = account !== undefined && account !== "personal" ? { account } : {};
+  const invited = checkGuests(guests, isEc);
+  if (!invited.ok) return invited;
+  const where = typeof location === "string" ? location.replace(/\s+/g, " ").trim() : "";
+  if (where.length > MAX_LOCATION) return err("location too long");
+  if (where !== "" && isEc(where)) return err("EC work is for Kiro");
+  const which = { ...(account !== undefined && account !== "personal" ? { account } : {}), ...(invited.value.length > 0 ? { guests: invited.value } : {}), ...(where !== "" ? { location: where } : {}) };
   if (typeof title !== "string") return err("no title");
   const cleanTitle = [...title]
     .map((c) => (c.charCodeAt(0) < 32 ? " " : c))
@@ -93,20 +124,26 @@ export const checkCreateRequest = (value: unknown, today: string, isEc: (text: s
 
 /** For the card and the brain: "“Work”, Wednesday 11 November, 21:00–22:00". */
 export const proposalLabel = (p: Proposal, today: string): string =>
-  `“${p.title}”, ${dayLabel(p.date, today)}, ${p.start && p.end ? `${p.start}–${p.end}` : "all day"}${p.account && p.account !== "personal" ? `, on the ${p.account} calendar` : ""}`;
+  `“${p.title}”, ${dayLabel(p.date, today)}, ${p.start && p.end ? `${p.start}–${p.end}` : "all day"}${p.location ? `, at ${p.location}` : ""}${p.account && p.account !== "personal" ? `, on the ${p.account} calendar` : ""}${p.guests && p.guests.length > 0 ? `, inviting ${p.guests.join(", ")} (Google emails ${p.guests.length === 1 ? "them" : "each"} an invitation)` : ""}`;
 
-/** For the path line: dates and times only, never the title. */
+/** For the path line: dates and times only, never the title or who's invited (a count). */
 export const proposalPathLabel = (p: Proposal): string =>
-  `${p.account && p.account !== "personal" ? `${p.account} · ` : ""}${shortRangeLabel({ from: p.date, to: p.date })}${p.start && p.end ? ` ${p.start}–${p.end}` : " all day"}`;
+  `${p.account && p.account !== "personal" ? `${p.account} · ` : ""}${shortRangeLabel({ from: p.date, to: p.date })}${p.start && p.end ? ` ${p.start}–${p.end}` : " all day"}${p.guests && p.guests.length > 0 ? ` · ${p.guests.length} invited` : ""}`;
 
 /** Google's event body. Local times with the time zone, so Google works out the offset (summer and winter). */
-export const googleEventBody = (p: Proposal, timeZone: string): Record<string, unknown> =>
-  p.start && p.end
+export const googleEventBody = (p: Proposal, timeZone: string): Record<string, unknown> => ({
+  ...(p.start && p.end
     ? { summary: p.title, start: { dateTime: `${p.date}T${p.start}:00`, timeZone }, end: { dateTime: `${p.date}T${p.end}:00`, timeZone } }
-    : { summary: p.title, start: { date: p.date }, end: { date: addDays(p.date, 1) } };
+    : { summary: p.title, start: { date: p.date }, end: { date: addDays(p.date, 1) } }),
+  ...(p.location ? { location: p.location } : {}),
+  ...(p.guests && p.guests.length > 0 ? { attendees: p.guests.map((email) => ({ email })) } : {}),
+});
+
+/** #265: with guests, Google emails them the invitation; without, nobody is told. */
+export const createUrl = (p: Proposal): string => `${EVENTS_URL}?fields=summary,start,end,attendees(email)&sendUpdates=${p.guests && p.guests.length > 0 ? "all" : "none"}`;
 
 /** What Google says it created. */
-export type CreatedEvent = { readonly title: string; readonly start: string; readonly end: string; readonly allDay: boolean };
+export type CreatedEvent = { readonly title: string; readonly start: string; readonly end: string; readonly allDay: boolean; readonly invited?: number };
 
 export type EventCreator = (p: Proposal) => Promise<Result<CreatedEvent, CalendarError>>;
 
@@ -125,7 +162,7 @@ export const makeGoogleEventCreator = (deps: {
     if (!token.ok) return token;
     let res: Response;
     try {
-      res = await doFetch(`${EVENTS_URL}?fields=summary,start,end`, {
+      res = await doFetch(createUrl(p), {
         method: "POST",
         headers: { authorization: `Bearer ${token.value}`, "content-type": "application/json", accept: "application/json" },
         body: JSON.stringify(googleEventBody(p, deps.timeZone)),
@@ -136,11 +173,12 @@ export const makeGoogleEventCreator = (deps: {
     if (res.status === 401 || res.status === 403)
       return err({ code: "auth", message: `Google Calendar refused to add it (${res.status}): connect again with write access (CALENDAR_WRITE=on npm run calendar:connect -- ${account}), then restart Atlas` });
     if (!res.ok) return err({ code: "api", message: `Google Calendar answered ${res.status}` });
-    const body = (await res.json().catch(() => ({}))) as { summary?: unknown; start?: { date?: unknown; dateTime?: unknown }; end?: { date?: unknown; dateTime?: unknown } };
+    const body = (await res.json().catch(() => ({}))) as { summary?: unknown; start?: { date?: unknown; dateTime?: unknown }; end?: { date?: unknown; dateTime?: unknown }; attendees?: unknown };
     const start = typeof body.start?.dateTime === "string" ? body.start.dateTime : typeof body.start?.date === "string" ? body.start.date : "";
     const end = typeof body.end?.dateTime === "string" ? body.end.dateTime : typeof body.end?.date === "string" ? body.end.date : "";
     if (start === "" || end === "") return err({ code: "api", message: "Google Calendar's answer had no start or end" });
-    return ok({ title: typeof body.summary === "string" ? body.summary : p.title, start, end, allDay: typeof body.start?.dateTime !== "string" });
+    const invited = Array.isArray(body.attendees) ? body.attendees.length : 0;
+    return ok({ title: typeof body.summary === "string" ? body.summary : p.title, start, end, allDay: typeof body.start?.dateTime !== "string", ...(invited > 0 ? { invited } : {}) });
   };
 };
 
@@ -150,7 +188,8 @@ const time = (iso: string, timeZone: string): string =>
 /** The confirmation, built from Google's answer: "Added “Work” on Wednesday 11 November, 21:00–22:00." */
 export const addedSentence = (e: CreatedEvent, timeZone: string, today: string): string => {
   const day = e.allDay ? e.start : localDate(new Date(e.start), timeZone);
-  return `Added “${e.title}” on ${dayLabel(day, today)}, ${e.allDay ? "all day" : `${time(e.start, timeZone)}–${time(e.end, timeZone)}`}.`;
+  const invited = e.invited ? ` Google sent the invitation to ${e.invited === 1 ? "1 guest" : `${e.invited} guests`}.` : "";
+  return `Added “${e.title}” on ${dayLabel(day, today)}, ${e.allDay ? "all day" : `${time(e.start, timeZone)}–${time(e.end, timeZone)}`}.${invited}`;
 };
 
 /** Proposals waiting for an answer: in memory only, single use, gone after `ttlMs`. */
