@@ -152,7 +152,8 @@ export type Config = {
    * (npm run gcloud:connect -- <env> <project-id>); no key is stored.
    * Local only for now.
    */
-  readonly gcloud: { readonly enabled: boolean; readonly keysPath: string };
+  /** #292 GCLOUD_PROD_WRITES=on: production databases may be changed too (each change after an OK). */
+  readonly gcloud: { readonly enabled: boolean; readonly keysPath: string; readonly prodWrites: boolean };
   /**
    * VENDUS=on (#8): Claude can read KidClub's invoices in Vendus, GET only, two
    * paths. The key of Atlas's own Vendus user is in a file under data/
@@ -396,6 +397,8 @@ const EnvSchema = z.object({
   GMAIL: onOff,
   GITHUB: onOff,
   GCLOUD: onOff,
+  // #292: production databases may be changed too, each change after an OK (dev only needs the OK). Off by default.
+  GCLOUD_PROD_WRITES: onOff,
   VENDUS: onOff,
   HOUSE: onOff,
   HOUSE_CONTROL: onOff,
@@ -687,7 +690,7 @@ export const loadConfig = (given: Env): Result<Config, string> => {
       tokensPath: (account: string) => `data/google-gmail-${account}.json` },
     drive: { enabled: e.DRIVE === "on", write: e.DRIVE === "on" && e.DRIVE_WRITE === "on", tokensPath: (account: string) => `data/google-drive-${account}.json` },
     github: { enabled: e.GITHUB === "on", tokensPath: "data/github-tokens.json" },
-    gcloud: { enabled: e.GCLOUD === "on", keysPath: "data/gcloud" },
+    gcloud: { enabled: e.GCLOUD === "on", keysPath: "data/gcloud", prodWrites: e.GCLOUD_PROD_WRITES === "on" },
     vendus: { enabled: e.VENDUS === "on", keyPath: "data/vendus.json" },
     house: {
       enabled: e.HOUSE === "on" && (e.GCLOUD === "on" || e.HOUSE_CONTROL === "on"),

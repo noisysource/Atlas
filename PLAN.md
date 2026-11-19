@@ -1376,6 +1376,23 @@ Confirmed (2026-11-12):
   passed), falling back to the API key when there's no login. Guests never
   run on his plan.
 
+- **KidClub's business assistant (#292):** `knowledge/kidclub.md` (committed,
+  learned from the monorepo) goes in the prompt whenever the cloud or invoices
+  tools are offered, and business words (families, income, costs, profit,
+  faturas, despesas…) route to both. `gcloud_db_aggregate` counts, sums and
+  averages over every matching document (Firestore's runAggregationQuery, a
+  read), so "income in October" doesn't need 50-document reads. Children's
+  health fields (medical, allergies…) are hidden from every read.
+  **Changes**: `gcloud_db_change`, one document per card, showing each value
+  before → after; only "Change it" applies it. An environment can be changed
+  only with a separate `writer` service account in its file (Cloud Datastore
+  User); production (any project not ending in `-dev`, unless the file says
+  `"dev": true`) also needs `GCLOUD_PROD_WRITES=on`, says PRODUCTION on the
+  card, and never deletes. The write carries Firestore's `updateTime`
+  precondition (a document that changed since the card fails), and the old
+  version is first kept in `data/gcloud/backups/<env>/` (0600). Vendus stays
+  read-only.
+
 ## Out of scope for M0
 
 Vendus, Cloud Run deployment or the Pi (#53), real memory (#24, #56),

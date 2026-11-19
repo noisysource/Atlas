@@ -35,7 +35,7 @@ describe("loadConfig", () => {
       gmail: { enabled: false, write: false, tidy: false, archiveClears: [], tokensPath: expect.any(Function) },
       drive: { enabled: false, write: false, tokensPath: expect.any(Function) },
       github: { enabled: false, tokensPath: "data/github-tokens.json" },
-      gcloud: { enabled: false, keysPath: "data/gcloud" },
+      gcloud: { enabled: false, keysPath: "data/gcloud", prodWrites: false },
       vendus: { enabled: false, keyPath: "data/vendus.json" },
       costs: { subscriptions: [], path: "data/costs.jsonl" },
       proactive: { enabled: false, from: "", quiet: "22:30-08:00" },

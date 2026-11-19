@@ -213,13 +213,15 @@ export const reachView = async (input: ReachInput): Promise<readonly ReachNode[]
     {
       id: "cloud",
       status: config.gcloud.enabled ? onOff(true) : "soon",
-      about: "Reads errors, logs and the database (Firestore) of your Google Cloud environments, read-only, one environment at a time. He can't change or deploy anything. Email addresses are masked.",
+      about: "Reads errors, logs and the database (Firestore) of your Google Cloud environments, one environment at a time, and answers questions about KidClub's business from it. He changes the database only after your OK on a card, one document at a time, with a writer account per environment; production also needs GCLOUD_PROD_WRITES=on. He can't deploy anything. Email addresses are masked; children's health fields are hidden.",
       tools: [
         { name: "gcloud_errors", does: "recent errors, grouped" },
         { name: "gcloud_logs", does: "recent log entries" },
         { name: "gcloud_db_collections", does: "collection names in the database" },
         { name: "gcloud_db_query", does: "documents of a collection" },
         { name: "gcloud_db_get", does: "one document" },
+        { name: "gcloud_db_aggregate", does: "counts and sums (KidClub's income, families…)" },
+        { name: "gcloud_db_change", does: "changes one document, after your OK (prod also needs GCLOUD_PROD_WRITES=on)" },
       ],
       accounts: cloudEnvs.map((e) => ({ name: `${e.env} · ${e.project}`, connected: true })),
       ...(config.gcloud.enabled ? (cloudEnvs.length === 0 ? { hint: "npm run gcloud:connect -- dev <project-id>" } : {}) : { hint: "GCLOUD=on in .env" }),
