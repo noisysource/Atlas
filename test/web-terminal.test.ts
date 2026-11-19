@@ -1,7 +1,7 @@
 // #195: the chat as a terminal.
 
 import { describe, expect, it } from "vitest";
-import { atEnd, clock, conversationText, inlineMarks } from "../src/web/terminal-lib.js";
+import { atEnd, clock, conversationText, inlineMarks, keepsFollowing } from "../src/web/terminal-lib.js";
 
 describe("the terminal chat", () => {
   it("keeps following only while you're at the end", () => {
@@ -32,5 +32,21 @@ describe("the terminal chat", () => {
       { kind: "text", text: " <b>x</b>" },
     ]);
     expect(inlineMarks("2 * 3 and a lone ` stay")).toEqual([{ kind: "text", text: "2 * 3 and a lone ` stay" }]);
+  });
+});
+
+describe("#298: following the reply like OpenJarvis", () => {
+  const at = (following: boolean, lastTop: number, top: number) => keepsFollowing({ following, lastTop, top, height: 100, total: 1000 });
+  it("any move up away from the end stops following at once, even a little", () => {
+    expect(at(true, 900, 880)).toBe(false);
+    expect(at(true, 900, 899)).toBe(false);
+  });
+  it("a trackpad's sub-pixel bounce at the end doesn't", () => {
+    expect(at(true, 900, 899.5)).toBe(true);
+  });
+  it("back at the very end follows again; scrolling down short of it changes nothing", () => {
+    expect(at(false, 850, 899)).toBe(true);
+    expect(at(false, 500, 700)).toBe(false);
+    expect(at(true, 500, 700)).toBe(true);
   });
 });

@@ -9,6 +9,23 @@ export const FOLLOW_SLACK = 64;
  */
 export const atEnd = (top, height, total, slack = FOLLOW_SLACK) => total - (top + height) <= slack;
 
+/**
+ * #298: whether the view keeps following new text after a scroll, the way
+ * OpenJarvis does it. Any move up, away from the end, stops it at once (so a
+ * reply never pulls you back while you read); it starts again only when you
+ * are back at the very end. A move down that isn't at the end changes nothing.
+ * Less than a pixel up (a trackpad's bounce settling) isn't a move up.
+ * @param {{ following: boolean, lastTop: number, top: number, height: number, total: number }} s
+ * @returns {boolean}
+ */
+export const keepsFollowing = ({ following, lastTop, top, height, total }) => {
+  const distance = total - (top + height);
+  const up = lastTop - top >= 1;
+  if (up && distance >= 1) return false;
+  if (!up && distance < 2) return true;
+  return following;
+};
+
 /** "18:02", local time. @param {Date} d */
 export const clock = (d) => `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
 
