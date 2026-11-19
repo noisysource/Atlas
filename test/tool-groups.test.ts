@@ -38,18 +38,20 @@ describe("tool groups: the words of a question", () => {
     expect(groupsByWords("Tell me a joke")).toEqual([]);
     expect(groupsByWords("Is the CI green on the Atlas repo?")).toEqual(["github"]);
     // "billing" also points at the invoices: a few extra tools, never a missing one.
-    expect(groupsByWords("How does the billing module work?")).toEqual(["code", "invoices"]);
+    expect(groupsByWords("How does the billing module work?")).toEqual(["code", "cloud", "invoices"]);
     expect(groupsByWords("What's in the dev database?")).toEqual(["cloud"]);
   });
 
   it("something failing points at the logs, CI and the code", () => {
-    expect(groupsByWords("can you check errors on the kidclub app")).toEqual(["github", "code", "cloud"]);
+    // #292: KidClub is the business too, so its data and invoices come along.
+    expect(groupsByWords("can you check errors on the kidclub app")).toEqual(["github", "code", "cloud", "invoices"]);
     expect(groupsByWords("Porque é que isto falha?")).toEqual(["github", "code", "cloud"]);
   });
 
   it("names of studied apps point at the code", () => {
-    expect(groupsByWords("Tell me about kidclub", ["kidclub", "finances"])).toEqual(["github", "code"]);
-    expect(groupsByWords("Tell me about kidclub")).toEqual([]);
+    expect(groupsByWords("Tell me about the finances app", ["kidclub", "finances"])).toEqual(["github", "code"]);
+    expect(groupsByWords("Tell me about kidclub", ["kidclub", "finances"])).toEqual(["github", "code", "cloud", "invoices"]);
+    expect(groupsByWords("Tell me about the finances app")).toEqual([]);
   });
 
   it("small talk and general questions get none", () => {

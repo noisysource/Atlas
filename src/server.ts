@@ -376,6 +376,18 @@ export const makeServer = (
     });
   }
 
+  // #292: their answer to a database change. Only "yes" changes it (one document, as the card showed it).
+  const dbWrites = deps.dbWrites;
+  if (dbWrites) {
+    const DbBody = z.object({ id: z.string().regex(/^[a-f0-9]{8,64}$/), decision: z.enum(["yes", "no"]) }).strict();
+    app.post("/gcloud/db/confirm", bodyLimit({ maxSize: 1024, onError: (c) => c.json(errorBody("The request is too large."), 413) }), async (c) => {
+      if (!isJson(c.req.header("content-type"))) return c.json(errorBody("POST /gcloud/db/confirm needs Content-Type: application/json."), 415);
+      const body = DbBody.safeParse(await c.req.json().catch(() => undefined));
+      if (!body.success) return c.json(errorBody('Send { id, decision: "yes" | "no" }.'), 400);
+      return c.json(await dbWrites.decide(body.data.id, body.data.decision));
+    });
+  }
+
   // #219: his answer to moving or cancelling an event. Only "yes" changes it.
   const calendarChange = deps.calendarChange;
   if (calendarChange) {

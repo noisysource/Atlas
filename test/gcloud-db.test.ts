@@ -153,7 +153,7 @@ describe("Claude reading the database", () => {
 
   it("offers the three tools next to the logs ones; the path names the environment and place", async () => {
     const { requests, steps } = await run("gcloud_db_query", { env: "dev", collection: "_apps/arcoiris/clientErrors", where: [{ field: "code", op: "==", value: "secret-value" }] });
-    expect(requests[0]?.tools?.map((t) => t.name)).toEqual(["gcloud_errors", "gcloud_logs", "gcloud_db_collections", "gcloud_db_query", "gcloud_db_get"]);
+    expect(requests[0]?.tools?.map((t) => t.name)).toEqual(["gcloud_errors", "gcloud_logs", "gcloud_db_collections", "gcloud_db_query", "gcloud_db_get", "gcloud_db_aggregate"]);
     expect(requests[0]?.system).toContain("read the environment's database (Firestore), read-only");
     // The filter's value isn't shown on the page, only its field.
     expect(steps[0]).toEqual({ kind: "tool", name: "gcloud_db_query", args: "dev · _apps/arcoiris/clientErrors · code ==", by: "model", ok: true, result: "1 document" });

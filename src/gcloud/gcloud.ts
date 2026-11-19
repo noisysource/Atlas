@@ -103,7 +103,14 @@ export const logsFilter = (r: LogsRequest, now: Date): string => {
 
 // ── Environments: a project and its read-only service account ─────────────
 
-export type GcloudEnv = { readonly projectId: string; readonly serviceAccount: string };
+export type GcloudEnv = {
+  readonly projectId: string;
+  readonly serviceAccount: string;
+  /** #292: a separate account that may write the database (Cloud Datastore User), used only after an OK. None: read-only. */
+  readonly writer?: string;
+  /** #292: "dev": true marks a test environment whose project id doesn't end in -dev. */
+  readonly dev?: boolean;
+};
 
 /** The default read-only account of a project. */
 export const defaultServiceAccount = (projectId: string): string => `jarvis-read@${projectId}.iam.gserviceaccount.com`;
@@ -120,7 +127,8 @@ export const parseEnvFile = (text: string): Result<GcloudEnv, string> => {
   if (typeof o?.project !== "string" || !PROJECT.test(o.project)) return err("not a project id");
   const serviceAccount = typeof o.serviceAccount === "string" ? o.serviceAccount : defaultServiceAccount(o.project);
   if (!SERVICE_ACCOUNT.test(serviceAccount)) return err("not a service account");
-  return ok({ projectId: o.project, serviceAccount });
+  if (o.writer !== undefined && (typeof o.writer !== "string" || !SERVICE_ACCOUNT.test(o.writer) || o.writer === serviceAccount)) return err("writer isn't a separate service account");
+  return ok({ projectId: o.project, serviceAccount, ...(typeof o.writer === "string" ? { writer: o.writer } : {}), ...(o.dev === true ? { dev: true } : {}) });
 };
 
 export type GcloudEnvs = {

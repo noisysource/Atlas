@@ -43,6 +43,7 @@ import { makeNoteStore, makeStudies, mapViews, type NoteFiles } from "./code/stu
 import { makeGithubReader, makeGithubTokens, type GithubReader } from "./github/github.js";
 import { cachedToken, makeGcloudCliToken, makeGcloudEnvs, makeGcloudReader, type GcloudReader } from "./gcloud/gcloud.js";
 import { makeDbReader, type DbReader } from "./gcloud/firestore.js";
+import { makeDbWrites, type DbWrites } from "./gcloud/db-write.js";
 import { makeDriveClient, makeDriveWrites } from "./drive.js";
 import { GMAIL_ACCOUNTS, isEcEmail, makeGmailReader, type GmailAccount, type GmailReader } from "./gmail/gmail.js";
 import { makeDraftBook, makeGmailWriter, makePendingDrafts, type GmailWriter } from "./gmail/send.js";
@@ -108,6 +109,10 @@ export type AppInputs = {
   readonly githubReader?: GithubReader;
   readonly gcloudReader?: GcloudReader;
   readonly gcloudDb?: DbReader;
+  /** #292 tests: database changes that don't reach Google. */
+  readonly dbWrites?: DbWrites;
+  /** #292 tests: the business knowledge without the file. */
+  readonly readKnowledge?: () => Promise<string>;
   /** #9: tests give their own Vendus. */
   readonly vendusGet?: VendusGet;
   /** #191: tests give their own tasks. */
@@ -413,8 +418,18 @@ export const buildDeps = async (inputs: AppInputs): Promise<Result<Deps, string>
     });
   const gcloudToken = cachedToken(makeGcloudCliToken(gcloudRun));
   // #167: the environment's database (Firestore), read-only, with the same account.
+  // #292: changing a database needs a separate writer account per environment, and an OK per change.
+  const dbWrites = config.gcloud.enabled
+    ? (inputs.dbWrites ?? makeDbWrites({ envs: gcloudEnvs, token: gcloudToken, prodWrites: config.gcloud.prodWrites, backupsPath: path.join(config.gcloud.keysPath, "backups"), log }))
+    : undefined;
+  // #292: what Atlas knows about KidClub, the business (committed; read when first needed).
+  let knowledgeText: Promise<string | undefined> | undefined;
+  const businessKnowledge = (): Promise<string | undefined> =>
+    (knowledgeText ??= (inputs.readKnowledge ?? (() => readFileFs("knowledge/kidclub.md", "utf8")))()
+      .then((t) => `<business name="KidClub">\n${t.trim()}\n</business>`)
+      .catch(() => undefined));
   const gcloud = config.gcloud.enabled
-    ? { reader: inputs.gcloudReader ?? makeGcloudReader({ envs: gcloudEnvs, token: gcloudToken }), db: inputs.gcloudDb ?? makeDbReader({ envs: gcloudEnvs, token: gcloudToken }) }
+    ? { reader: inputs.gcloudReader ?? makeGcloudReader({ envs: gcloudEnvs, token: gcloudToken }), db: inputs.gcloudDb ?? makeDbReader({ envs: gcloudEnvs, token: gcloudToken }), ...(dbWrites ? { writes: dbWrites } : {}) }
     : undefined;
   // #127: what he's learned from studying repos: one note per repo or app, local, readable only by him.
   const noteStore = makeNoteStore(
@@ -821,6 +836,7 @@ export const buildDeps = async (inputs: AppInputs): Promise<Result<Deps, string>
       : {}),
     ...(inboxTidy ? { gmailTidy: inboxTidy } : {}),
     ...(driveWrites ? { driveWrites } : {}),
+    ...(dbWrites ? { dbWrites } : {}),
     classify: makeClassifier({ contexts: contexts.value, llm: classifierLlm.value, log, thinking: config.turn.classifierThinking }),
     stickyContext: config.turn.stickyContext,
     speculativeAnswer: config.turn.speculativeAnswer,
@@ -858,6 +874,8 @@ export const buildDeps = async (inputs: AppInputs): Promise<Result<Deps, string>
               ...(code && config.toolCalling ? { code } : {}),
               // #161: errors and logs in his Google Cloud environments, read-only, with tools (Claude).
               ...(gcloud && config.toolCalling ? { gcloud } : {}),
+              // #292: KidClub, the business, for questions the database and Vendus answer.
+              ...((gcloud || vendusGet) && config.toolCalling ? { knowledge: businessKnowledge } : {}),
               // #9: KidClub's invoices in Vendus, GET only, with tools (Claude).
               ...(vendusGet && config.toolCalling ? { vendus: { get: vendusGet, timeZone: config.timeZone } } : {}),
               // #166: the house now, read-only, from the domotics bridge's state document.

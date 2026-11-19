@@ -10,6 +10,7 @@ import type { ToolGroup } from "./answer/tool-groups.js";
 import type { Household } from "./household.js";
 import type { User } from "./users.js";
 import type { Fixes } from "./code/fix.js";
+import type { DbWrites } from "./gcloud/db-write.js";
 import type { Tasks } from "./code/tasks.js";
 import type { MorningBriefs } from "./morning.js";
 import type { CodeRefresh } from "./code/freshness.js";
@@ -160,7 +161,7 @@ export type PathStep =
        * card with "Add it" / "Don't add", and POSTs `id` to /calendar/confirm.
        * Page only: the path is never logged.
        */
-      readonly confirm?: { readonly id: string; readonly label: string; /** #269: small and undoable: the page does it at once, no card. */ readonly auto?: boolean; /** #278: the next step of his request, carried out by itself after the yes. */ readonly then?: string; readonly kind?: "calendar" | "skill" | "email" | "draft-delete" | "fix" | "pr-close" | "task-start" | "task-publish" | "task-merge" | "task-close" | "house" | "lights" | "house-change" | "gap-issue" | "gmail-tidy" | "calendar-change" | "drive" };
+      readonly confirm?: { readonly id: string; readonly label: string; /** #269: small and undoable: the page does it at once, no card. */ readonly auto?: boolean; /** #278: the next step of his request, carried out by itself after the yes. */ readonly then?: string; readonly kind?: "calendar" | "skill" | "email" | "draft-delete" | "fix" | "pr-close" | "task-start" | "task-publish" | "task-merge" | "task-close" | "house" | "lights" | "house-change" | "gap-issue" | "gmail-tidy" | "calendar-change" | "drive" | "db-change" };
     }
   | {
       readonly kind: "guard";
@@ -391,6 +392,8 @@ export type Deps = {
   readonly gmailTidy?: Pick<InboxTidy, "decide">;
   /** #270: his answer to a Drive change (POST /drive/confirm). Only "yes" creates the folder or saves the file. */
   readonly driveWrites?: Pick<DriveWrites, "decide">;
+  /** #292: database changes waiting for an OK (POST /gcloud/db/confirm). */
+  readonly dbWrites?: Pick<DbWrites, "decide">;
   /** #219: his answer to moving or cancelling an event (POST /calendar/change). Only "yes" changes it. */
   readonly calendarChange?: Pick<CalendarChanges, "decide">;
   /** #218: his reminders, for the page (GET /reminders, POST /reminders/done). */
