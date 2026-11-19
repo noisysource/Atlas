@@ -23,6 +23,8 @@ import { makeWhisperHints } from "./stt/hints.js";
 import { makeSttProvider } from "./stt/registry.js";
 import { makeTtsProviders } from "./tts/registry.js";
 import { loadVendorAssets, loadWebAssets } from "./web.js";
+import { makeWhatsApp, parseKeys } from "./whatsapp/whatsapp.js";
+import { readFile as readKeysFile } from "node:fs/promises";
 
 const SHUTDOWN_TIMEOUT_MS = 10_000;
 
@@ -192,6 +194,33 @@ const server = serve({ fetch: app.fetch, hostname: cfg.host, port: cfg.port }, (
   warm(); // listening now: warm the model connection before the first question
 });
 
+// #294: Atlas on WhatsApp. Its webhook is a server of its own with that one route (for the tunnel),
+// and each message is asked of this server's own /ask, as the person whose number it is.
+const whatsappServer = (() => {
+  if (!cfg.whatsapp.enabled) return undefined;
+  let warned = false;
+  const keys = async () => {
+    const text = await readKeysFile(cfg.whatsapp.keyPath, "utf8").catch(() => undefined);
+    const parsed = text === undefined ? undefined : parseKeys(text);
+    if (!parsed?.ok) {
+      if (!warned) log.warn("whatsapp isn't set up", { reason: parsed ? parsed.error : `no ${cfg.whatsapp.keyPath}` });
+      warned = true;
+      return undefined;
+    }
+    return parsed.value;
+  };
+  const local = async (path: string, body: unknown): Promise<unknown> => {
+    const res = await app.request(`http://127.0.0.1:${cfg.port}${path}`, {
+      method: "POST",
+      headers: { host: `127.0.0.1:${cfg.port}`, "content-type": "application/json", accept: "application/json" },
+      body: JSON.stringify(body),
+    });
+    return res.json();
+  };
+  const whatsapp = makeWhatsApp({ keys, local, mainUser: "renato", log });
+  return serve({ fetch: whatsapp.webhook.fetch, hostname: "127.0.0.1", port: cfg.whatsapp.port }, (info) => log.info("whatsapp webhook listening", { port: info.port }));
+})();
+
 // The local brain (#88): load the model now, so the first Local answer doesn't wait for it.
 const ollamaStarted = performance.now();
 void warmOllama({ model: cfg.models.local.model, baseUrl: cfg.ollamaUrl }).then((loaded) =>
@@ -208,6 +237,7 @@ const shutdown = (signal: string): void => {
   }, SHUTDOWN_TIMEOUT_MS);
   force.unref();
   // Stops accepting new connections and waits for in-flight requests.
+  whatsappServer?.close();
   server.close(() => {
     // Spoken answers still waiting for their playback report are settled as
     // unreported (#78), so their wrap-ups are queued before the drain.

@@ -37,6 +37,7 @@ describe("loadConfig", () => {
       github: { enabled: false, tokensPath: "data/github-tokens.json" },
       gcloud: { enabled: false, keysPath: "data/gcloud", prodWrites: false },
       vendus: { enabled: false, keyPath: "data/vendus.json" },
+      whatsapp: { enabled: false, port: 8788, keyPath: "data/whatsapp.json" },
       costs: { subscriptions: [], path: "data/costs.jsonl" },
       proactive: { enabled: false, from: "", quiet: "22:30-08:00" },
       gemini: { enabled: false, model: { provider: "google", model: "gemini-3.8-flash" }, router: { provider: "google", model: "gemini-3.5-flash-lite" }, secretName: "gemini-api-key", live: { enabled: false, model: "gemini-3.8-live" } },

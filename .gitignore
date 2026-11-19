@@ -47,6 +47,8 @@ data/plans.json
 data/house/
 # #8: the Vendus key of Atlas's Vendus user
 data/vendus.json
+# #294: WhatsApp's keys (token, app secret) and the numbers allowed to talk to Atlas
+data/whatsapp.json
 # #191: coding tasks: their list and their copies of repos
 data/tasks/
 # Google Cloud (#161): which project each environment is, local only

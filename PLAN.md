@@ -1408,6 +1408,17 @@ Confirmed (2026-11-12):
   precondition (a document that changed since the card fails), and the old
   version is first kept in `data/gcloud/backups/<env>/` (0600). Vendus stays
   read-only.
+- **WhatsApp (#294):** message Atlas from the phone through the WhatsApp
+  Business Cloud API. The webhook is a separate small server
+  (`127.0.0.1:WHATSAPP_PORT`, default 8788) with only `/whatsapp/webhook`, so the
+  tunnel (Cloudflare Tunnel) exposes nothing else. Every POST must carry Meta's
+  HMAC signature; numbers not in `data/whatsapp.json` (gitignored, 0600) are
+  dropped. A message is asked of Atlas's own `/ask` (same brain, tools, memory,
+  rules), as the person the number belongs to (#290). Cards become "reply yes or
+  no" lines and the answer goes through the page's own card route; `auto`
+  cards (#269) are applied as on the page. Sends are capped at 30 a minute;
+  logs never carry a number or a message. Proactive messages outside the
+  24-hour window need Meta templates: not yet.
 
 ## Out of scope for M0
 
