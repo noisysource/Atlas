@@ -3234,3 +3234,219 @@ button.trace-head:hover:not(:disabled) {
     scrollbar-width: none;
   }
 }
+
+/* #300: the panel on the right, like OpenJarvis's: settings, tools, skills, memory and costs, in tabs.
+   It docks beside the chat on wide screens (the page makes room) and covers it on narrow ones. */
+:root {
+  --side-w: min(27rem, 100vw);
+}
+
+.side {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 30;
+  width: var(--side-w);
+  display: flex;
+  flex-direction: column;
+  border-left: 1px solid #161c2c;
+  background: rgb(5 7 14 / 0.96);
+  box-shadow: -20px 0 60px rgb(0 0 0 / 0.45);
+  animation: side-in 0.2s ease-out;
+}
+
+.side[hidden] {
+  display: none;
+}
+
+@keyframes side-in {
+  from {
+    opacity: 0;
+    transform: translateX(12px);
+  }
+}
+
+.side-head {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.7rem 0.8rem 0.6rem;
+  border-bottom: 1px solid #161c2c;
+}
+
+.side-tabs {
+  display: flex;
+  flex: 1;
+  flex-wrap: wrap;
+  gap: 0.2rem;
+}
+
+.side-tabs [role="tab"] {
+  padding: 0.3rem 0.6rem;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: none;
+  color: #8a93ad;
+  font-size: 12px;
+  letter-spacing: 0.04em;
+}
+
+.side-tabs [role="tab"][aria-selected="true"] {
+  border-color: #2a3350;
+  background: rgb(74 123 255 / 0.12);
+  color: #e6ecff;
+}
+
+.side-tabs [role="tab"][hidden] {
+  display: none;
+}
+
+#side-close {
+  border: 0;
+  background: none;
+  color: #8a93ad;
+}
+
+#side .side-tab {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 0.9rem 1rem 1.2rem;
+  scrollbar-width: thin;
+}
+
+#side .side-tab[hidden] {
+  display: none;
+}
+
+/* Settings: what used to drop down from ⚙, now a column of controls. */
+#side .settings {
+  position: static;
+  width: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.45rem;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+  animation: none;
+}
+
+#side .settings > * {
+  justify-content: flex-start;
+  text-align: left;
+}
+
+#side .settings select {
+  width: 100%;
+  max-width: none;
+}
+
+/* The tabs that were dialogs: no frame of their own in the panel. */
+#side #memories-panel,
+#side #skills-panel,
+#side .costs {
+  position: static;
+  width: auto;
+  max-width: none;
+  max-height: none;
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+}
+
+#side .costs-table {
+  width: 100%;
+}
+
+/* Tools: one row per thing Atlas can reach. */
+.tools-list {
+  margin: 0.4rem 0 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 0.55rem;
+}
+
+.tool-row {
+  padding: 0.6rem 0.7rem;
+  border: 1px solid #161c2c;
+  border-radius: 8px;
+  background: rgb(10 14 26 / 0.6);
+}
+
+.tool-head {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.tool-status {
+  margin-left: auto;
+  padding: 0.05rem 0.5rem;
+  border-radius: 999px;
+  border: 1px solid #2a3350;
+  color: #8a93ad;
+  font-size: 11px;
+}
+
+.tone-on .tool-status {
+  border-color: rgb(74 123 255 / 0.6);
+  color: #cfe0ff;
+  box-shadow: 0 0 8px rgb(74 123 255 / 0.25);
+}
+
+.tone-soon {
+  opacity: 0.75;
+}
+
+.tool-about,
+.tool-accounts,
+.tool-hint {
+  margin: 0.35rem 0 0;
+  color: #8a93ad;
+  font-size: 12px;
+}
+
+.tool-hint {
+  color: #9fb4e8;
+}
+
+.tool-tools summary {
+  margin-top: 0.35rem;
+  color: #5d6680;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.tool-tools ul {
+  margin: 0.3rem 0 0;
+  padding-left: 1rem;
+  font-size: 12px;
+  color: #8a93ad;
+}
+
+/* Wide screens: the page makes room for the panel instead of hiding under it. */
+@media (min-width: 68.01rem) {
+  body[data-side="true"] .layout {
+    width: calc(100% - var(--side-w));
+    margin: 0 var(--side-w) 0 0;
+    flex-wrap: nowrap;
+  }
+
+  /* The galaxy and the chat share what's left, rather than the galaxy dropping below. */
+  body[data-side="true"] .brain {
+    min-width: 0;
+    flex: 1 1 0;
+  }
+
+  body[data-side="true"] .chat {
+    flex: 0 0 min(40rem, calc((100vw - var(--side-w)) * 0.55));
+  }
+}

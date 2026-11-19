@@ -13,9 +13,12 @@ const el = (tag, className, text) => {
   return e;
 };
 
-/** @param {HTMLDialogElement} dialog */
-export const makeCostsView = (dialog) => {
-  dialog.className = "costs";
+/**
+ * #300: drawn into the panel's Costs tab; `show` opens that tab, `close` the panel.
+ * @param {HTMLElement} dialog @param {{ show: () => void, close: () => void }} panel
+ */
+export const makeCostsView = (dialog, panel) => {
+  dialog.classList.add("costs");
   const head = el("div", "costs-head");
   const title = el("h2", "", "💲 What Atlas costs");
   const refresh = el("button", "", "Refresh");
@@ -24,7 +27,7 @@ export const makeCostsView = (dialog) => {
   const body = el("div", "costs-body");
   const note = el("p", "costs-note");
   dialog.replaceChildren(head, body, note);
-  close.addEventListener("click", () => dialog.close());
+  close.addEventListener("click", () => panel.close());
 
   const load = async () => {
     body.replaceChildren(el("p", "costs-note", "Counting…"));
@@ -87,7 +90,7 @@ export const makeCostsView = (dialog) => {
   refresh.addEventListener("click", () => void load());
   return {
     open: () => {
-      dialog.showModal();
+      panel.show();
       void load();
     },
   };
