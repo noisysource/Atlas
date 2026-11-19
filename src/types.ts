@@ -367,6 +367,8 @@ export type Deps = {
   readonly gmailTidy?: Pick<InboxTidy, "decide">;
   /** #270: his answer to a Drive change (POST /drive/confirm). Only "yes" creates the folder or saves the file. */
   readonly driveWrites?: Pick<DriveWrites, "decide">;
+  /** #304: Gemini Live for WhatsApp calls (only with GEMINI_LIVE=on). The key stays on the Mac. */
+  readonly liveCall?: { readonly apiKey: string; readonly model: string; readonly voice?: string };
   /** #219: his answer to moving or cancelling an event (POST /calendar/change). Only "yes" changes it. */
   readonly calendarChange?: Pick<CalendarChanges, "decide">;
   /** #218: his reminders, for the page (GET /reminders, POST /reminders/done). */

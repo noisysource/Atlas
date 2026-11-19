@@ -2,7 +2,8 @@
 
 import { createHmac } from "node:crypto";
 import { describe, expect, it } from "vitest";
-import { answerOf, askLine, cardsOf, incomingMessages, makeWhatsApp, parseKeys, pieces, signatureOk, type WhatsAppKeys } from "../src/whatsapp/whatsapp.js";
+import { down48to16, makeFramer, opusOf, toMono, up24to48 } from "../src/whatsapp/call.js";
+import { answerOf, askLine, cardsOf, incomingCalls, incomingMessages, makeWhatsApp, parseKeys, pieces, signatureOk, type WhatsAppKeys } from "../src/whatsapp/whatsapp.js";
 
 const NOW = Date.parse("2026-11-19T18:00:00Z");
 const keys: WhatsAppKeys = {
@@ -162,5 +163,53 @@ describe("WhatsApp: the webhook", () => {
     await post(message("351910000001", "Actually, what's the weather?"));
     await post(message("351910000001", "yes"));
     expect(asked.map((a) => a.path)).toEqual(["/ask", "/ask", "/ask"]);
+  });
+});
+
+describe("#304: calls", () => {
+  it("reads a call's connect and terminate", () => {
+    const body = { entry: [{ changes: [{ field: "calls", value: { calls: [{ id: "wacid.1", from: "351910000001", event: "connect", session: { sdp_type: "offer", sdp: "v=0" } }, { id: "wacid.2", from: "351910000001", event: "terminate" }] } }] }] };
+    expect(incomingCalls(body)).toEqual([
+      { id: "wacid.1", from: "351910000001", event: "connect", sdp: "v=0" },
+      { id: "wacid.2", from: "351910000001", event: "terminate" },
+    ]);
+  });
+
+  it("audio: 48 kHz down to 16, 24 up to 48, stereo to mono, whole 20 ms frames", () => {
+    expect([...down48to16(Int16Array.from([3, 6, 9, 30, 30, 30]))]).toEqual([6, 30]);
+    expect([...up24to48(Int16Array.from([0, 100]))]).toEqual([0, 50, 100, 100]);
+    expect([...toMono(Int16Array.from([10, 20, -10, -30]), 2)]).toEqual([15, -20]);
+    const framer = makeFramer(4);
+    expect(framer(Int16Array.from([1, 2, 3])).length).toBe(0);
+    expect(framer(Int16Array.from([4, 5, 6, 7, 8, 9])).map((f) => [...f])).toEqual([
+      [1, 2, 3, 4],
+      [5, 6, 7, 8],
+    ]);
+    expect(opusOf("m=audio 9 UDP/TLS/RTP/SAVPF 111\r\na=rtpmap:111 opus/48000/2\r\n")).toEqual({ pt: 111, channels: 2 });
+  });
+
+  it("a call from a number it doesn't know, or with calls not set up, is rejected", async () => {
+    const actions: unknown[] = [];
+    const wa = makeWhatsApp({
+      keys: async () => keys,
+      local: async () => ({}),
+      mainUser: "renato",
+      now: () => NOW,
+      fetch: (async (url: string, init: RequestInit) => {
+        if (url.endsWith("/calls")) actions.push(JSON.parse(String(init.body)));
+        return new Response("{}", { status: 200 });
+      }) as unknown as typeof fetch,
+    });
+    const post = async (from: string, id: string) => {
+      const raw = JSON.stringify({ entry: [{ changes: [{ value: { calls: [{ id, from, event: "connect", session: { sdp_type: "offer", sdp: "v=0" } }] } }] }] });
+      await wa.webhook.request("/whatsapp/webhook", { method: "POST", headers: { "x-hub-signature-256": sign(raw) }, body: raw });
+      await new Promise((r) => setTimeout(r, 10));
+    };
+    await post("351999999999", "wacid.a");
+    await post("351910000001", "wacid.b");
+    expect(actions).toEqual([
+      { messaging_product: "whatsapp", call_id: "wacid.a", action: "reject" },
+      { messaging_product: "whatsapp", call_id: "wacid.b", action: "reject" },
+    ]);
   });
 });
