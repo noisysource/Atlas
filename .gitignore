@@ -59,3 +59,7 @@ data/code/
 data/introspection/
 # Skills (#116): your routines, local only, never commit
 data/skills.json
+# #270: Google Drive tokens, local only, never commit
+data/google-drive-*.json
+# #288: the conversation, kept across restarts (personal), local only
+data/conversations/

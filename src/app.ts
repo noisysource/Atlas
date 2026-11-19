@@ -27,6 +27,7 @@ import { makeVendusGet, type VendusGet } from "./vendus/vendus.js";
 import { makeCodeRefresh } from "./code/freshness.js";
 import { briefSources } from "./brief.js";
 import { makeMorningBriefs, type BriefStore, type MorningBrief } from "./morning.js";
+import { makeConversationStore, type ConversationStore } from "./conversation.js";
 import { makeDriveTimes, makeNotices, startProactive, type Notice, type ProactiveSources } from "./proactive.js";
 import { makeBareAnswerer } from "./answer/bare.js";
 import { makePersonalAnswerer } from "./answer/personal.js";
@@ -108,6 +109,8 @@ export type AppInputs = {
   readonly vendusGet?: VendusGet;
   /** #191: tests give their own tasks. */
   readonly codeTasks?: Tasks;
+  /** Tests: a conversation store that isn't on disk. */
+  readonly conversation?: ConversationStore;
   /** #162: tests give their own fixes. */
   readonly codeFixes?: Fixes;
   /** Tests: a code agent and repo copies instead of Claude Code and git (#126). */
@@ -748,6 +751,8 @@ export const buildDeps = async (inputs: AppInputs): Promise<Result<Deps, string>
     ...(calendarConfirm ? { calendarConfirm } : {}),
     ...(calendarUndo ? { calendarUndo } : {}),
     ...(proactive ? { proactive } : {}),
+    // #288: the conversation, kept across restarts (one file per person, data/conversations/).
+    conversation: inputs.conversation ?? makeConversationStore({ dir: "data/conversations" }),
     reach: async () =>
       withSwitchesView(await reachView({
         config,

@@ -333,7 +333,7 @@ describe("Atlas as the PM", () => {
 
   it("proposes a task with a card, and reports from the list", async () => {
     const task: Task = { id: "a1b2c3d4", repo: "noisysource/noisysource", title: "Restructure FinHub", goal: "g", base: "staging", branch: "agent/restructure-finhub-a1b2c3d4", status: "waiting", createdAt: "", updatedAt: "", costUsd: 1.2, turns: 30, report: "WAITING: cents or euros?\nMore detail." };
-    const tasks = { list: async () => [task], canStart: async () => true, proposeStart: () => "c".repeat(24), proposePublish: async () => err("x"), proposeMerge: async () => err("no"), proposeClose: async () => err("x"), decide: async () => ({ ok: true, text: "" }), tell: async () => ok("Passed on."), stop: () => false };
+    const tasks = { list: async () => [task], canStart: async () => true, proposeStart: () => "c".repeat(24), proposePublish: async () => err("x"), proposeMerge: async () => err("no"), proposeClose: async () => err("x"), decide: async () => ({ ok: true, text: "" }), tell: async () => ok("Passed on."), stop: () => false, recover: async () => 0 };
     const script: LlmResponse[] = [
       { ...common, kind: "tool_calls", text: "", calls: [{ id: "t1", name: "task_start", input: { repo: "noisysource/noisysource", title: "Restructure FinHub", goal: "Continue the restructure, FinHub first." } }, { id: "t2", name: "task_list", input: {} }] },
       { ...common, kind: "text", text: "It needs your OK; the other one is waiting for you." },

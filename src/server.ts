@@ -16,6 +16,7 @@ import { Hono, type Context } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import { streamSSE } from "hono/streaming";
 import { z } from "zod";
+import { SavedConversation } from "./conversation.js";
 import { checkTalkChange, TALK_LABELS, TALK_OPTIONS } from "./talk.js";
 import { handleAsk } from "./ask.js";
 import { withLogFields } from "./log.js";
@@ -606,6 +607,27 @@ export const makeServer = (
         const body = UndoBody.safeParse(await c.req.json().catch(() => undefined));
         if (!body.success) return c.json(errorBody("Send { token }."), 400);
         return c.json(await undo(body.data.token));
+      },
+    );
+  }
+
+  // #288: the conversation, kept across restarts: the page saves it after each turn and asks for it when it opens.
+  const conversation = deps.conversation;
+  if (conversation) {
+    const whoOf = (v: string | undefined): string => (v && /^[a-z][a-z0-9-]{0,30}$/.test(v) ? v : "renato");
+    app.get("/conversation", async (c) => c.json({ conversation: (await conversation.read(whoOf(c.req.query("who")))) ?? null }));
+    app.put(
+      "/conversation",
+      async (c, next) => {
+        if (!isJson(c.req.header("content-type"))) return c.json(errorBody("PUT /conversation needs Content-Type: application/json."), 415);
+        await next();
+      },
+      bodyLimit({ maxSize: 256 * 1024, onError: (c) => c.json(errorBody("The conversation is too large."), 413) }),
+      async (c) => {
+        const body = SavedConversation.safeParse(await c.req.json().catch(() => undefined));
+        if (!body.success) return c.json(errorBody("Send { conversationId, history }."), 400);
+        await conversation.write(whoOf(c.req.query("who")), body.data).catch(() => deps.log.warn("conversation not saved", { reason: "write failed" }));
+        return c.json({ ok: true });
       },
     );
   }

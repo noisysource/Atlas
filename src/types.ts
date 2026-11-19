@@ -4,6 +4,7 @@
 // context id is a branded string that only the contexts parser should create.
 
 import type { Notice, Notices } from "./proactive.js";
+import type { ConversationStore } from "./conversation.js";
 import type { Fixes } from "./code/fix.js";
 import type { Tasks } from "./code/tasks.js";
 import type { MorningBriefs } from "./morning.js";
@@ -362,7 +363,7 @@ export type Deps = {
   /** #162: fixes as pull requests: his OK to prepare one (POST /code/fix), its progress and diff (GET /code/fixes/:id), his OK to publish (POST /code/fixes/publish). */
   readonly codeFixes?: Pick<Fixes, "decide" | "view" | "publish">;
   /** #191: coding tasks: his answers to their cards (POST /code/task), the list (GET /code/tasks), stop (POST /code/tasks/stop). */
-  readonly codeTasks?: Pick<Tasks, "decide" | "list" | "stop">;
+  readonly codeTasks?: Pick<Tasks, "decide" | "list" | "stop" | "recover">;
   /** #214: his answer to tidying the inbox (POST /gmail/tidy). Only "yes" archives or labels. */
   readonly gmailTidy?: Pick<InboxTidy, "decide">;
   /** #270: his answer to a Drive change (POST /drive/confirm). Only "yes" creates the folder or saves the file. */
@@ -399,6 +400,8 @@ export type Deps = {
   readonly introspect?: () => Promise<IntrospectionReport>;
   /** #177: the morning brief, prepared at BRIEF_AT and shown on the page (GET /brief/today). */
   readonly morningBrief?: MorningBriefs;
+  /** #288: the conversation, kept across restarts. */
+  readonly conversation?: ConversationStore;
   /** #271 PROACTIVE=on: Atlas speaks up on his own. main.ts starts the watchers; the page asks GET /notices. */
   readonly proactive?: {
     readonly notices: Notices;

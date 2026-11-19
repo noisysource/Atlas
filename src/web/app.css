@@ -3234,3 +3234,17 @@ button.trace-head:hover:not(:disabled) {
     scrollbar-width: none;
   }
 }
+
+/* #288: the turns picked up after a restart, a little quieter, then a line. */
+#transcript .message.earlier {
+  opacity: 0.72;
+}
+
+#transcript .earlier-line {
+  list-style: none;
+  margin: 0.6rem 0 0.9rem;
+  text-align: center;
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  color: #4c5570;
+}

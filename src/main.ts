@@ -80,6 +80,17 @@ const stopProactive = proactive
       if (n.speak) execFile("say", [text], () => undefined);
     })
   : undefined;
+// #288: tasks cut off by a restart carry on where they stopped, a few seconds after starting.
+const codeTasks = deps.ok ? deps.value.codeTasks : undefined;
+if (codeTasks) {
+  const resume = setTimeout(() => {
+    void codeTasks
+      .recover()
+      .then((n) => (n > 0 ? log.info("tasks resumed after restart", { count: n }) : undefined))
+      .catch(() => log.warn("task recovery failed", { reason: "unexpected" }));
+  }, 5_000);
+  resume.unref();
+}
 // #128: every night at 04:00, what changed since each code study (and, with CODE_REFRESH=study, a few re-studies).
 const refresh = deps.ok ? deps.value.codeRefresh : undefined;
 const stopRefresh = refresh

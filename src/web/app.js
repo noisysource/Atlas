@@ -2419,3 +2419,53 @@ void fetch("/brains")
   void loop();
   setInterval(sayQueued, 2_000);
 }
+
+// #288: the conversation, kept across restarts. When the page opens it asks
+// for the last one back (a restart, a deploy or a reload carries on where he
+// left off); after each turn it sends the last turns to be kept.
+{
+  /** Who the conversation is for (one file each; more than one person comes with #289). */
+  const who = () => "renato";
+  /** @type {import("./chat.js").Turn[] | undefined} */
+  let saved;
+  let restoring = true;
+  const restore = async () => {
+    try {
+      const res = await fetch(`/conversation?who=${encodeURIComponent(who())}`, { cache: "no-store" });
+      if (!res.ok) return;
+      const body = await res.json();
+      const c = body?.conversation;
+      // Only into an empty page: never over a conversation already going.
+      if (!c || !Array.isArray(c.history) || c.history.length === 0 || state.history.length > 0 || transcript.children.length > 0) return;
+      state.history = c.history;
+      state.conversationId = typeof c.conversationId === "string" ? c.conversationId : state.conversationId;
+      saved = state.history;
+      for (const t of c.history) {
+        const item = addMessage(t.role === "user" ? "user" : "answer", String(t.text ?? ""));
+        item.classList.add("earlier");
+      }
+      const line = document.createElement("li");
+      line.className = "earlier-line";
+      const at = typeof c.savedAt === "string" ? new Date(c.savedAt) : undefined;
+      line.textContent = `— picked up where we left off${at && !Number.isNaN(at.getTime()) ? `, ${at.toLocaleString("en-GB", { weekday: "short", hour: "2-digit", minute: "2-digit", hourCycle: "h23" })}` : ""} —`;
+      transcript.append(line);
+      line.scrollIntoView({ block: "end" });
+    } catch {
+      // Nothing kept, or Atlas is still starting: a fresh conversation.
+    } finally {
+      restoring = false;
+    }
+  };
+  const keep = () => {
+    if (restoring || state.history === saved) return;
+    saved = state.history;
+    void fetch(`/conversation?who=${encodeURIComponent(who())}`, {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ conversationId: state.conversationId, history: state.history }),
+    }).catch(() => undefined);
+  };
+  void restore();
+  setInterval(keep, 2_000);
+  window.addEventListener("pagehide", keep);
+}

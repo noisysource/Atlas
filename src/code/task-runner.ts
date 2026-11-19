@@ -101,6 +101,8 @@ export type TaskRunner = (q: {
   readonly maxUsd: number;
   readonly maxTurns: number;
   readonly onProgress?: (step: CodeStep) => void;
+  /** #288: the session id as soon as Claude Code has one, so a restart mid-turn can resume it. */
+  readonly onSession?: (sessionId: string) => void;
   readonly signal?: AbortSignal;
 }) => Promise<Result<TaskTurn, TaskRunError>>;
 
@@ -148,7 +150,10 @@ export const makeTaskRunner = (deps: { readonly model?: string; readonly query?:
       },
     })) {
       const m = message as Record<string, unknown>;
-      if (typeof m.session_id === "string") session = m.session_id;
+      if (typeof m.session_id === "string" && m.session_id !== session) {
+        session = m.session_id;
+        q.onSession?.(m.session_id);
+      }
       if (m.type === "assistant" && q.onProgress) {
         const content = (m.message as { content?: unknown } | undefined)?.content;
         for (const block of Array.isArray(content) ? content : []) {
