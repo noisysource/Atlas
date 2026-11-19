@@ -159,6 +159,8 @@ export type Config = {
    * (npm run vendus:connect). Local only for now.
    */
   readonly vendus: { readonly enabled: boolean; readonly keyPath: string };
+  /** #294 WHATSAPP=on: messages from WhatsApp, on a webhook of its own (WHATSAPP_PORT); keys in data/whatsapp.json. */
+  readonly whatsapp: { readonly enabled: boolean; readonly port: number; readonly keyPath: string };
   /**
    * HOUSE=on (#166): Claude can read the house's live state. With
    * HOUSE_CONTROL=on everything goes through Atlas's own domotics user (the
@@ -397,6 +399,9 @@ const EnvSchema = z.object({
   GITHUB: onOff,
   GCLOUD: onOff,
   VENDUS: onOff,
+  // #294: Atlas on WhatsApp. Its webhook listens on its own port (127.0.0.1), for the tunnel to reach.
+  WHATSAPP: onOff,
+  WHATSAPP_PORT: z.coerce.number().int().min(1024).max(65535).default(8788),
   HOUSE: onOff,
   HOUSE_CONTROL: onOff,
   HOUSE_ENV: z.preprocess((v) => (typeof v === "string" && v.trim() === "" ? undefined : v), z.string().regex(/^[a-z][a-z0-9-]{0,19}$/, { error: "must be an environment name like dev" }).default("dev")),
@@ -630,6 +635,10 @@ export const loadConfig = (given: Env): Result<Config, string> => {
     if (production) errors.push("VENDUS: local only for now (its key is a file on this Mac, not in Secret Manager)");
     if (raw("BARE_MODE") !== "on") errors.push("VENDUS: needs BARE_MODE=on");
   }
+  if (raw("WHATSAPP") === "on") {
+    if (production) errors.push("WHATSAPP: local only for now (its keys are a file on this Mac, not in Secret Manager)");
+    if (raw("BARE_MODE") !== "on") errors.push("WHATSAPP: needs BARE_MODE=on");
+  }
   if (raw("GCLOUD") === "on") {
     if (production) errors.push("GCLOUD: local only for now (it signs in through gcloud on this Mac)");
     if (raw("BARE_MODE") !== "on") errors.push("GCLOUD: needs BARE_MODE=on");
@@ -689,6 +698,7 @@ export const loadConfig = (given: Env): Result<Config, string> => {
     github: { enabled: e.GITHUB === "on", tokensPath: "data/github-tokens.json" },
     gcloud: { enabled: e.GCLOUD === "on", keysPath: "data/gcloud" },
     vendus: { enabled: e.VENDUS === "on", keyPath: "data/vendus.json" },
+    whatsapp: { enabled: e.WHATSAPP === "on", port: e.WHATSAPP_PORT, keyPath: "data/whatsapp.json" },
     house: {
       enabled: e.HOUSE === "on" && (e.GCLOUD === "on" || e.HOUSE_CONTROL === "on"),
       env: e.HOUSE_ENV,
