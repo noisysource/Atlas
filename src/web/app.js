@@ -15,7 +15,7 @@ import { voiceLevel } from "./voice-level.js";
 import { makeCodeMapView } from "./codemap.js";
 import { makeStudiesView } from "./studies.js";
 import { makeTraceView } from "./trace.js";
-import { atEnd, clock, conversationText, inlineMarks } from "./terminal-lib.js";
+import { clock, conversationText, inlineMarks, keepsFollowing } from "./terminal-lib.js";
 import { CARD_DONE } from "./turn-lib.js";
 import { cardAnswer } from "./card-lib.js";
 import {
@@ -87,22 +87,56 @@ const transcript = byId("transcript");
 const chatMain = /** @type {HTMLElement} */ (transcript.closest("main") ?? transcript);
 /** The chat scrolls inside its own pane on wide screens, with the page on narrow ones. */
 const scroller = () => (chatMain.scrollHeight > chatMain.clientHeight + 1 && getComputedStyle(chatMain).overflowY !== "visible" ? chatMain : /** @type {HTMLElement} */ (document.scrollingElement ?? document.documentElement));
+// #298: like OpenJarvis: scrolling up stops the following at once; back at the end, it follows again;
+// and while you're up reading, a button takes you to the latest (marked when something new came in).
 let following = true;
+let lastTop = 0;
+const latest = document.createElement("button");
+latest.type = "button";
+latest.className = "jump-latest";
+latest.hidden = true;
+latest.setAttribute("aria-label", "Jump to the latest message");
+latest.textContent = "↓ Latest";
+chatMain.after(latest);
+const showLatest = (/** @type {boolean} */ fresh) => {
+  latest.hidden = following;
+  if (following) latest.classList.remove("fresh");
+  else if (fresh) latest.classList.add("fresh");
+};
 const noteScroll = () => {
   const el = scroller();
-  following = atEnd(el.scrollTop, el.clientHeight, el.scrollHeight);
+  following = keepsFollowing({ following, lastTop, top: el.scrollTop, height: el.clientHeight, total: el.scrollHeight });
+  lastTop = el.scrollTop;
+  showLatest(false);
 };
 chatMain.addEventListener("scroll", noteScroll, { passive: true });
 window.addEventListener("scroll", noteScroll, { passive: true });
-/** Back to the end of the conversation; `force` when you've just asked something. */
+/** Back to the end of the conversation; `force` when you've just asked something (or pressed ↓ Latest). */
 const toEnd = (force = false) => {
   if (force) following = true;
-  if (!following) return;
+  if (!following) {
+    showLatest(true);
+    return;
+  }
   const el = scroller();
   el.scrollTop = el.scrollHeight;
+  lastTop = el.scrollTop;
+  showLatest(false);
 };
-// Streaming text, cards and paths all grow the transcript: follow every change.
-new MutationObserver(() => toEnd()).observe(transcript, { childList: true, subtree: true, characterData: true });
+latest.addEventListener("click", () => {
+  toEnd(true);
+  input.focus({ preventScroll: true });
+});
+// Streaming text, cards and paths all grow the transcript: follow every change (once per frame).
+let endQueued = false;
+new MutationObserver(() => {
+  if (endQueued) return;
+  endQueued = true;
+  requestAnimationFrame(() => {
+    endQueued = false;
+    toEnd();
+  });
+}).observe(transcript, { childList: true, subtree: true, characterData: true });
 window.addEventListener("resize", () => toEnd());
 // #177: the morning brief, as a card above the conversation, once per day.
 void showMorningBrief(transcript);

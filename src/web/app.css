@@ -3234,3 +3234,41 @@ button.trace-head:hover:not(:disabled) {
     scrollbar-width: none;
   }
 }
+
+/* #298: while you scroll up to read, one tap back to the latest; it lights up when something new came in. */
+.jump-latest {
+  align-self: center;
+  position: relative;
+  z-index: 3;
+  margin: -2.6rem 0 0.6rem;
+  padding: 0.3rem 0.9rem;
+  border: 1px solid #2a3350;
+  border-radius: 999px;
+  background: rgb(10 14 26 / 0.92);
+  color: #9fb4e8;
+  font: inherit;
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  box-shadow: 0 4px 14px rgb(0 0 0 / 0.35);
+}
+
+.jump-latest[hidden] {
+  display: none;
+}
+
+.jump-latest.fresh {
+  border-color: var(--accent);
+  color: #e6ecff;
+  box-shadow: 0 0 10px rgb(74 123 255 / 0.55);
+}
+
+/* Narrow screens scroll the whole page, so the button floats above the question box. */
+@media (max-width: 68rem) {
+  .jump-latest {
+    position: fixed;
+    right: 1rem;
+    bottom: 9rem;
+    margin: 0;
+  }
+}
