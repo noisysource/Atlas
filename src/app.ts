@@ -834,6 +834,10 @@ export const buildDeps = async (inputs: AppInputs): Promise<Result<Deps, string>
           })),
         }
       : {}),
+    // #304: WhatsApp calls are answered by Gemini Live too (main.ts), with the same model and voice.
+    ...(geminiKey && config.gemini.live.enabled
+      ? { liveCall: { apiKey: geminiKey.value.key, model: config.gemini.live.model, ...(config.gemini.live.voice ? { voice: config.gemini.live.voice } : {}) } }
+      : {}),
     ...(inboxTidy ? { gmailTidy: inboxTidy } : {}),
     ...(driveWrites ? { driveWrites } : {}),
     ...(dbWrites ? { dbWrites } : {}),

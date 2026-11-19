@@ -25,6 +25,7 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 import { Hono } from "hono";
 import { z } from "zod";
 import { err, ok, type Result } from "../result.js";
+import { makeCall, type CallBrain } from "./call.js";
 import type { Logger } from "../types.js";
 
 // v26 (July 2026); each Graph version is supported for about two years.
@@ -92,6 +93,21 @@ export const incomingMessages = (body: unknown): Incoming[] =>
                 ? (object(object(msg.interactive)?.button_reply)?.title ?? object(object(msg.interactive)?.list_reply)?.title)
                 : undefined;
         return [{ id: msg.id, from: msg.from, text: typeof text === "string" && text.trim() !== "" ? text.trim().slice(0, 2000) : undefined, at: Number.isFinite(at) ? at : 0 }];
+      }),
+    ),
+  );
+
+export type IncomingCall = { readonly id: string; readonly from: string; readonly event: string; readonly sdp?: string };
+
+/** #304: the calls in a webhook call: "connect" carries the caller's WebRTC offer; "terminate" ends one. */
+export const incomingCalls = (body: unknown): IncomingCall[] =>
+  list(object(body)?.entry).flatMap((entry) =>
+    list(object(entry)?.changes).flatMap((change) =>
+      list(object(object(change)?.value)?.calls).flatMap((c) => {
+        const call = object(c);
+        if (!call || typeof call.id !== "string" || typeof call.from !== "string" || typeof call.event !== "string") return [];
+        const sdp = object(call.session)?.sdp;
+        return [{ id: call.id, from: call.from, event: call.event, ...(typeof sdp === "string" ? { sdp } : {}) }];
       }),
     ),
   );
@@ -173,6 +189,8 @@ export type WhatsAppDeps = {
   readonly local: (path: string, body: unknown) => Promise<unknown>;
   /** The main user's id: questions from his number go without a user, as the page's do. */
   readonly mainUser: string;
+  /** #304: what answers a voice call (Gemini Live), for the person calling; no calls without it. */
+  readonly callBrain?: (who: string, ask: (question: string) => Promise<string>) => CallBrain;
   readonly fetch?: typeof fetch;
   readonly now?: () => number;
   readonly newId?: () => string;
@@ -277,6 +295,52 @@ export const makeWhatsApp = (deps: WhatsAppDeps) => {
     return lines.filter((l) => l.trim() !== "").join("\n\n");
   };
 
+  // #304: voice calls. One at a time per caller; each ends when either side hangs up.
+  const calls = new Map<string, { end: (why: string, tell?: boolean) => Promise<void> }>();
+  const callAction = (keys: WhatsAppKeys, callId: string) => async (action: string, sdp?: string): Promise<boolean> => {
+    try {
+      const res = await doFetch(`${GRAPH}/${keys.phoneNumberId}/calls`, {
+        method: "POST",
+        headers: { authorization: `Bearer ${keys.token}`, "content-type": "application/json" },
+        body: JSON.stringify({ messaging_product: "whatsapp", call_id: callId, action, ...(sdp ? { session: { sdp_type: "answer", sdp } } : {}) }),
+      });
+      if (!res.ok) deps.log?.warn("whatsapp call action failed", { action, status: res.status, error: (await res.text().catch(() => "")).slice(0, 300) });
+      return res.ok;
+    } catch {
+      deps.log?.warn("whatsapp call action failed", { action, status: "network" });
+      return false;
+    }
+  };
+  const handleCall = async (keys: WhatsAppKeys, c: IncomingCall): Promise<void> => {
+    if (c.event === "terminate") {
+      await calls.get(c.id)?.end("hung up", false);
+      calls.delete(c.id);
+      return;
+    }
+    if (c.event !== "connect" || !c.sdp) return;
+    const who = keys.numbers[c.from];
+    if (!who || !deps.callBrain) {
+      await callAction(keys, c.id)("reject");
+      deps.log?.info("whatsapp call rejected", { reason: who ? "calls aren't set up" : "unknown number" });
+      return;
+    }
+    deps.log?.info("whatsapp call", { who });
+    const chat = chatOf(c.from);
+    // Asked on the call: the same as a message; a card goes to the chat, to answer there.
+    const askOnCall = async (question: string): Promise<string> => {
+      const before = chat.waiting.length;
+      const reply = await ask(chat, who, question);
+      if (chat.waiting.length > before) {
+        const first = chat.waiting[0];
+        if (first) await send(keys, c.from, askLine(first));
+        return `${reply}\n(Sent to the WhatsApp chat to confirm with yes or no.)`;
+      }
+      return reply;
+    };
+    const call = await makeCall({ offer: c.sdp, line: { action: callAction(keys, c.id) }, brain: deps.callBrain(who, askOnCall), ...(deps.log ? { log: deps.log } : {}) });
+    calls.set(c.id, call);
+  };
+
   const handle = async (keys: WhatsAppKeys, m: Incoming): Promise<void> => {
     const who = keys.numbers[m.from];
     if (!who) {
@@ -340,6 +404,11 @@ export const makeWhatsApp = (deps: WhatsAppDeps) => {
       body = JSON.parse(raw);
     } catch {
       return c.text("Bad request", 400);
+    }
+    for (const c of incomingCalls(body)) {
+      if (seen.includes(`${c.id}:${c.event}`)) continue;
+      seen.push(`${c.id}:${c.event}`);
+      void handleCall(keys, c).catch(() => deps.log?.warn("whatsapp call failed", {}));
     }
     for (const m of incomingMessages(body)) {
       // Meta sends again when it doesn't hear back fast: each message once.

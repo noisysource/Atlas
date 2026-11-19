@@ -394,6 +394,8 @@ export type Deps = {
   readonly driveWrites?: Pick<DriveWrites, "decide">;
   /** #292: database changes waiting for an OK (POST /gcloud/db/confirm). */
   readonly dbWrites?: Pick<DbWrites, "decide">;
+  /** #304: Gemini Live for WhatsApp calls (only with GEMINI_LIVE=on). The key stays on the Mac. */
+  readonly liveCall?: { readonly apiKey: string; readonly model: string; readonly voice?: string };
   /** #219: his answer to moving or cancelling an event (POST /calendar/change). Only "yes" changes it. */
   readonly calendarChange?: Pick<CalendarChanges, "decide">;
   /** #218: his reminders, for the page (GET /reminders, POST /reminders/done). */

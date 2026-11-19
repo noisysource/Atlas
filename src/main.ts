@@ -24,6 +24,7 @@ import { makeSttProvider } from "./stt/registry.js";
 import { makeTtsProviders } from "./tts/registry.js";
 import { loadVendorAssets, loadWebAssets } from "./web.js";
 import { makeWhatsApp, parseKeys } from "./whatsapp/whatsapp.js";
+import { makeGeminiCallBrain } from "./whatsapp/call-brain.js";
 import { readFile as readKeysFile } from "node:fs/promises";
 
 const SHUTDOWN_TIMEOUT_MS = 10_000;
@@ -198,15 +199,19 @@ const server = serve({ fetch: app.fetch, hostname: cfg.host, port: cfg.port }, (
 // and each message is asked of this server's own /ask, as the person whose number it is.
 const whatsappServer = (() => {
   if (!cfg.whatsapp.enabled) return undefined;
-  let warned = false;
+  // Said again only when the reason changes, so the log shows the current problem, not the first one.
+  let warned: string | undefined;
   const keys = async () => {
     const text = await readKeysFile(cfg.whatsapp.keyPath, "utf8").catch(() => undefined);
     const parsed = text === undefined ? undefined : parseKeys(text);
     if (!parsed?.ok) {
-      if (!warned) log.warn("whatsapp isn't set up", { reason: parsed ? parsed.error : `no ${cfg.whatsapp.keyPath}` });
-      warned = true;
+      const reason = parsed ? parsed.error : `no ${cfg.whatsapp.keyPath}`;
+      if (warned !== reason) log.warn("whatsapp isn't set up", { reason });
+      warned = reason;
       return undefined;
     }
+    if (warned !== undefined) log.info("whatsapp is set up", {});
+    warned = undefined;
     return parsed.value;
   };
   const local = async (path: string, body: unknown): Promise<unknown> => {
@@ -217,7 +222,20 @@ const whatsappServer = (() => {
     });
     return res.json();
   };
-  const whatsapp = makeWhatsApp({ keys, local, mainUser: "renato", log });
+  const liveCall = deps.ok ? deps.value.liveCall : undefined;
+  const whatsapp = makeWhatsApp({
+    keys,
+    local,
+    mainUser: "renato",
+    // #304: calls are answered by Gemini Live, asking this server for anything real.
+    ...(liveCall
+      ? {
+          callBrain: (who: string, ask: (q: string) => Promise<string>) =>
+            makeGeminiCallBrain({ apiKey: liveCall.apiKey, model: liveCall.model, ...(liveCall.voice ? { voice: liveCall.voice } : {}), who, ask, log }),
+        }
+      : {}),
+    log,
+  });
   return serve({ fetch: whatsapp.webhook.fetch, hostname: "127.0.0.1", port: cfg.whatsapp.port }, (info) => log.info("whatsapp webhook listening", { port: info.port }));
 })();
 
