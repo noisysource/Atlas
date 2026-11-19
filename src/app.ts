@@ -77,6 +77,9 @@ import { makeProfileSource, type ProfileFileSystem } from "./profile.js";
 import { err, ok, type Result } from "./result.js";
 import { makeGcpSecretAccess, makeSecretGetter, resolveAnthropicKey, resolveGeminiKey } from "./secrets.js";
 import type { Context, Deps, Logger } from "./types.js";
+import { parseUsers, profilePathOf, type User } from "./users.js";
+import { makeHousehold, type Household } from "./household.js";
+import { scopedMemoryStore } from "./memory-scope.js";
 
 export type AppInputs = {
   readonly config: Config;
@@ -111,6 +114,8 @@ export type AppInputs = {
   readonly codeTasks?: Tasks;
   /** Tests: a conversation store that isn't on disk. */
   readonly conversation?: ConversationStore;
+  /** #290 tests: a household that isn't on disk. */
+  readonly household?: Household;
   /** #162: tests give their own fixes. */
   readonly codeFixes?: Fixes;
   /** Tests: a code agent and repo copies instead of Claude Code and git (#126). */
@@ -213,7 +218,23 @@ export const buildDeps = async (inputs: AppInputs): Promise<Result<Deps, string>
   }
 
   const now = inputs.now ?? (() => new Date());
-  const memoryStore = inputs.memoryStore ?? makeMemoryStoreInMemory({ now });
+  // #290: one store for the household; the answers scope it to whoever is talking, everything else sees his.
+  const sharedMemory = inputs.memoryStore ?? makeMemoryStoreInMemory({ now });
+  const memoryStore = scopedMemoryStore(sharedMemory, undefined);
+  const users = parseUsers(config.users, config.userName);
+  if (!users.ok) return err(users.error);
+  const guestProfiles = new Map<string, ReturnType<typeof makeProfileSource>>();
+  const readProfile = async (user: User): Promise<string | undefined> => {
+    if (user.main) return undefined;
+    let source = guestProfiles.get(user.id);
+    if (!source) {
+      source = makeProfileSource({ kind: "file", path: profilePathOf(user, "data/profile.md") }, { ...(inputs.profileFs ? { fs: inputs.profileFs } : {}) });
+      guestProfiles.set(user.id, source);
+    }
+    // Missing is fine: she just has no profile yet. The content is never logged.
+    const read = await source();
+    return read.ok ? read.value.text : undefined;
+  };
 
   const personalWith = (llm: LlmCall): Record<string, Deps["answer"]> => ({
     personal: makePersonalAnswerer({
@@ -753,6 +774,8 @@ export const buildDeps = async (inputs: AppInputs): Promise<Result<Deps, string>
     ...(proactive ? { proactive } : {}),
     // #288: the conversation, kept across restarts (one file per person, data/conversations/).
     conversation: inputs.conversation ?? makeConversationStore({ dir: "data/conversations" }),
+    users: { list: users.value, readProfile, timeZone: config.timeZone },
+    household: inputs.household ?? makeHousehold({ dir: "data/household" }),
     reach: async () =>
       withSwitchesView(await reachView({
         config,
@@ -822,7 +845,7 @@ export const buildDeps = async (inputs: AppInputs): Promise<Result<Deps, string>
               ...(drive && config.toolCalling ? { drive } : {}),
               // #107: memory across conversations, with tools (Claude); every rule enforced in code.
               ...(config.bareMemory && config.toolCalling
-                ? { memory: { store: memoryStore, contexts: contexts.value, ec: memoryEc, timeZone: config.timeZone, log } }
+                ? { memory: { store: sharedMemory, contexts: contexts.value, ec: memoryEc, timeZone: config.timeZone, log } }
                 : {}),
               ...(skillStore && config.toolCalling ? { skills: { store: skillStore, ec: memoryEc } } : {}),
               // #125: his GitHub repos, read-only, with tools (Claude).

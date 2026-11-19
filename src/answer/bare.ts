@@ -14,7 +14,7 @@ import { streamOrCall } from "../llm/stream.js";
 import { makeSentenceSplitter } from "../sentences.js";
 import type { ProfileSource } from "../profile.js";
 import type { CalendarReader } from "../calendar/google.js";
-import { isCalendarAccount, readAccounts, type CalendarReaders } from "../calendar/accounts.js";
+import { isCalendarAccount, readAccounts, type CalendarAccount, type CalendarReaders } from "../calendar/accounts.js";
 import {
   CALENDAR_READ_TOOL,
   CALENDAR_REQUEST_SCHEMA,
@@ -74,6 +74,7 @@ import { checkStudyRequest, CODE_NOTES_TOOL, CODE_STUDY_TOOL, noteForBrain, note
 import { checkDraftRequest, MAX_DRAFTS_PER_ANSWER, draftLabel, GMAIL_DRAFT_DELETE_TOOL, GMAIL_DRAFT_TOOL, isDraftRef, type DraftBook, type GmailWriter, type PendingDrafts } from "../gmail/send.js";
 import { makeSkillTurn, SKILL_FOLLOW_TOOL, SKILL_PROPOSE_TOOL, skillsForPrompt, type SkillStore } from "../skills.js";
 import type { EcMatchers } from "../memory-rules.js";
+import { scopedMemoryStore } from "../memory-scope.js";
 import { makeMemoryTurn, MEMORY_FORGET_TOOL, MEMORY_RECALL_TOOL, MEMORY_REMEMBER_TOOL, MEMORY_TOOLS, type MemoryToolDeps } from "../memory-tools.js";
 import { CALENDAR_CREATE_TOOL, checkCreateRequest, isSmallProposal, proposalLabel, proposalPathLabel, type PendingProposals } from "../calendar/create.js";
 import { historyMessages, profileName } from "./personal.js";
@@ -829,14 +830,16 @@ export const makeBareAnswerer = (deps: {
   const max = deps.spokenSentences ?? DEFAULT_SPOKEN_SENTENCES;
   const random = deps.random ?? Math.random;
   const pauses = deps.pauses === true;
-  const prompts = (profile?: string) => {
-    // ATLAS_USER_NAME wins; otherwise the profile's "Name:" line.
-    const name = deps.userName ?? (profile ? profileName(profile) : undefined);
+  const prompts = (profile?: string, who?: string) => {
+    // #290: someone else talking goes by their name; for him ATLAS_USER_NAME wins, then the profile's "Name:" line.
+    const name = who ?? deps.userName ?? (profile ? profileName(profile) : undefined);
     const extra = { ...(deps.elsewhere && deps.tools !== true ? { elsewhere: deps.elsewhere } : {}), ...(deps.decisions && deps.tools === true ? { decisions: true, tools: true } : {}), ...(deps.gaps && deps.tools === true ? { gaps: true, tools: true } : {}), ...(deps.reminders && deps.tools === true ? { reminders: true, tools: true } : {}), ...(deps.talk && deps.tools === true ? { talk: true, tools: true } : {}), ...(deps.webSearch && deps.tools === true ? { web: true, tools: true } : {}), ...(profile ? { profile } : {}), ...(deps.calendar ? { calendar: true } : {}), ...(deps.calendar && deps.tools === true ? { tools: true } : {}), ...(deps.calendar?.create && deps.tools === true ? { create: true } : {}), ...(deps.calendar?.change && deps.tools === true ? { calendarChange: true } : {}), ...(deps.gmail && deps.tools === true ? { email: true, tools: true } : {}), ...(deps.gmail?.writer && deps.tools === true ? { emailDrafts: true } : {}), ...(deps.gmail?.tidy && deps.tools === true ? { emailTidy: true } : {}), ...(deps.gmail?.reader.unanswered && deps.tools === true ? { emailFollowups: true } : {}), ...(deps.memory && deps.tools === true ? { memory: true, tools: true } : {}), ...(deps.memory && deps.skills && deps.tools === true ? { skills: true } : {}), ...(deps.github && deps.tools === true ? { github: true, tools: true } : {}), ...(deps.github?.plans && deps.tools === true ? { plans: true } : {}), ...(deps.github && deps.code && deps.tools === true ? { code: true } : {}), ...(deps.github && deps.code?.study && deps.tools === true ? { study: true } : {}), ...(deps.gcloud && deps.tools === true ? { gcloud: true, tools: true } : {}), ...(deps.vendus && deps.tools === true ? { vendus: true, tools: true } : {}), ...(deps.house && deps.tools === true ? { house: true, tools: true } : {}), ...((deps.house?.blinds || deps.house?.changes) && deps.tools === true ? { houseControl: true } : {}), ...(deps.house?.changes && deps.tools === true ? { houseAll: true } : {}), ...(deps.gcloud?.db && deps.tools === true ? { gcloudDb: true } : {}), ...(deps.route && deps.route.mode !== "all" && deps.tools === true ? { routed: true } : {}), ...(deps.brief === true && deps.calendar && deps.tools === true ? { brief: true } : {}), ...(deps.github && deps.code?.fix && deps.tools === true ? { fix: true } : {}), ...(deps.github && deps.code?.tasks && deps.tools === true ? { tasks: true } : {}) };
     return { typed: barePrompt(name, extra), spoken: barePrompt(name, { spoken: true, maxSentences: max, pauses, ...extra }) };
   };
   const withoutProfile = prompts();
   let cached: { text: string; prompts: ReturnType<typeof prompts> } | undefined;
+  /** #290: the prompts for the other people of the household, by id and profile. */
+  const guestPrompts = new Map<string, { key: string; prompts: ReturnType<typeof prompts> }>();
 
   /**
    * The calendar for this turn (#100), or undefined when it isn't about the
@@ -853,6 +856,7 @@ export const makeBareAnswerer = (deps: {
     history: AnswerInput["history"],
     signal?: AbortSignal,
     onStep?: (step: PathStep) => void,
+    defaults?: readonly CalendarAccount[],
   ): Promise<{ readonly text: string; readonly lead?: string } | undefined> => {
     const calendar = deps.calendar;
     if (!calendar) return undefined;
@@ -915,7 +919,7 @@ export const makeBareAnswerer = (deps: {
       deps.log?.info("calendar not needed", { ms: Math.round(performance.now() - started) });
       return undefined;
     }
-    const read = await readAccounts(calendar.accounts ?? { personal: calendar.read }, range, undefined, signal);
+    const read = await readAccounts(calendar.accounts ?? { personal: calendar.read }, range, undefined, signal, defaults);
     if (!read.ok) {
       deps.log?.warn("calendar read failed", { code: read.error.code, reason: read.error.message });
       failed(read.error.code, shortRangeLabel(range));
@@ -963,7 +967,10 @@ export const makeBareAnswerer = (deps: {
                   : [HOUSE_NOW_TOOL, ...(deps.house?.blinds ? [HOUSE_BLINDS_TOOL] : []), ...(deps.house?.lights ? [HOUSE_LIGHTS_TOOL] : []), ...(deps.house?.read ? HOUSE_READ_TOOLS : []), ...(deps.house?.changes ? HOUSE_CHANGE_TOOLS : [])];
   const routing = deps.tools === true && deps.route !== undefined && deps.route.mode !== "all";
 
-  return async ({ question, history, onText, signal, spoken, onStep: onStepAsked, onReach, onOffered, now, remember, onToolSucceeded }) => {
+  return async ({ question, history, onText, signal, spoken, onStep: onStepAsked, onReach, onOffered, now, remember, onToolSucceeded, user }) => {
+    // #290: someone of his household who isn't him: her name, profile, memories, accounts and tools.
+    const guest = user && !user.main ? user : undefined;
+    const available: readonly ToolGroup[] = guest ? connectedGroups.filter((g) => guest.groups.includes(g)) : connectedGroups;
     /** #278: the current call's next step, put on any card it shows. */
     let thenOfCall: string | undefined;
     const onStep = onStepAsked
@@ -973,10 +980,18 @@ export const makeBareAnswerer = (deps: {
     const routeStarted = performance.now();
     const routerSaid =
       routing && deps.route?.mode === "model" && deps.route.router
-        ? deps.route.router({ question, history: history.map((t) => ({ role: t.role, text: t.text })), available: connectedGroups, ...(signal ? { signal } : {}) }).catch(() => undefined)
+        ? deps.route.router({ question, history: history.map((t) => ({ role: t.role, text: t.text })), available, ...(signal ? { signal } : {}) }).catch(() => undefined)
         : Promise.resolve(undefined);
     let system = withoutProfile;
-    if (deps.profile) {
+    if (guest) {
+      const key = guest.profile ?? "";
+      let kept = guestPrompts.get(guest.id);
+      if (kept?.key !== key) {
+        kept = { key, prompts: prompts(guest.profile, guest.name) };
+        guestPrompts.set(guest.id, kept);
+      }
+      system = kept.prompts;
+    } else if (deps.profile) {
       const profile = await deps.profile();
       if (!profile.ok) {
         // The error names the path, never the profile's content.
@@ -991,7 +1006,9 @@ export const makeBareAnswerer = (deps: {
     // Without tools (the local brain), code decides and words the date sentence, as before.
     const tools = deps.tools === true && (deps.calendar !== undefined || deps.gmail !== undefined || deps.memory !== undefined || deps.github !== undefined || deps.gcloud !== undefined || deps.vendus !== undefined || deps.house !== undefined || deps.drive !== undefined || deps.decisions !== undefined || deps.gaps !== undefined || deps.reminders !== undefined || deps.webSearch !== undefined || deps.talk !== undefined);
     // #107: this turn's memory: recent short-term notes go in the prompt; the rest is recalled on demand.
-    const memoryTurn = tools && deps.memory ? makeMemoryTurn(deps.memory, { question, remember: remember !== false, now, ...(onStep ? { onStep } : {}) }) : undefined;
+    // #290: each person sees only their own memories (his stay where they always were).
+    const memoryDeps = deps.memory ? { ...deps.memory, store: scopedMemoryStore(deps.memory.store, guest?.id) } : undefined;
+    const memoryTurn = tools && memoryDeps ? makeMemoryTurn(memoryDeps, { question, remember: remember !== false, now, ...(onStep ? { onStep } : {}) }) : undefined;
     const memoryCore = memoryTurn ? await memoryTurn.core() : undefined;
     // #68: his talk settings, in every answer (tools or not); spoken answers keep their own length.
     const talkNow = deps.talk ? talkLines(await deps.talk.get().catch(() => ({ language: "theirs", length: "default", tone: "default" }) as const), spoken === true) : undefined;
@@ -1007,7 +1024,7 @@ export const makeBareAnswerer = (deps: {
     // #116: approved skills are listed; drafts can be proposed. With memory (skills come from it).
     const skillTurn = memoryTurn && deps.skills ? makeSkillTurn({ ...deps.skills, ...(deps.log ? { log: deps.log } : {}) }, { ...(onStep ? { onStep } : {}) }) : undefined;
     const skillList = skillTurn && deps.skills ? skillsForPrompt(await deps.skills.store.list()) : undefined;
-    const calendar = tools ? undefined : await calendarTurn(question, history, signal, onStep);
+    const calendar = tools ? undefined : await calendarTurn(question, history, signal, onStep, guest?.accounts);
     // #146: which accounts are connected, checked now (a cheap file check), for "what can you see?".
     const connected = deps.connected ? connectedLine(await deps.connected().catch(() => ({}))) : undefined;
     // #127: which code he has notes on, and what's being studied, so he reads notes before asking the agent.
@@ -1017,13 +1034,13 @@ export const makeBareAnswerer = (deps: {
     const fresh = study?.refresh ? await study.refresh.freshness().catch(() => ({})) : {};
     const studied = study ? notesLine(notes, study.studies.active(), (n) => staleSuffix(n, fresh)) : undefined;
     // #175: the groups this question gets. Without routing, all that are connected.
-    let groups: readonly ToolGroup[] = connectedGroups;
+    let groups: readonly ToolGroup[] = available;
     if (tools && routing) {
       const apps = notes.flatMap((n) => [n.repo.split("/")[1] ?? "", n.folder.split("/").pop() ?? ""]).filter((a) => a !== "");
       const words = groupsByWords(question, apps);
       const lately = groupsUsedLately(history);
       const router = await routerSaid;
-      groups = pickGroups({ available: connectedGroups, words, lately, ...(router ? { router } : {}) });
+      groups = pickGroups({ available, words, lately, ...(router ? { router } : {}) });
       deps.log?.info("tools routed", { mode: deps.route?.mode ?? "all", words, lately, router: router ?? "no answer", offered: groups, ms: Math.round(performance.now() - routeStarted) });
     }
     if (signal?.aborted) return err({ code: "cancelled", message: "Cancelled." });
@@ -1041,7 +1058,7 @@ export const makeBareAnswerer = (deps: {
     const cap = spoken === true && !asksForDetail(question) ? makeSentenceCap(max) : undefined;
     /** The tools for these groups, always in the same order (memory and skills are always there). */
     const toolList = (on: readonly ToolGroup[]): readonly LlmTool[] => {
-      const missing = connectedGroups.filter((g) => !on.includes(g));
+      const missing = available.filter((g) => !on.includes(g));
       const list = [
         ...(on.includes("calendar") ? toolsOf("calendar") : []),
         ...(on.includes("gmail") ? toolsOf("gmail") : []),
@@ -1059,7 +1076,8 @@ export const makeBareAnswerer = (deps: {
         ...(on.includes("drive") ? toolsOf("drive") : []),
         ...(routing && missing.length > 0 ? [toolsMoreTool(missing)] : []),
       ];
-      return list;
+      // #290: the brief reads his email, so it isn't hers.
+      return guest ? list.filter((t) => t.name !== DAY_BRIEF_TOOL.name) : list;
     };
     const request: LlmRequest = {
       system: spoken === true ? system.spoken : system.typed,
@@ -1069,6 +1087,8 @@ export const makeBareAnswerer = (deps: {
         // Always: today's date, weekday and time where they are (#102).
         const suffix = [
           nowLine(now, deps.timeZone ?? deps.calendar?.timeZone ?? DEFAULT_TIME_ZONE),
+          // #290: who this is, and what the household did lately, when sharing is on.
+          ...(user?.lines ?? []),
           connected,
           studied,
           toolsSoFar(history),
@@ -1110,6 +1130,11 @@ export const makeBareAnswerer = (deps: {
       // The page's brain view (#130): only names Atlas offered, never the model's free text.
       if (offered.has(call.name)) onReach?.(call.name);
       const group = groupOfTool(call.name);
+      // #290: only her tools for someone who isn't him, whatever the model asks for; the brief reads his email.
+      if (guest && ((group && !available.includes(group)) || call.name === DAY_BRIEF_TOOL.name)) {
+        onStep?.({ kind: "tool", name: call.name, args: "", by: "model", ok: false, error: "refused: not hers" });
+        return { callId: call.id, content: `Refused: that's ${deps.userName ?? "the main user"}'s, not ${guest.name}'s. Say so in one sentence.`, isError: true };
+      }
       if (group) used.add(group);
       if (call.name === DAY_BRIEF_TOOL.name && deps.brief === true && deps.calendar) {
         const started = performance.now();
@@ -1136,7 +1161,7 @@ export const makeBareAnswerer = (deps: {
       }
       if (call.name === TOOLS_MORE && routing) {
         const asked = typeof (call.input as Record<string, unknown> | undefined)?.group === "string" ? String((call.input as Record<string, unknown>).group) : "";
-        const g = connectedGroups.find((x) => x === asked && !groups.includes(x));
+        const g = available.find((x) => x === asked && !groups.includes(x));
         if (!g) {
           onStep?.({ kind: "tool", name: TOOLS_MORE, args: "", by: "model", ok: false, error: "refused: not a missing group" });
           return { callId: call.id, content: `Refused: ${groups.includes(asked as ToolGroup) ? "that group is already offered; use its tools" : "not a group you can add"}.`, isError: true };
@@ -1529,7 +1554,7 @@ export const makeBareAnswerer = (deps: {
       const which = isCalendarAccount(input.account) ? input.account : undefined;
       const label = `${which ? `${which} · ` : ""}${shortRangeLabel(range)}`;
       const started = performance.now();
-      const read = await readAccounts(cal.accounts ?? { personal: cal.read }, range, which, signal);
+      const read = await readAccounts(cal.accounts ?? { personal: cal.read }, range, which, signal, guest?.accounts);
       if (!read.ok) {
         deps.log?.warn("calendar read failed", { code: read.error.code, reason: read.error.message });
         onStep?.({ kind: "tool", name: "calendar_read", args: label, by: "model", ok: false, error: read.error.code });

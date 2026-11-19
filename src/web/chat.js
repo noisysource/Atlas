@@ -69,9 +69,10 @@ export const toolsRan = (path) =>
  * `spoken`: a spoken turn (answered for speed, #76); `stickyContext`: the
  * context the spoken conversation was last answered in (used only when the
  * server has STICKY_CONTEXT=on); `brain`: "claude" or "local" (#88).
- * @param {{ question: string, context?: string, history: readonly Turn[], conversationId?: string, remember?: boolean, spoken?: boolean, stickyContext?: string, brain?: "claude" | "local" | "google" }} input
+ * @param {{ question: string, context?: string, history: readonly Turn[], conversationId?: string, remember?: boolean, spoken?: boolean, stickyContext?: string, brain?: "claude" | "local" | "google", user?: string }} input
+ * `user` (#290): who's talking, sent only when it isn't the main user.
  */
-export const buildAskBody = ({ question, context, history, conversationId, remember, spoken, stickyContext, brain }) => ({
+export const buildAskBody = ({ question, context, history, conversationId, remember, spoken, stickyContext, brain, user }) => ({
   question: question.trim().slice(0, LIMITS.questionChars),
   ...(context ? { context } : {}),
   ...(history.length > 0 ? { history: [...history] } : {}),
@@ -80,6 +81,7 @@ export const buildAskBody = ({ question, context, history, conversationId, remem
   ...(spoken ? { spoken: true } : {}),
   ...(spoken && stickyContext && !context ? { stickyContext } : {}),
   ...(brain ? { brain } : {}),
+  ...(user ? { user } : {}),
 });
 
 /** @typedef {"claude" | "local" | "google"} Brain */

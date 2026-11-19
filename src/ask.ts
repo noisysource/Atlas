@@ -20,7 +20,9 @@ import { makeHonestyGuard } from "./answer/honesty.js";
 import { calendarIntent, cameFromRead } from "./calendar/intent.js";
 import { resolveDatePhrase } from "./calendar/dates.js";
 import { clarifyOptions, handoffMessage } from "./contexts.js";
-import type { AskRequest, AskResponse, Context, ContextOption, Deps, PathStep, Turn } from "./types.js";
+import type { AnswerUser, AskRequest, AskResponse, Context, ContextOption, Deps, PathStep, Turn } from "./types.js";
+import { userOf, whoLines } from "./users.js";
+import { householdLines } from "./household.js";
 
 export const clarifyMessage = (options: readonly ContextOption[]): string => {
   const names = options.map((o) => o.name);
@@ -176,8 +178,10 @@ const handleBare = async (deps: Deps, bare: Deps["answer"], request: AskRequest,
   }
   const personal = deps.contexts.find((c) => c.id === "personal");
   if (!personal) return { type: "error", message: GENERIC_ERROR };
+  const user = await answerUser(deps, request.user);
   const answer = await bare({
     context: personal,
+    ...(user ? { user } : {}),
     question: request.question,
     history: request.history ?? [],
     memories: [],
@@ -397,4 +401,25 @@ const answerChecked = async (deps: Deps, request: AskRequest, meta: AskMeta, gua
     deps.log.error("ask failed", { errorName: e instanceof Error ? e.name : typeof e });
     return { type: "error", message: GENERIC_ERROR };
   }
+};
+
+/**
+ * #290: who's talking, for the answer: her name, profile, accounts and tools,
+ * and what the rest of the household had Atlas do (when sharing is on). The
+ * main user with no one else in the household and sharing off: undefined, as
+ * before.
+ */
+export const answerUser = async (deps: Pick<Deps, "users" | "household" | "now">, id: string | undefined): Promise<AnswerUser | undefined> => {
+  const list = deps.users?.list ?? [];
+  const main = list[0];
+  if (!main) return undefined;
+  const user = userOf(list, id);
+  const shared = deps.household ? await deps.household.sharing().catch(() => false) : false;
+  const lines = [
+    whoLines(user, main),
+    shared && deps.household ? householdLines(await deps.household.entries().catch(() => []), user, list, deps.now(), deps.users?.timeZone ?? "Europe/Lisbon") : undefined,
+  ].filter((l): l is string => l !== undefined);
+  if (user.main && lines.length === 0) return undefined;
+  const profile = user.main ? undefined : await deps.users?.readProfile(user).catch(() => undefined);
+  return { id: user.id, name: user.name, main: user.main, accounts: user.accounts, groups: user.groups, ...(profile ? { profile } : {}), ...(lines.length > 0 ? { lines } : {}) };
 };

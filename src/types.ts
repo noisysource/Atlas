@@ -5,6 +5,10 @@
 
 import type { Notice, Notices } from "./proactive.js";
 import type { ConversationStore } from "./conversation.js";
+import type { GoogleAccount } from "./google-accounts.js";
+import type { ToolGroup } from "./answer/tool-groups.js";
+import type { Household } from "./household.js";
+import type { User } from "./users.js";
 import type { Fixes } from "./code/fix.js";
 import type { Tasks } from "./code/tasks.js";
 import type { MorningBriefs } from "./morning.js";
@@ -102,6 +106,8 @@ export type AskRequest = {
   readonly stickyContext?: ContextId;
   /** Which brain answers (#88); Claude when not given. */
   readonly brain?: Brain;
+  /** #290: who's talking (a user id); the main user when not given. */
+  readonly user?: string;
 };
 
 export type Classification =
@@ -292,6 +298,23 @@ export type AnswerInput = {
   readonly onReach?: (tool: string) => void;
   /** The tools offered to the brain this turn (#141), once, before it answers. */
   readonly onOffered?: (tools: readonly string[]) => void;
+  /** #290: who's talking; the main user when undefined. */
+  readonly user?: AnswerUser;
+};
+
+/** #290: the person talking to Atlas, as an answer sees them. */
+export type AnswerUser = {
+  readonly id: string;
+  readonly name: string;
+  readonly main: boolean;
+  /** Their profile's text (someone who isn't him; his comes from PROFILE as before). */
+  readonly profile?: string;
+  /** Google accounts read by default for them. */
+  readonly accounts: readonly GoogleAccount[];
+  /** The tool groups they get. */
+  readonly groups: readonly ToolGroup[];
+  /** Lines for this turn's prompt: who this is, and what the household did lately. */
+  readonly lines?: readonly string[];
 };
 
 /**
@@ -402,6 +425,10 @@ export type Deps = {
   readonly morningBrief?: MorningBriefs;
   /** #288: the conversation, kept across restarts. */
   readonly conversation?: ConversationStore;
+  /** #290: who Atlas talks to (the main user first), and where their profiles are. */
+  readonly users?: { readonly list: readonly User[]; readonly readProfile: (user: User) => Promise<string | undefined>; readonly timeZone: string };
+  /** #290: what each person had Atlas do, shared between them when the household's sharing is on. */
+  readonly household?: Household;
   /** #271 PROACTIVE=on: Atlas speaks up on his own. main.ts starts the watchers; the page asks GET /notices. */
   readonly proactive?: {
     readonly notices: Notices;

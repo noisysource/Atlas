@@ -63,3 +63,6 @@ data/skills.json
 data/google-drive-*.json
 # #288: the conversation, kept across restarts (personal), local only
 data/conversations/
+# #290: the household: other people's profiles, and what each had Atlas do (personal data)
+data/profiles/
+data/household/

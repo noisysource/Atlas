@@ -1376,6 +1376,23 @@ Confirmed (2026-11-12):
   passed), falling back to the API key when there's no login. Guests never
   run on his plan.
 
+- **The household (#290):** Atlas is Renato's, shared with Marisa.
+  `ATLAS_USERS` (in `.env`, e.g. `marisa=Marisa;accounts=marisa;tools=calendar,house`)
+  lists the others; Renato is always first, with every tool. The page
+  keeps who it's talking to (settings, or saying "it's Marisa" / "sou a
+  Marisa") and sends `user` with each question. For someone who isn't him:
+  her name and profile (`data/profiles/<id>.md`, gitignored) in the prompt,
+  plus a `<who>` block; her Google accounts read by default; only her tool
+  groups offered, and code refuses any other tool (and the day brief, which
+  reads his email); her memories under `<context>@<id>` in the same store,
+  so his stay where they were and neither sees the other's (the Memories
+  panel shows his). Each person has their own kept conversation.
+  **Sharing** is one household switch, off by default: while on, every card
+  someone OKs is written down (`data/household/`, 0600) and the other's
+  prompt gets the last 7 days of them, to check before booking or doing
+  something twice; turning it off clears the log. Still shared, for now:
+  skills, decisions, reminders and talk settings; proactive notices are his.
+
 ## Out of scope for M0
 
 Vendus, Cloud Run deployment or the Pi (#53), real memory (#24, #56),

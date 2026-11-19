@@ -18,6 +18,7 @@ import { makeTraceView } from "./trace.js";
 import { atEnd, clock, conversationText, inlineMarks } from "./terminal-lib.js";
 import { CARD_DONE } from "./turn-lib.js";
 import { cardAnswer } from "./card-lib.js";
+import { currentPerson, placeholderFor, switchPhrase } from "./users-lib.js";
 import {
   CONVERSATION,
   LANGUAGES,
@@ -534,6 +535,8 @@ const confirmCard = (proposal) => {
       const stillWaiting = [...document.querySelectorAll('.confirm[data-pending="true"]')].some((c) => NODE_OF_CARD[/** @type {keyof typeof NODE_OF_CARD} */ (/** @type {HTMLElement} */ (c).dataset.kind ?? "")] === node);
       if (node && !stillWaiting) brainView.decided(/** @type {import("./brain-lib.js").NodeId} */ (node), outcome);
       markDecided(card, outcome);
+      // #290: written down for the household (kept only while sharing is on).
+      if (decision === "yes" && result.ok) people.record(kind, proposal.label);
       if (auto) {
         // #269: no new message and nothing said aloud: the line itself says what happened.
         what.textContent = text;
@@ -1291,6 +1294,7 @@ const ask = async (question, context, hidden = false) => {
           spoken: timing.spoken,
           stickyContext: state.lastContext,
           brain: state.brain,
+          ...(people.asking() ? { user: people.asking() } : {}),
         }),
       ),
       signal: controller.signal,
@@ -1467,6 +1471,12 @@ const submit = (raw, how = {}) => {
     return;
   }
   input.value = "";
+  // #290: "it's Marisa" / "sou a Marisa": her conversation, then the question goes on as hers.
+  const someone = people.saysWho(text);
+  if (someone) {
+    void people.switchTo(someone.id, how.spoken === true).then(() => submit(text, how));
+    return;
+  }
   // #224: "yes" / "no" (spoken or typed) answers the card waiting for an OK, as if its button was pressed.
   const card = latestPendingCard();
   const said = card ? cardAnswer(text, { yes: card.dataset.yes, no: card.dataset.no }) : undefined;
@@ -2423,13 +2433,15 @@ void fetch("/brains")
 // #288: the conversation, kept across restarts. When the page opens it asks
 // for the last one back (a restart, a deploy or a reload carries on where he
 // left off); after each turn it sends the last turns to be kept.
-{
-  /** Who the conversation is for (one file each; more than one person comes with #289). */
-  const who = () => "renato";
+// #290: one per person; the page asks for whoever is talking.
+const keeper = (() => {
+  const who = () => people.who();
   /** @type {import("./chat.js").Turn[] | undefined} */
   let saved;
   let restoring = true;
   const restore = async () => {
+    restoring = true;
+    saved = undefined;
     try {
       const res = await fetch(`/conversation?who=${encodeURIComponent(who())}`, { cache: "no-store" });
       if (!res.ok) return;
@@ -2465,7 +2477,102 @@ void fetch("/brains")
       body: JSON.stringify({ conversationId: state.conversationId, history: state.history }),
     }).catch(() => undefined);
   };
-  void restore();
   setInterval(keep, 2_000);
   window.addEventListener("pagehide", keep);
-}
+  return { keep, restore };
+})();
+
+// #290: who's talking. Atlas is shared with the household: each person has
+// their own conversation (and, on Atlas's side, memories, profile and tools).
+// The settings pick who; saying "it's Marisa" switches too. One switch shares
+// what each of them has Atlas do, so he doesn't book or do it twice.
+const people = (() => {
+  /** @type {import("./users-lib.js").Person[]} */
+  let list = [];
+  /** @type {import("./users-lib.js").Person | undefined} */
+  let current;
+  const pick = /** @type {HTMLSelectElement} */ (byId("user"));
+  const sharingButton = /** @type {HTMLButtonElement} */ (byId("sharing"));
+  const renderSharing = (/** @type {boolean} */ on) => {
+    sharingButton.setAttribute("aria-pressed", String(on));
+    sharingButton.textContent = `🤝 Sharing: ${on ? "on" : "off"}`;
+  };
+  const show = () => {
+    input.placeholder = placeholderFor(current, list);
+    document.body.dataset.user = current?.id ?? "";
+    pick.value = current?.id ?? "";
+  };
+  /**
+   * Moves the page to someone else's conversation: his is kept, hers comes back.
+   * `spoken`: she said who she is aloud, so the voice conversation goes on.
+   * @param {string} id @param {boolean} [spoken]
+   */
+  const switchTo = async (id, spoken = false) => {
+    const next = list.find((p) => p.id === id);
+    if (!next || next.id === current?.id) return;
+    keeper.keep();
+    if (!spoken) endVoice("reset");
+    stopSpeaking("new-conversation");
+    retirePending();
+    current = next;
+    save("atlas.user", next.id);
+    state.history = [];
+    state.conversationId = newConversationId(randomBytes);
+    state.lastContext = undefined;
+    state.remember = true;
+    transcript.replaceChildren();
+    show();
+    renderControls();
+    await keeper.restore();
+    setStatus(`Talking to ${next.name}.`);
+  };
+  pick.addEventListener("change", () => void switchTo(pick.value));
+  sharingButton.addEventListener("click", async () => {
+    const on = sharingButton.getAttribute("aria-pressed") !== "true";
+    try {
+      const res = await fetch("/household/sharing", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ on }) });
+      if (!res.ok) throw new Error("refused");
+      renderSharing(on);
+      setStatus(on ? "Sharing on: what each of you has Atlas do is shared from now." : "Sharing off: nothing is shared, and what was kept is cleared.");
+    } catch {
+      setStatus("Couldn't change sharing.");
+    }
+  });
+  const ready = (async () => {
+    try {
+      const res = await fetch("/users", { cache: "no-store" });
+      if (!res.ok) return;
+      const body = await res.json();
+      list = Array.isArray(body?.users) ? body.users.filter((/** @type {any} */ p) => typeof p?.id === "string" && typeof p?.name === "string") : [];
+      current = currentPerson(load("atlas.user"), list);
+      pick.replaceChildren(...list.map((p) => Object.assign(document.createElement("option"), { value: p.id, textContent: p.name })));
+      byId("user-pick").hidden = list.length < 2;
+      sharingButton.hidden = list.length < 2 || typeof body?.sharing !== "boolean";
+      renderSharing(body?.sharing === true);
+      show();
+    } catch {
+      // Atlas is still starting, or has no household: just him.
+    }
+  })();
+  return {
+    ready,
+    /** The id for the conversation file: whoever is talking. */
+    who: () => current?.id ?? "renato",
+    /** The id sent with a question, when it isn't the main user (so his requests are as before). */
+    asking: () => (current && list[0] && current.id !== list[0].id ? current.id : undefined),
+    /** Someone else of the household saying who they are. @param {string} text */
+    saysWho: (text) => {
+      const p = list.length > 1 ? switchPhrase(text, list) : undefined;
+      return p && p.id !== current?.id ? p : undefined;
+    },
+    switchTo,
+    /** @param {string} kind @param {string} label */
+    record: (kind, label) => {
+      if (list.length < 2 || sharingButton.getAttribute("aria-pressed") !== "true") return;
+      void fetch("/household/record", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ who: current?.id, kind, label: label.slice(0, 200) }) }).catch(() => undefined);
+    },
+  };
+})();
+
+// Once it knows who's talking, the page asks for their conversation back.
+void people.ready.then(() => keeper.restore());

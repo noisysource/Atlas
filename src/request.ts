@@ -58,6 +58,11 @@ const AskRequestSchema = z
       .optional(),
     // Only the two configured brains (#88); never a model name.
     brain: z.enum(["claude", "local", "google"], { error: 'brain must be "claude", "local" or "google"' }).optional(),
+    // #290: who's talking, one of ATLAS_USERS (checked by the ask handler); the main user when not given.
+    user: z
+      .string()
+      .regex(/^[a-z][a-z0-9-]{0,23}$/, { error: "user must be a user id" })
+      .optional(),
   })
   .strict();
 
@@ -71,7 +76,7 @@ export const parseAskRequest = (body: unknown): Result<AskRequest, string> => {
         .join("; "),
     );
   }
-  const { question, context, history, conversationId, remember, spoken, stickyContext, brain } = parsed.data;
+  const { question, context, history, conversationId, remember, spoken, stickyContext, brain, user } = parsed.data;
   return ok({
     question,
     ...(context !== undefined ? { context: context as ContextId } : {}),
@@ -81,5 +86,6 @@ export const parseAskRequest = (body: unknown): Result<AskRequest, string> => {
     ...(spoken !== undefined ? { spoken } : {}),
     ...(stickyContext !== undefined ? { stickyContext: stickyContext as ContextId } : {}),
     ...(brain !== undefined ? { brain } : {}),
+    ...(user !== undefined ? { user } : {}),
   });
 };

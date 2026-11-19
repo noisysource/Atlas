@@ -13,6 +13,7 @@ import { openSqliteMemoryStore, startMemoryPurge } from "./memory-sqlite.js";
 import { msUntil, startNightlyIntrospection } from "./introspection.js";
 import { startDailyAt } from "./morning.js";
 import { makeMemoryStoreInMemory } from "./memory-store.js";
+import { scopedMemoryStore } from "./memory-scope.js";
 import { localHosts, makeServer } from "./server.js";
 import { warmOllama } from "./llm/ollama.js";
 import { makeTurnRegistry } from "./turns.js";
@@ -168,7 +169,8 @@ const app = makeServer(deps.ok ? deps.value : refuse("unreachable"), {
   },
   ...(cfg.env === "production" ? {} : { allowedHosts: localHosts(cfg.port) }),
   web: web.ok && vendor.ok ? { ...web.value, ...vendor.value } : refuse("unreachable"),
-  memories: memoryStore,
+  // #290: the Memories panel shows his; someone else's stay out of it.
+  memories: scopedMemoryStore(memoryStore, undefined),
 });
 
 const server = serve({ fetch: app.fetch, hostname: cfg.host, port: cfg.port }, (info) => {

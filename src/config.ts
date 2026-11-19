@@ -258,6 +258,8 @@ export type Config = {
   readonly toolRouter: "model" | "rules" | "all";
   /** Your name for the persona (ATLAS_USER_NAME, in the gitignored .env); none: "the person you're talking to". */
   readonly userName: string | undefined;
+  /** #290 ATLAS_USERS: the rest of the household (users.ts says how it's written); empty: only him. */
+  readonly users: string | undefined;
   /** Names and phrases memories must never contain (colleagues and the like). Gitignored; missing is fine. */
   readonly neverRememberPath: string;
   readonly secrets: {
@@ -366,6 +368,8 @@ const EnvSchema = z.object({
       .regex(/^[A-Za-z0-9._:/-]{1,100}$/, { error: "must be an Ollama model name, e.g. qwen3:8b" })
       .optional(),
   ),
+  // #290: the rest of the household, e.g. "marisa=Marisa;accounts=marisa;tools=calendar,house" (parsed in users.ts).
+  ATLAS_USERS: z.string().max(1000).optional(),
   ATLAS_USER_NAME: z.preprocess(
     (v) => (typeof v === "string" && v.trim() === "" ? undefined : v),
     z
@@ -697,6 +701,7 @@ export const loadConfig = (given: Env): Result<Config, string> => {
     codeAgent: { enabled: e.GITHUB === "on" && e.CODE_AGENT === "on", maxUsd: e.CODE_AGENT_MAX_USD, maxTurns: e.CODE_AGENT_MAX_TURNS, reposPath: "data/repos", auth: e.CODE_AGENT_AUTH, model: e.CODE_AGENT_MODEL, study: { maxUsd: e.CODE_STUDY_MAX_USD, maxTurns: e.CODE_STUDY_MAX_TURNS, notesPath: "data/code" }, refresh: { mode: e.CODE_REFRESH, maxStudies: e.CODE_REFRESH_MAX }, tasks: { enabled: e.GITHUB === "on" && e.CODE_AGENT === "on" && e.CODE_TASKS === "on", maxUsd: e.CODE_TASK_MAX_USD, maxTurns: e.CODE_TASK_MAX_TURNS, path: "data/tasks" }, fix: { enabled: e.GITHUB === "on" && e.CODE_AGENT === "on" && e.CODE_FIX === "on", maxUsd: e.CODE_FIX_MAX_USD, maxTurns: e.CODE_FIX_MAX_TURNS, writeTokensPath: "data/github-write-tokens.json", fixesPath: "data/fixes" } },
     ollamaThink: e.OLLAMA_THINK === "on",
     userName: e.ATLAS_USER_NAME,
+    users: e.ATLAS_USERS,
     tts: { provider: e.TTS_PROVIDER ?? DEFAULTS.ttsProvider, voice: e.TTS_VOICE ?? "", kokoroUrl, piperUrl },
     stt: { provider: e.STT_PROVIDER ?? DEFAULTS.sttProvider, whisperUrl, hintsPath: e.WHISPER_HINTS_PATH ?? DEFAULTS.whisperHintsPath },
     turn: {

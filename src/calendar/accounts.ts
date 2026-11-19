@@ -33,9 +33,17 @@ export type AccountsRead = {
  * undefined), in parallel. Fails only when no account could be read: then
  * with the most useful error (a real failure over "not connected").
  */
-export const readAccounts = async (readers: CalendarReaders, range: DayRange, which: CalendarAccount | undefined, signal?: AbortSignal): Promise<Result<AccountsRead, CalendarError>> => {
+export const readAccounts = async (
+  readers: CalendarReaders,
+  range: DayRange,
+  which: CalendarAccount | undefined,
+  signal?: AbortSignal,
+  /** #290: whose calendars a read without an account covers, when it isn't him talking. */
+  defaults?: readonly CalendarAccount[],
+): Promise<Result<AccountsRead, CalendarError>> => {
   // Without an account: his own calendars only (#245); someone else's only when asked by name.
-  const accounts = CALENDAR_ACCOUNTS.filter((a) => (which === undefined ? MY_ACCOUNTS.includes(a) : a === which) && readers[a] !== undefined);
+  const own = defaults && defaults.length > 0 ? defaults : MY_ACCOUNTS;
+  const accounts = CALENDAR_ACCOUNTS.filter((a) => (which === undefined ? own.includes(a) : a === which) && readers[a] !== undefined);
   if (accounts.length === 0)
     return err({ code: "not_connected", message: which ? `The ${which} calendar isn't connected: run npm run calendar:connect -- ${which}` : "No calendar is connected" });
   const results = await Promise.all(

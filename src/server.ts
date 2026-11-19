@@ -32,6 +32,7 @@ import { registerTtsRoutes } from "./tts-routes.js";
 import type { TtsProviders } from "./tts/registry.js";
 import { parseAskRequest } from "./request.js";
 import type { Deps } from "./types.js";
+import { MAIN_ID, userOf } from "./users.js";
 import { WEB_SECURITY_HEADERS, type WebAssets } from "./web.js";
 
 /** Enough for a 2000-char question plus 20 turns of 4000 chars, with room for JSON overhead. */
@@ -614,7 +615,8 @@ export const makeServer = (
   // #288: the conversation, kept across restarts: the page saves it after each turn and asks for it when it opens.
   const conversation = deps.conversation;
   if (conversation) {
-    const whoOf = (v: string | undefined): string => (v && /^[a-z][a-z0-9-]{0,30}$/.test(v) ? v : "renato");
+    // #290: one of the household, else the main user.
+    const whoOf = (v: string | undefined): string => (deps.users ? userOf(deps.users.list, v).id : v && /^[a-z][a-z0-9-]{0,30}$/.test(v) ? v : MAIN_ID);
     app.get("/conversation", async (c) => c.json({ conversation: (await conversation.read(whoOf(c.req.query("who")))) ?? null }));
     app.put(
       "/conversation",
@@ -630,6 +632,38 @@ export const makeServer = (
         return c.json({ ok: true });
       },
     );
+  }
+
+  // #290: who Atlas can talk to, and the household's sharing switch.
+  const users = deps.users;
+  if (users) {
+    const household = deps.household;
+    app.get("/users", async (c) =>
+      c.json({ users: users.list.map((u) => ({ id: u.id, name: u.name })), sharing: household ? await household.sharing().catch(() => false) : null }),
+    );
+    if (household) {
+      const small = bodyLimit({ maxSize: 1024, onError: (c) => c.json(errorBody("The request is too large."), 413) });
+      const jsonOnly = (route: string) => async (c: Context, next: () => Promise<void>) => {
+        if (!isJson(c.req.header("content-type"))) return c.json(errorBody(`POST ${route} needs Content-Type: application/json.`), 415);
+        await next();
+        return undefined;
+      };
+      app.post("/household/sharing", jsonOnly("/household/sharing"), small, async (c) => {
+        const body = (await c.req.json().catch(() => undefined)) as { on?: unknown } | undefined;
+        if (typeof body?.on !== "boolean") return c.json(errorBody("Send { on: true | false }."), 400);
+        await household.setSharing(body.on);
+        deps.log.info("household sharing", { on: body.on });
+        return c.json({ ok: true, sharing: body.on });
+      });
+      // The page writes down what someone OKed; nothing is kept while sharing is off.
+      app.post("/household/record", jsonOnly("/household/record"), small, async (c) => {
+        const body = (await c.req.json().catch(() => undefined)) as { who?: unknown; kind?: unknown; label?: unknown } | undefined;
+        if (typeof body?.label !== "string" || body.label.trim() === "" || typeof body.kind !== "string" || !/^[a-z][a-z-]{0,23}$/.test(body.kind)) return c.json(errorBody("Send { who, kind, label }."), 400);
+        const who = userOf(users.list, typeof body.who === "string" ? body.who : undefined).id;
+        const kept = await household.record({ who, kind: body.kind, label: body.label }).catch(() => false);
+        return c.json({ ok: true, kept });
+      });
+    }
   }
 
   // #271: what Atlas wants to tell him, since the last one the page has.
