@@ -12,7 +12,7 @@ import { makeJsonLogger } from "../src/log.js";
 import { makePrecheck } from "../src/precheck.js";
 import { ok } from "../src/result.js";
 import { makeServer } from "../src/server.js";
-import type { Deps } from "../src/types.js";
+import type { ContextId, Deps } from "../src/types.js";
 
 const conv = { conversationId: "0f3a9c1e2b4d5e6f", history: [{ role: "user" as const, text: "close the blinds" }, { role: "assistant" as const, text: "Closed.", tools: ["house_blinds → moved"] }] };
 
@@ -38,7 +38,7 @@ describe("the conversation, kept", () => {
     const deps: Deps = {
       contexts: contexts.value,
       precheck: makePrecheck(contexts.value),
-      classify: async () => ({ kind: "context", contextId: "personal" }),
+      classify: async () => ({ kind: "context", contextId: "personal" as ContextId }),
       answer: async () => ok({ kind: "answer", text: "x" }),
       memory: { loadMemories: async () => [], wrapUp: async () => undefined },
       isAnswered: () => true,
