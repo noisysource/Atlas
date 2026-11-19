@@ -11,16 +11,30 @@
     <canvas id="universe" aria-hidden="true"></canvas>
     <header>
       <h1>Atlas</h1>
-      <button id="settings-toggle" type="button" aria-expanded="false" aria-controls="settings" title="Settings">
-        <span aria-hidden="true">⚙</span><span class="visually-hidden">Settings</span>
+      <button id="settings-toggle" type="button" aria-expanded="false" aria-controls="side" title="Settings, tools, skills, memory and costs">
+        <span aria-hidden="true">⚙</span><span class="visually-hidden">Open the panel</span>
       </button>
-      <div id="settings" class="settings" role="region" aria-label="Settings" hidden>
-        <p class="settings-title">settings</p>
+    </header>
+
+    <!-- #300: the panel on the right, like OpenJarvis's: settings, tools, skills, memory and costs. -->
+    <aside id="side" class="side" aria-label="Atlas's panel" hidden>
+      <div class="side-head">
+        <div class="side-tabs" role="tablist" aria-label="Panel">
+          <button type="button" role="tab" data-tab="settings" aria-selected="true">Settings</button>
+          <button type="button" role="tab" data-tab="tools" aria-selected="false">Tools</button>
+          <button type="button" role="tab" data-tab="skills" aria-selected="false" id="skills" hidden>Skills</button>
+          <button type="button" role="tab" data-tab="memory" aria-selected="false" id="memories">Memory <span id="memories-badge" class="badge" hidden></span></button>
+          <button type="button" role="tab" data-tab="costs" aria-selected="false" id="costs">Costs</button>
+        </div>
+        <button id="side-close" type="button" aria-label="Close the panel">✕</button>
+      </div>
+      <section id="settings" class="settings side-tab" data-tab="settings" role="tabpanel" aria-label="Settings">
         <label id="user-pick" hidden>
           <span class="visually-hidden">Talking to</span>
           <select id="user" aria-label="Who's talking to Atlas" title="Who's talking: each person has their own conversation, memories and tools. Saying &quot;it's Marisa&quot; switches too."></select>
         </label>
         <button id="sharing" type="button" aria-pressed="false" hidden title="When on, what each of you has Atlas do is shared, so he doesn't book or do it twice">🤝 Sharing: off</button>
+        
         <label>
           <span class="visually-hidden">Language</span>
           <select id="language" aria-label="Language">
@@ -37,31 +51,12 @@
         <button id="mute" type="button" aria-pressed="false">🔊 Sound on</button>
         <button id="read-typed" type="button" class="small" aria-pressed="false" title="Typed questions get text only. Turn on to have typed replies read aloud too.">🔈 Read typed replies: off</button>
         <button id="remember" type="button" aria-pressed="true" title="Turn off to keep this conversation out of memory">🧠 Remembering</button>
-        <button id="memories" type="button" aria-haspopup="dialog">
-          Memories <span id="memories-badge" class="badge" hidden></span>
-        </button>
-        <button id="skills" type="button" aria-haspopup="dialog" hidden>✨ Skills</button>
         <button id="codemaps" type="button" aria-haspopup="dialog">🗺 Code maps</button>
-        <button id="costs" type="button" aria-haspopup="dialog" title="What each service Atlas uses costs">💲 Costs</button>
         <button id="copy-all" type="button" title="Copy the whole conversation as text">⧉ Copy all</button>
         <button id="new-conversation" type="button">New conversation</button>
-      </div>
-    </header>
-
-    <dialog id="memories-panel" aria-labelledby="memories-title">
-      <div class="panel-head">
-        <h2 id="memories-title">What Atlas remembers</h2>
-        <button id="memories-close" type="button" aria-label="Close">✕</button>
-      </div>
-      <p class="note">
-        Saved automatically after answers, within the memory rules. Delete anything you don't want kept, or turn
-        off 🧠 Remembering for a conversation. Deleting is permanent.
-      </p>
-      <p id="memories-status" class="note" role="status"></p>
-      <div id="memories-list"></div>
-    </dialog>
-
-    <dialog id="skills-panel" aria-labelledby="skills-title">
+      </section>
+      <section id="tools-tab" class="side-tab" data-tab="tools" role="tabpanel" aria-label="Tools" hidden></section>
+      <div class="side-tab" data-tab="skills" role="tabpanel" hidden id="skills-panel" aria-labelledby="skills-title">
       <div class="panel-head">
         <h2 id="skills-title">Atlas's skills</h2>
         <button id="skills-close" type="button" aria-label="Close">✕</button>
@@ -72,7 +67,21 @@
       </p>
       <p id="skills-status" class="note" role="status"></p>
       <div id="skills-list"></div>
-    </dialog>
+    </div>
+      <div class="side-tab" data-tab="memory" role="tabpanel" hidden id="memories-panel" aria-labelledby="memories-title">
+      <div class="panel-head">
+        <h2 id="memories-title">What Atlas remembers</h2>
+        <button id="memories-close" type="button" aria-label="Close">✕</button>
+      </div>
+      <p class="note">
+        Saved automatically after answers, within the memory rules. Delete anything you don't want kept, or turn
+        off 🧠 Remembering for a conversation. Deleting is permanent.
+      </p>
+      <p id="memories-status" class="note" role="status"></p>
+      <div id="memories-list"></div>
+    </div>
+      <div class="side-tab" data-tab="costs" role="tabpanel" hidden id="costs-panel" aria-label="Costs"></div>
+    </aside>
 
     <div class="layout">
       <section id="brain-view" class="brain" aria-label="What Atlas is reaching for" data-working="false"></section>
@@ -107,6 +116,5 @@
       </div>
     </div>
       <dialog id="codemap" aria-label="Code map"></dialog>
-      <dialog id="costs-panel" aria-label="Costs"></dialog>
   </body>
 </html>

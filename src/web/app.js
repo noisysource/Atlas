@@ -8,6 +8,7 @@ import { showMorningBrief } from "./morning.js";
 import { startTasksPanel, taskGlance } from "./tasks.js";
 import { startRemindersPanel } from "./reminders.js";
 import { makeCostsView } from "./costs.js";
+import { renderTools } from "./tools-tab.js";
 import { makeLivePlayer, runLiveTurn } from "./live.js";
 import { makeBrainView } from "./brain.js";
 import { startUniverse } from "./universe.js";
@@ -177,7 +178,6 @@ const autoNote = byId("auto-note");
 const rememberButton = /** @type {HTMLButtonElement} */ (byId("remember"));
 const memoriesButton = /** @type {HTMLButtonElement} */ (byId("memories"));
 const memoriesBadge = byId("memories-badge");
-const memoriesPanel = /** @type {HTMLDialogElement} */ (byId("memories-panel"));
 const memoriesClose = /** @type {HTMLButtonElement} */ (byId("memories-close"));
 const memoriesList = byId("memories-list");
 const memoriesStatus = byId("memories-status");
@@ -323,8 +323,8 @@ const codeMapView = makeCodeMapView(/** @type {HTMLDialogElement} */ (byId("code
 byId("codemaps").addEventListener("click", () => void codeMapView.open());
 
 // #247: what each service costs, per use or fixed.
-const costsView = makeCostsView(/** @type {HTMLDialogElement} */ (byId("costs-panel")));
-byId("costs").addEventListener("click", () => costsView.open());
+// #300: the costs live in the panel's Costs tab.
+const costsView = makeCostsView(byId("costs-panel"), { show: () => side.open("costs"), close: () => side.close() });
 
 // #143: how he got there, for the current answer, as a tree that grows while he works.
 const traceView = makeTraceView(brainView.traceSlot);
@@ -357,20 +357,82 @@ startUniverse(/** @type {HTMLCanvasElement} */ (byId("universe")), {
 }
 
 // Settings: the controls live in a panel behind the gear, out of the way.
+// #300: the panel on the right (like OpenJarvis's): settings, tools, skills, memory and costs, in tabs.
+// It docks beside the chat on wide screens and stays open while you use the page; ✕, ⚙ or Escape closes it.
 const settingsToggle = /** @type {HTMLButtonElement} */ (byId("settings-toggle"));
-const settingsPanel = byId("settings");
-/** @param {boolean} open */
-const showSettings = (open) => {
-  settingsPanel.hidden = !open;
-  settingsToggle.setAttribute("aria-expanded", String(open));
-};
-settingsToggle.addEventListener("click", () => showSettings(settingsPanel.hidden === true));
-document.addEventListener("keydown", (e) => {
-  if (e.key === "Escape" && !settingsPanel.hidden && !document.querySelector("dialog[open]")) showSettings(false);
+const sidePanel = byId("side");
+const toolsTab = byId("tools-tab");
+/** @type {import("./brain.js").ReachNode[]} */
+let reachNodes = [];
+const side = (() => {
+  const tabs = /** @type {HTMLButtonElement[]} */ ([...sidePanel.querySelectorAll('[role="tab"]')]);
+  const panes = /** @type {HTMLElement[]} */ ([...sidePanel.querySelectorAll(".side-tab")]);
+  /** @type {string} */
+  let current = "settings";
+  try {
+    current = localStorage.getItem("atlas.side.tab") ?? "settings";
+  } catch {
+    // No storage: start on Settings.
+  }
+  const select = (/** @type {string} */ tab) => {
+    const usable = tabs.find((t) => t.dataset.tab === tab && !t.hidden) ? tab : "settings";
+    current = usable;
+    for (const t of tabs) t.setAttribute("aria-selected", String(t.dataset.tab === usable));
+    for (const p of panes) p.hidden = p.dataset.tab !== usable;
+    try {
+      localStorage.setItem("atlas.side.tab", usable);
+    } catch {
+      // Not kept: fine.
+    }
+    if (usable === "tools") renderTools(toolsTab, reachNodes);
+  };
+  const show = (/** @type {boolean} */ open) => {
+    sidePanel.hidden = !open;
+    document.body.dataset.side = String(open);
+    settingsToggle.setAttribute("aria-expanded", String(open));
+    // The chat keeps its place: following the end (#298) or not.
+    window.dispatchEvent(new Event("resize"));
+  };
+  for (const t of tabs)
+    t.addEventListener("click", () => {
+      const tab = t.dataset.tab ?? "settings";
+      // The tabs with their own loading do it through their open (memories, skills, costs).
+      if (tab === "memory") void openMemories();
+      else if (tab === "skills") void openSkills();
+      else if (tab === "costs") costsView.open();
+      else select(tab);
+    });
+  return {
+    /** Opens the panel on a tab. @param {string} [tab] */
+    open: (tab) => {
+      select(tab ?? current);
+      show(true);
+    },
+    close: () => {
+      show(false);
+      input.focus({ preventScroll: true });
+    },
+    get isOpen() {
+      return !sidePanel.hidden;
+    },
+    get tab() {
+      return current;
+    },
+  };
+})();
+settingsToggle.addEventListener("click", () => {
+  if (!side.isOpen) {
+    // Back to where it was, loading what that tab needs.
+    const tab = side.tab;
+    if (tab === "memory") void openMemories();
+    else if (tab === "skills") void openSkills();
+    else if (tab === "costs") costsView.open();
+    else side.open(tab);
+  } else side.close();
 });
-document.addEventListener("pointerdown", (e) => {
-  const t = /** @type {Node} */ (e.target);
-  if (!settingsPanel.hidden && !settingsPanel.contains(t) && !settingsToggle.contains(t) && !document.querySelector("dialog[open]")?.contains(t)) showSettings(false);
+byId("side-close").addEventListener("click", () => side.close());
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && side.isOpen && !document.querySelector("dialog[open]")) side.close();
 });
 
 // #156: what the code agent is studying in the background, live, with Stop.
@@ -388,7 +450,11 @@ const refreshReach = async () => {
     const res = await fetch("/reach", { cache: "no-store" });
     if (!res.ok) return;
     const body = /** @type {{ nodes?: unknown }} */ (await res.json());
-    if (Array.isArray(body.nodes)) brainView.setReach(/** @type {import("./brain.js").ReachNode[]} */ (body.nodes));
+    if (Array.isArray(body.nodes)) {
+      reachNodes = /** @type {import("./brain.js").ReachNode[]} */ (body.nodes);
+      brainView.setReach(reachNodes);
+      if (side.isOpen && side.tab === "tools") renderTools(toolsTab, reachNodes);
+    }
   } catch {
     // The panels say they couldn't load; nothing else depends on it.
   }
@@ -2164,7 +2230,7 @@ const wipeContext = async (contextId, name, count) => {
 const openMemories = async () => {
   setMemoriesStatus("Loading…");
   memoriesList.replaceChildren();
-  memoriesPanel.showModal();
+  side.open("memory");
   try {
     await loadMemories();
     setMemoriesStatus("");
@@ -2187,7 +2253,6 @@ const openMemories = async () => {
 // ---- skills panel (#116) ----
 
 const skillsButton = /** @type {HTMLButtonElement} */ (byId("skills"));
-const skillsPanel = /** @type {HTMLDialogElement} */ (byId("skills-panel"));
 const skillsList = byId("skills-list");
 const skillsStatus = byId("skills-status");
 
@@ -2243,7 +2308,7 @@ const renderSkills = async () => {
 const openSkills = async () => {
   skillsStatus.textContent = "Loading…";
   skillsList.replaceChildren();
-  skillsPanel.showModal();
+  side.open("skills");
   try {
     await renderSkills();
     skillsStatus.textContent = "";
@@ -2252,9 +2317,7 @@ const openSkills = async () => {
   }
 };
 
-skillsButton.addEventListener("click", () => void openSkills());
-byId("skills-close").addEventListener("click", () => skillsPanel.close());
-skillsPanel.addEventListener("close", () => input.focus());
+byId("skills-close").addEventListener("click", () => side.close());
 // The button shows only when the server has skills (MEMORY=on).
 fetch("/skills")
   .then((res) => {
@@ -2262,9 +2325,7 @@ fetch("/skills")
   })
   .catch(() => undefined);
 
-memoriesButton.addEventListener("click", () => void openMemories());
-memoriesClose.addEventListener("click", () => memoriesPanel.close());
-memoriesPanel.addEventListener("close", () => input.focus());
+memoriesClose.addEventListener("click", () => side.close());
 
 rememberButton.addEventListener("click", () => {
   state.remember = !state.remember;
