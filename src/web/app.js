@@ -10,6 +10,7 @@ import { startRemindersPanel } from "./reminders.js";
 import { makeCostsView } from "./costs.js";
 import { renderTools } from "./tools-tab.js";
 import { makeLogsTab } from "./logs-tab.js";
+import { makeSystemPanel } from "./system-panel.js";
 import { makeLivePlayer, runLiveTurn } from "./live.js";
 import { makeBrainView } from "./brain.js";
 import { startUniverse } from "./universe.js";
@@ -357,64 +358,62 @@ startUniverse(/** @type {HTMLCanvasElement} */ (byId("universe")), {
   requestAnimationFrame(pulse);
 }
 
-// Settings: the controls live in a panel behind the gear, out of the way.
-// #300: the panel on the right (like OpenJarvis's): settings, tools, skills, memory and costs, in tabs.
-// It docks beside the chat on wide screens and stays open while you use the page; ✕, ⚙ or Escape closes it.
-const settingsToggle = /** @type {HTMLButtonElement} */ (byId("settings-toggle"));
+// #307: OpenJarvis-style pages. The menu on the left picks one: Chat (the galaxy and the conversation), or
+// Dashboard, Data sources, Memory, Skills, Logs, Settings, shown in the middle in its place. (#300's
+// panel became these pages: `side` keeps its name, open(tab) shows a page, close() goes back to Chat.)
 const sidePanel = byId("side");
 const toolsTab = byId("tools-tab");
 const logsTab = makeLogsTab(byId("logs-tab"));
 /** @type {import("./brain.js").ReachNode[]} */
 let reachNodes = [];
 const side = (() => {
-  const tabs = /** @type {HTMLButtonElement[]} */ ([...sidePanel.querySelectorAll('[role="tab"]')]);
+  const tabs = /** @type {HTMLButtonElement[]} */ ([...document.querySelectorAll('.rail [role="tab"]')]);
   const panes = /** @type {HTMLElement[]} */ ([...sidePanel.querySelectorAll(".side-tab")]);
   /** @type {string} */
-  let current = "settings";
-  try {
-    current = localStorage.getItem("atlas.side.tab") ?? "settings";
-  } catch {
-    // No storage: start on Settings.
-  }
+  let current = "chat";
+  const mark = () => {
+    const shown = sidePanel.hidden ? "chat" : current;
+    for (const t of tabs) t.setAttribute("aria-selected", String(t.dataset.tab === shown));
+  };
   const select = (/** @type {string} */ tab) => {
-    const usable = tabs.find((t) => t.dataset.tab === tab && !t.hidden) ? tab : "settings";
+    const usable = panes.some((p) => p.dataset.tab === tab) ? tab : "settings";
     current = usable;
-    for (const t of tabs) t.setAttribute("aria-selected", String(t.dataset.tab === usable));
     for (const p of panes) p.hidden = p.dataset.tab !== usable;
-    try {
-      localStorage.setItem("atlas.side.tab", usable);
-    } catch {
-      // Not kept: fine.
-    }
     if (usable === "tools") renderTools(toolsTab, reachNodes);
-    // #305: the log is read only while its tab shows.
-    if (usable === "logs" && !sidePanel.hidden) logsTab.start();
-    else logsTab.stop();
   };
   const show = (/** @type {boolean} */ open) => {
     sidePanel.hidden = !open;
+    // #305: the log is read only while its page shows.
     if (open && current === "logs") logsTab.start();
     else logsTab.stop();
     document.body.dataset.side = String(open);
-    settingsToggle.setAttribute("aria-expanded", String(open));
+    document.body.dataset.page = open ? current : "chat";
+    mark();
+    try {
+      localStorage.setItem("atlas.page", open ? current : "chat");
+    } catch {
+      // Not kept: fine.
+    }
     // The chat keeps its place: following the end (#298) or not.
     window.dispatchEvent(new Event("resize"));
   };
   for (const t of tabs)
     t.addEventListener("click", () => {
-      const tab = t.dataset.tab ?? "settings";
-      // The tabs with their own loading do it through their open (memories, skills, costs).
-      if (tab === "memory") void openMemories();
+      const tab = t.dataset.tab ?? "chat";
+      // The pages with their own loading do it through their open (memories, skills, costs).
+      if (tab === "chat") api.close();
+      else if (tab === "memory") void openMemories();
       else if (tab === "skills") void openSkills();
       else if (tab === "costs") costsView.open();
-      else select(tab);
+      else api.open(tab);
     });
-  return {
-    /** Opens the panel on a tab. @param {string} [tab] */
-    open: (tab) => {
+  const api = {
+    /** Shows a page. @param {string} [tab] */
+    open: (/** @type {string | undefined} */ tab) => {
       select(tab ?? current);
       show(true);
     },
+    /** Back to Chat. */
     close: () => {
       show(false);
       input.focus({ preventScroll: true });
@@ -426,21 +425,36 @@ const side = (() => {
       return current;
     },
   };
+  return api;
 })();
-settingsToggle.addEventListener("click", () => {
-  if (!side.isOpen) {
-    // Back to where it was, loading what that tab needs.
-    const tab = side.tab;
-    if (tab === "memory") void openMemories();
-    else if (tab === "skills") void openSkills();
-    else if (tab === "costs") costsView.open();
-    else side.open(tab);
-  } else side.close();
-});
-byId("side-close").addEventListener("click", () => side.close());
 document.addEventListener("keydown", (e) => {
   if (e.key === "Escape" && side.isOpen && !document.querySelector("dialog[open]")) side.close();
 });
+
+// #307: the galaxy sits on top of the chat and folds away; it stays as you left it.
+{
+  const band = /** @type {HTMLElement} */ (document.querySelector(".galaxy-band"));
+  const toggle = /** @type {HTMLButtonElement} */ (byId("galaxy-toggle"));
+  const set = (/** @type {boolean} */ open) => {
+    band.dataset.open = String(open);
+    toggle.setAttribute("aria-expanded", String(open));
+    toggle.textContent = open ? "▾ Galaxy" : "▸ Galaxy";
+    try {
+      localStorage.setItem("atlas.galaxy", open ? "open" : "folded");
+    } catch {
+      // Not kept: fine.
+    }
+    window.dispatchEvent(new Event("resize"));
+  };
+  let saved = "open";
+  try {
+    saved = localStorage.getItem("atlas.galaxy") ?? "open";
+  } catch {
+    // Open by default.
+  }
+  set(saved !== "folded");
+  toggle.addEventListener("click", () => set(band.dataset.open !== "true"));
+}
 
 // #156: what the code agent is studying in the background, live, with Stop.
 const studiesView = makeStudiesView(brainView.studiesSlot, {
@@ -461,6 +475,7 @@ const refreshReach = async () => {
       reachNodes = /** @type {import("./brain.js").ReachNode[]} */ (body.nodes);
       brainView.setReach(reachNodes);
       if (side.isOpen && side.tab === "tools") renderTools(toolsTab, reachNodes);
+      systemPanel?.render();
     }
   } catch {
     // The panels say they couldn't load; nothing else depends on it.
@@ -2603,6 +2618,11 @@ const people = (() => {
   };
   const show = () => {
     input.placeholder = placeholderFor(current, list);
+    // #307: the menu says whose Atlas this is, when it isn't the main user's.
+    const railWho = byId("rail-who");
+    railWho.hidden = !(current && list[0] && current.id !== list[0].id);
+    railWho.textContent = current ? `Talking as ${current.name}` : "";
+    systemPanel?.render();
     document.body.dataset.user = current?.id ?? "";
     pick.value = current?.id ?? "";
   };
@@ -2662,6 +2682,8 @@ const people = (() => {
     ready,
     /** The id for the conversation file: whoever is talking. */
     who: () => current?.id ?? "renato",
+    /** #307: who's talking, by name, when the household has more than one person. */
+    name: () => (list.length > 1 ? current?.name : undefined),
     /** The id sent with a question, when it isn't the main user (so his requests are as before). */
     asking: () => (current && list[0] && current.id !== list[0].id ? current.id : undefined),
     /** Someone else of the household saying who they are. @param {string} text */
@@ -2680,3 +2702,11 @@ const people = (() => {
 
 // Once it knows who's talking, the page asks for their conversation back.
 void people.ready.then(() => keeper.restore());
+
+// #307: the System panel on the right: this session, the brain, what's connected, what it costs.
+/** @type {ReturnType<typeof makeSystemPanel> | undefined} */
+var systemPanel = makeSystemPanel(byId("system"), {
+  brain: () => brainLabels[state.brain] ?? state.brain,
+  who: () => people.name(),
+  sources: () => ({ on: reachNodes.filter((n) => n.status === "on" || n.status === "ready").length, all: reachNodes.filter((n) => n.status !== "kiro").length }),
+});
