@@ -11,6 +11,7 @@ import { makeCostsView } from "./costs.js";
 import { renderTools } from "./tools-tab.js";
 import { makeLogsTab } from "./logs-tab.js";
 import { makeSystemPanel } from "./system-panel.js";
+import { ago } from "./chats-lib.js";
 import { makeLivePlayer, runLiveTurn } from "./live.js";
 import { makeBrainView } from "./brain.js";
 import { startUniverse } from "./universe.js";
@@ -329,7 +330,8 @@ byId("codemaps").addEventListener("click", () => void codeMapView.open());
 const costsView = makeCostsView(byId("costs-panel"), { show: () => side.open("costs"), close: () => side.close() });
 
 // #143: how he got there, for the current answer, as a tree that grows while he works.
-const traceView = makeTraceView(brainView.traceSlot);
+// #309: in the System panel, under the session and cost cards.
+const traceView = makeTraceView(byId("trace-slot"));
 
 // The universe behind the page: its photons follow what Atlas is doing, and stream in and out of the star while he thinks.
 startUniverse(/** @type {HTMLCanvasElement} */ (byId("universe")), {
@@ -2412,6 +2414,8 @@ copyAllButton.addEventListener("click", () => {
 });
 
 newButton.addEventListener("click", () => {
+  // #309: the one just finished goes in the list first.
+  void keeper.keep();
   endVoice("reset");
   stopSpeaking("new-conversation");
   retirePending();
@@ -2422,6 +2426,7 @@ newButton.addEventListener("click", () => {
   transcript.replaceChildren();
   setStatus("New conversation.");
   renderControls();
+  chats.render();
   input.focus();
 });
 
@@ -2558,6 +2563,22 @@ const keeper = (() => {
   /** @type {import("./chat.js").Turn[] | undefined} */
   let saved;
   let restoring = true;
+  /** Puts a kept conversation on the (empty) page, dimmed, with a line saying when it's from. @param {any} c @param {string} said */
+  const show = (c, said) => {
+    state.history = c.history;
+    state.conversationId = typeof c.conversationId === "string" ? c.conversationId : state.conversationId;
+    saved = state.history;
+    for (const t of c.history) {
+      const item = addMessage(t.role === "user" ? "user" : "answer", String(t.text ?? ""));
+      item.classList.add("earlier");
+    }
+    const line = document.createElement("li");
+    line.className = "earlier-line";
+    const at = typeof c.savedAt === "string" ? new Date(c.savedAt) : undefined;
+    line.textContent = `— ${said}${at && !Number.isNaN(at.getTime()) ? `, ${at.toLocaleString("en-GB", { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", hourCycle: "h23" })}` : ""} —`;
+    transcript.append(line);
+    line.scrollIntoView({ block: "end" });
+  };
   const restore = async () => {
     restoring = true;
     saved = undefined;
@@ -2568,37 +2589,115 @@ const keeper = (() => {
       const c = body?.conversation;
       // Only into an empty page: never over a conversation already going.
       if (!c || !Array.isArray(c.history) || c.history.length === 0 || state.history.length > 0 || transcript.children.length > 0) return;
-      state.history = c.history;
-      state.conversationId = typeof c.conversationId === "string" ? c.conversationId : state.conversationId;
-      saved = state.history;
-      for (const t of c.history) {
-        const item = addMessage(t.role === "user" ? "user" : "answer", String(t.text ?? ""));
-        item.classList.add("earlier");
-      }
-      const line = document.createElement("li");
-      line.className = "earlier-line";
-      const at = typeof c.savedAt === "string" ? new Date(c.savedAt) : undefined;
-      line.textContent = `— picked up where we left off${at && !Number.isNaN(at.getTime()) ? `, ${at.toLocaleString("en-GB", { weekday: "short", hour: "2-digit", minute: "2-digit", hourCycle: "h23" })}` : ""} —`;
-      transcript.append(line);
-      line.scrollIntoView({ block: "end" });
+      show(c, "picked up where we left off");
     } catch {
       // Nothing kept, or Atlas is still starting: a fresh conversation.
     } finally {
       restoring = false;
+      chats.refresh();
     }
   };
-  const keep = () => {
-    if (restoring || state.history === saved) return;
+  /** Saves the conversation now, if it changed. */
+  const keep = async () => {
+    if (restoring || state.history === saved || state.history.length === 0) return;
     saved = state.history;
-    void fetch(`/conversation?who=${encodeURIComponent(who())}`, {
-      method: "PUT",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ conversationId: state.conversationId, history: state.history }),
-    }).catch(() => undefined);
+    try {
+      await fetch(`/conversation?who=${encodeURIComponent(who())}`, {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ conversationId: state.conversationId, history: state.history }),
+      });
+      chats.refresh();
+    } catch {
+      // Kept on the next try.
+    }
   };
-  setInterval(keep, 2_000);
-  window.addEventListener("pagehide", keep);
-  return { keep, restore };
+  /** #309: back to an earlier conversation, from the list. This one is kept first. @param {string} id */
+  const open = async (id) => {
+    if (id === state.conversationId) return;
+    await keep();
+    restoring = true;
+    try {
+      const res = await fetch(`/conversation?who=${encodeURIComponent(who())}&id=${encodeURIComponent(id)}`, { cache: "no-store" });
+      const c = res.ok ? (await res.json())?.conversation : undefined;
+      if (!c || !Array.isArray(c.history)) return;
+      endVoice("reset");
+      stopSpeaking("new-conversation");
+      retirePending();
+      transcript.replaceChildren();
+      state.lastContext = undefined;
+      show(c, "an earlier conversation");
+      side.close();
+    } catch {
+      setStatus("Couldn't open that conversation.");
+    } finally {
+      restoring = false;
+      chats.refresh();
+    }
+  };
+  setInterval(() => void keep(), 2_000);
+  window.addEventListener("pagehide", () => void keep());
+  return { keep, restore, open };
+})();
+
+// #309: the conversations so far, under ＋ in the menu: newest first, the open one marked, a search, and × to forget one.
+const chats = (() => {
+  const list = byId("chat-list");
+  const search = /** @type {HTMLInputElement} */ (byId("chat-search"));
+  /** @type {{ conversationId: string, title: string, savedAt: string, turns: number }[]} */
+  let all = [];
+  /** @type {ReturnType<typeof setTimeout> | undefined} */
+  let timer;
+  const render = () => {
+    const q = search.value.trim().toLowerCase();
+    const shown = all.filter((c) => q === "" || c.title.toLowerCase().includes(q));
+    list.replaceChildren(
+      ...shown.map((c) => {
+        const li = document.createElement("li");
+        li.className = "chat-item";
+        if (c.conversationId === state.conversationId) li.setAttribute("aria-current", "true");
+        const openIt = document.createElement("button");
+        openIt.type = "button";
+        openIt.className = "chat-open";
+        const title = document.createElement("span");
+        title.className = "chat-title";
+        title.textContent = c.title;
+        const when = document.createElement("span");
+        when.className = "chat-when";
+        when.textContent = ago(c.savedAt);
+        openIt.append(title, when);
+        openIt.addEventListener("click", () => void keeper.open(c.conversationId));
+        const forget = document.createElement("button");
+        forget.type = "button";
+        forget.className = "chat-forget";
+        forget.textContent = "×";
+        forget.setAttribute("aria-label", `Forget "${c.title}"`);
+        forget.addEventListener("click", async () => {
+          await fetch(`/conversation?who=${encodeURIComponent(people.who())}&id=${encodeURIComponent(c.conversationId)}`, { method: "DELETE" }).catch(() => undefined);
+          refresh();
+        });
+        li.append(openIt, forget);
+        return li;
+      }),
+    );
+  };
+  const load = async () => {
+    try {
+      const res = await fetch(`/conversations?who=${encodeURIComponent(people.who())}`, { cache: "no-store" });
+      const body = res.ok ? await res.json() : undefined;
+      all = Array.isArray(body?.conversations) ? body.conversations : [];
+    } catch {
+      all = [];
+    }
+    render();
+  };
+  /** Reads the list again, soon (several saves in a row make one read). */
+  const refresh = () => {
+    if (timer) clearTimeout(timer);
+    timer = setTimeout(() => void load(), 300);
+  };
+  search.addEventListener("input", render);
+  return { refresh, render };
 })();
 
 // #290: who's talking. Atlas is shared with the household: each person has

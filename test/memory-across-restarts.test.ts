@@ -24,10 +24,47 @@ describe("the conversation, kept", () => {
     await store.write("renato", conv);
     expect(await store.read("renato")).toMatchObject(conv);
     expect(await store.read("marisa")).toBeUndefined();
-    expect(((await stat(path.join(dir, "renato.json"))).mode & 0o777).toString(8)).toBe("600");
-    expect(JSON.parse(await readFile(path.join(dir, "renato.json"), "utf8")).savedAt).toBe("2026-11-19T00:00:00.000Z");
+    // #309: one file per conversation, in a folder per person.
+    const file = path.join(dir, "renato", `${conv.conversationId}.json`);
+    expect(((await stat(file)).mode & 0o777).toString(8)).toBe("600");
+    expect(JSON.parse(await readFile(file, "utf8")).savedAt).toBe("2026-11-19T00:00:00.000Z");
     t += KEEP_MS + 1;
     expect(await store.read("renato")).toBeUndefined();
+    // Too old to pick up by itself, but still in the list, and opened by id.
+    expect((await store.list("renato")).map((c) => c.conversationId)).toEqual([conv.conversationId]);
+    expect(await store.read("renato", conv.conversationId)).toMatchObject(conv);
+  });
+
+  it("#309: past conversations are listed newest first, titled by their first question; one can be removed", async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), "atlas-conv-"));
+    let t = Date.parse("2026-11-20T10:00:00Z");
+    const store = makeConversationStore({ dir, now: () => t });
+    await store.write("renato", { conversationId: "conv-aaaaaaaa", history: [{ role: "user", text: "What's on   tomorrow?" }, { role: "assistant", text: "The dentist." }] });
+    t += 60_000;
+    await store.write("renato", { conversationId: "conv-bbbbbbbb", history: [{ role: "user", text: "x".repeat(80) }] });
+    // An empty conversation (a new one nobody wrote in) isn't kept.
+    await store.write("renato", { conversationId: "conv-cccccccc", history: [] });
+    const list = await store.list("renato");
+    expect(list.map((c) => [c.conversationId, c.turns])).toEqual([
+      ["conv-bbbbbbbb", 1],
+      ["conv-aaaaaaaa", 2],
+    ]);
+    expect(list[1]?.title).toBe("What's on tomorrow?");
+    expect(list[0]?.title).toHaveLength(60);
+    expect(await store.read("renato")).toMatchObject({ conversationId: "conv-bbbbbbbb" });
+    expect(await store.remove("renato", "conv-bbbbbbbb")).toBe(true);
+    expect(await store.remove("renato", "../../etc")).toBe(false);
+    expect((await store.list("renato")).map((c) => c.conversationId)).toEqual(["conv-aaaaaaaa"]);
+    expect(await store.list("marisa")).toEqual([]);
+  });
+
+  it("#309: the single file from before is moved in as one of them", async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), "atlas-conv-"));
+    const { writeFile } = await import("node:fs/promises");
+    await writeFile(path.join(dir, "renato.json"), JSON.stringify({ ...conv, savedAt: "2026-11-19T00:00:00.000Z" }));
+    const store = makeConversationStore({ dir, now: () => Date.parse("2026-11-19T01:00:00Z") });
+    expect(await store.read("renato")).toMatchObject(conv);
+    expect((await store.list("renato")).length).toBe(1);
   });
 
   it("the page saves it and gets it back; anything else is refused", async () => {
@@ -45,7 +82,7 @@ describe("the conversation, kept", () => {
       afterReply: makeBackgroundTasks({ log }).run,
       now: () => new Date(),
       log,
-      conversation: { read: async (who) => kept.get(who) as never, write: async (who, c) => void kept.set(who, c) },
+      conversation: { read: async (who) => kept.get(who) as never, write: async (who, c) => void kept.set(who, c), list: async () => [], remove: async () => false },
     };
     const app = makeServer(deps, {});
     expect(await (await app.request("/conversation")).json()).toEqual({ conversation: null });
@@ -90,5 +127,19 @@ describe("coding tasks cut off by a restart", () => {
     expect(removed).toEqual(["/data/tasks/b"]);
     expect(kept.find((t) => t.id === "a")?.status).toBe("done");
     expect(kept.find((t) => t.id === "c")?.status).toBe("waiting");
+  });
+});
+
+describe("#309: the conversation list's times", () => {
+  it("reads like a chat list", async () => {
+    const { ago } = await import("../src/web/chats-lib.js");
+    const now = Date.parse("2026-11-20T18:00:00Z");
+    expect(ago("2026-11-20T17:59:40Z", now)).toBe("now");
+    expect(ago("2026-11-20T17:52:00Z", now)).toBe("8m ago");
+    expect(ago("2026-11-20T15:00:00Z", now)).toBe("3h ago");
+    expect(ago("2026-11-19T12:00:00Z", now)).toBe("yesterday");
+    expect(ago("2026-11-17T12:00:00Z", now)).toBe("Tue");
+    expect(ago("2026-11-01T12:00:00Z", now)).toBe("1 Nov");
+    expect(ago("nope", now)).toBe("");
   });
 });

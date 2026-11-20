@@ -642,7 +642,13 @@ export const makeServer = (
   if (conversation) {
     // #290: one of the household, else the main user.
     const whoOf = (v: string | undefined): string => (deps.users ? userOf(deps.users.list, v).id : v && /^[a-z][a-z0-9-]{0,30}$/.test(v) ? v : MAIN_ID);
-    app.get("/conversation", async (c) => c.json({ conversation: (await conversation.read(whoOf(c.req.query("who")))) ?? null }));
+    app.get("/conversation", async (c) => {
+      const id = c.req.query("id");
+      return c.json({ conversation: (await conversation.read(whoOf(c.req.query("who")), id === undefined || id === "" ? undefined : id)) ?? null });
+    });
+    // #309: the past conversations, for the list under ＋ (newest first), and forgetting one.
+    app.get("/conversations", async (c) => c.json({ conversations: await conversation.list(whoOf(c.req.query("who"))).catch(() => []) }));
+    app.delete("/conversation", async (c) => c.json({ ok: await conversation.remove(whoOf(c.req.query("who")), c.req.query("id") ?? "") }));
     app.put(
       "/conversation",
       async (c, next) => {

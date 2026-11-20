@@ -3944,3 +3944,143 @@ body[data-side="true"] .app .center .layout {
   background: rgb(74 123 255 / 0.12);
   transform: none;
 }
+
+/* #309: line icons in the menu, like the galaxy's nodes. */
+.rail-icon {
+  flex: 0 0 auto;
+  width: 1.05rem;
+  height: 1.05rem;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.rail-new .rail-icon {
+  width: 1rem;
+  height: 1rem;
+}
+
+.rail-new {
+  display: grid;
+  place-items: center;
+}
+
+/* #309: the conversations so far, under ＋. */
+.chat-search {
+  width: 100%;
+  padding: 0.4rem 0.55rem;
+  border: 1px solid #1d2438;
+  border-radius: 6px;
+  background: rgb(10 14 26 / 0.7);
+  color: #cfd6ea;
+  font-size: 12px;
+}
+
+.chat-list {
+  flex: 1 1 auto;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+  scrollbar-width: thin;
+}
+
+.chat-item {
+  position: relative;
+  display: flex;
+  border-radius: 6px;
+}
+
+.chat-item:hover,
+.chat-item[aria-current="true"] {
+  background: rgb(255 255 255 / 0.04);
+}
+
+.chat-item[aria-current="true"] {
+  box-shadow: inset 2px 0 0 #4a7bff;
+}
+
+.chat-open {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  padding: 0.45rem 0.55rem;
+  border: 0;
+  background: none;
+  text-align: left;
+  letter-spacing: normal;
+  box-shadow: none;
+}
+
+.chat-title {
+  overflow: hidden;
+  color: #cfd6ea;
+  font-size: 12.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chat-when {
+  color: #5d6680;
+  font-size: 10.5px;
+}
+
+.chat-forget {
+  align-self: center;
+  padding: 0 0.45rem;
+  border: 0;
+  background: none;
+  color: #5d6680;
+  opacity: 0;
+  box-shadow: none;
+}
+
+.chat-item:hover .chat-forget,
+.chat-forget:focus-visible {
+  opacity: 1;
+}
+
+/* With the list, the pages sit at the bottom of the menu. */
+.rail .rail-nav {
+  margin-top: 0.4rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid #141a29;
+}
+
+/* #309: bigger letters in the chat. */
+.app #transcript {
+  font-size: 15px;
+  line-height: 1.6;
+}
+
+.app #question {
+  font-size: 15px;
+}
+
+/* #309: "How he got there" in the System panel (the trace view makes its slot the .trace box). */
+.system #trace-slot.trace {
+  margin: 0.6rem 0.8rem 1rem;
+  max-width: none;
+}
+
+.system #trace-slot .trace-scroll {
+  max-height: none;
+  overflow-x: auto;
+}
+
+.system[data-open="false"] #trace-slot {
+  display: none;
+}
+
+@media (max-width: 60rem) {
+  .chat-search,
+  .chat-list {
+    display: none;
+  }
+}
+
