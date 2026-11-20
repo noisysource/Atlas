@@ -18,6 +18,8 @@ export const callInstruction = (who: string): string =>
   [
     liveInstruction(who),
     `This is a WhatsApp voice call with ${who}. Greet briefly when the call starts (one short sentence), then listen.`,
+    // #304: Atlas can take a few seconds; silence on a phone line feels like it dropped.
+    "Before you call ask_atlas, always say a very short phrase first, like \"One moment, let me check.\" or \"Deixa-me ver.\", so the line isn't silent while Atlas looks it up.",
     "When ask_atlas says something waits for an OK, say you've sent it to the WhatsApp chat: they reply yes or no there.",
     "If they say goodbye, say goodbye briefly.",
   ].join("\n");
