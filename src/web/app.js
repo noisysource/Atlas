@@ -9,6 +9,7 @@ import { startTasksPanel, taskGlance } from "./tasks.js";
 import { startRemindersPanel } from "./reminders.js";
 import { makeCostsView } from "./costs.js";
 import { renderTools } from "./tools-tab.js";
+import { makeLogsTab } from "./logs-tab.js";
 import { makeLivePlayer, runLiveTurn } from "./live.js";
 import { makeBrainView } from "./brain.js";
 import { startUniverse } from "./universe.js";
@@ -327,6 +328,7 @@ startUniverse(/** @type {HTMLCanvasElement} */ (byId("universe")), {
 const settingsToggle = /** @type {HTMLButtonElement} */ (byId("settings-toggle"));
 const sidePanel = byId("side");
 const toolsTab = byId("tools-tab");
+const logsTab = makeLogsTab(byId("logs-tab"));
 /** @type {import("./brain.js").ReachNode[]} */
 let reachNodes = [];
 const side = (() => {
@@ -350,9 +352,14 @@ const side = (() => {
       // Not kept: fine.
     }
     if (usable === "tools") renderTools(toolsTab, reachNodes);
+    // #305: the log is read only while its tab shows.
+    if (usable === "logs" && !sidePanel.hidden) logsTab.start();
+    else logsTab.stop();
   };
   const show = (/** @type {boolean} */ open) => {
     sidePanel.hidden = !open;
+    if (open && current === "logs") logsTab.start();
+    else logsTab.stop();
     document.body.dataset.side = String(open);
     settingsToggle.setAttribute("aria-expanded", String(open));
     // The chat keeps its place: following the end (#298) or not.
