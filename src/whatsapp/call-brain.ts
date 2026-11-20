@@ -7,7 +7,7 @@
 // no Whisper and EC check on the Mac first. The instruction still hands EC
 // work to Kiro.
 
-import { ASK_ATLAS, LIVE_URL, liveInstruction, liveSetup, parseLive } from "../live/live.js";
+import { ASK_ATLAS, LIVE_URL, liveInstruction, liveSetup, parseLive, textOf } from "../live/live.js";
 import type { Logger } from "../types.js";
 import { bytesOf, pcmOf, type CallBrain } from "./call.js";
 
@@ -48,14 +48,15 @@ export const makeGeminiCallBrain =
       }, 15_000);
       ws.onopen = () => ws.send(JSON.stringify({ setup: rest }));
       ws.onerror = () => deps.log?.warn("whatsapp call: live socket error", {});
-      ws.onclose = () => {
-        if (!ready) reject(new Error("Gemini Live closed during setup"));
+      ws.onclose = (e) => {
+        if (!ready) reject(new Error(`Gemini Live closed during setup (${e.code}${e.reason ? `: ${e.reason.slice(0, 200)}` : ""})`));
         else hooks.hangUp();
       };
       ws.onmessage = async (event) => {
         let raw: unknown;
         try {
-          raw = JSON.parse(typeof event.data === "string" ? event.data : Buffer.from(event.data as ArrayBuffer).toString("utf8"));
+          // Google sends its JSON as binary frames, which Node's WebSocket gives as Blobs.
+          raw = JSON.parse(await textOf(event.data));
         } catch {
           return;
         }

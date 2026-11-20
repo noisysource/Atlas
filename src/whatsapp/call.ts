@@ -144,9 +144,9 @@ export const makeCall = async (deps: { readonly offer: string; readonly line: Ca
       },
       hangUp: () => void end("brain"),
     });
-  } catch {
+  } catch (e) {
     await deps.line.action("reject").catch(() => false);
-    log?.warn("whatsapp call rejected", { why: "brain" });
+    log?.warn("whatsapp call rejected", { why: "brain", reason: e instanceof Error ? e.message : "unknown" });
     return { end };
   }
 

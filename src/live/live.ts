@@ -186,7 +186,8 @@ export const noteMessage = (text: string) => ({
   clientContent: { turns: [{ role: "user", parts: [{ text: `[On the screen, not said aloud] ${text}` }] }], turnComplete: false },
 });
 
-const textOf = async (data: unknown): Promise<string> =>
+/** A socket message as text: Node's WebSocket hands Google's frames over as Blobs. */
+export const textOf = async (data: unknown): Promise<string> =>
   typeof data === "string" ? data : data instanceof ArrayBuffer ? new TextDecoder().decode(data) : data instanceof Blob ? await data.text() : Buffer.isBuffer(data) ? data.toString("utf8") : "";
 
 export const makeLiveSession = (deps: {
