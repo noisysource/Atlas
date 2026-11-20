@@ -58,7 +58,7 @@ const refuse = (reason: string): never => {
   process.exit(1);
 };
 
-// #310: the settings set from the page (data/settings.json) over .env; the first start copies .env in.
+// #310: the settings set from the page (data/atlas-settings.json) over .env; the first start copies .env in.
 const settingsDid = process.env.NODE_ENV === "production" ? "none" : applySettings(process.cwd(), process.env);
 const config = loadConfig(process.env);
 if (!config.ok) refuse(config.error);
@@ -201,7 +201,7 @@ const app = makeServer(deps.ok ? deps.value : refuse("unreachable"), {
 });
 
 const server = serve({ fetch: app.fetch, hostname: cfg.host, port: cfg.port }, (info) => {
-  if (settingsDid !== "none") log.info("settings", { from: settingsDid === "imported" ? ".env, copied into data/settings.json" : "data/settings.json" });
+  if (settingsDid !== "none") log.info("settings", { from: settingsDid === "imported" ? ".env, copied into data/atlas-settings.json" : "data/atlas-settings.json" });
   log.info("listening", {
     url: `http://${cfg.host}:${info.port}`,
     env: cfg.env,

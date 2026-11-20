@@ -32,6 +32,8 @@ data/fixes/
 data/brief/
 # #151: the page's switches (what's off)
 data/settings.json
+# #310: the settings set in Data sources (API keys among them)
+data/atlas-settings.json
 # #218: his reminders
 data/reminders.json
 # #68: how Atlas talks (his settings)

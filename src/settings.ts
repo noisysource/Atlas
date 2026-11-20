@@ -1,5 +1,5 @@
 // Atlas's settings, set from the page (#310): what .env held, now in
-// data/settings.json (gitignored, mode 0600, only on this Mac), edited in
+// data/atlas-settings.json (gitignored, mode 0600, only on this Mac), edited in
 // Data sources. The first start copies an existing .env in, so nothing is
 // lost; after that .env isn't needed. Settings override .env, key by key.
 // An empty value removes a key (back to its default).
@@ -17,7 +17,8 @@ import {
 } from "node:fs";
 import path from "node:path";
 
-export const SETTINGS_PATH = "data/settings.json";
+// Not data/settings.json: that's the galaxy's switches (switches.ts).
+export const SETTINGS_PATH = "data/atlas-settings.json";
 const KEY = /^[A-Z][A-Z0-9_]{1,63}$/;
 
 export type Settings = Readonly<Record<string, string>>;
@@ -48,10 +49,9 @@ const parse = (
   if (text === undefined) return undefined;
   try {
     const raw = JSON.parse(text) as { env?: unknown };
-    const env =
-      raw && typeof raw.env === "object" && raw.env !== null
-        ? (raw.env as Record<string, unknown>)
-        : {};
+    // Only a file of ours: { env: { … } }. Anything else isn't settings.
+    if (!raw || typeof raw.env !== "object" || raw.env === null || Array.isArray(raw.env)) return undefined;
+    const env = raw.env as Record<string, unknown>;
     return Object.fromEntries(
       Object.entries(env).filter(
         ([k, v]) => KEY.test(k) && typeof v === "string",

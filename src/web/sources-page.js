@@ -1,7 +1,7 @@
 // Data sources (#310): every setting Atlas has, by what it's for, set here
 // instead of in .env. Each card shows its source's status (from the galaxy's
 // /reach), its switches and fields, and for Google sources a Connect button
-// that opens Google's sign-in on this Mac. Save writes data/settings.json;
+// that opens Google's sign-in on this Mac. Save writes data/atlas-settings.json;
 // Restart applies it (npm run atlas starts the server again by itself).
 // Secrets are never sent to the page: a set one shows as "set", and typing
 // replaces it. Everything is set as text.

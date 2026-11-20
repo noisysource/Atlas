@@ -29,12 +29,26 @@ describe("the settings file", () => {
     const env: NodeJS.ProcessEnv = { CALENDAR: "on", GMAIL: "on", PATH: "/bin" };
     expect(applySettings(root, env)).toBe("imported");
     expect(readSettings(root)).toEqual({ CALENDAR: "on", GMAIL: "on" });
-    expect(((await stat(path.join(root, "data/settings.json"))).mode & 0o777).toString(8)).toBe("600");
+    expect(((await stat(path.join(root, "data/atlas-settings.json"))).mode & 0o777).toString(8)).toBe("600");
     // Gmail turned off on the page: gone from the settings, so gone from the env even though .env still has it.
-    await writeFile(path.join(root, "data/settings.json"), JSON.stringify({ env: { CALENDAR: "on" } }));
+    await writeFile(path.join(root, "data/atlas-settings.json"), JSON.stringify({ env: { CALENDAR: "on" } }));
     const next: NodeJS.ProcessEnv = { CALENDAR: "on", GMAIL: "on", PATH: "/bin" };
     expect(applySettings(root, next)).toBe("loaded");
     expect(next).toEqual({ CALENDAR: "on", PATH: "/bin" });
+  });
+
+  it("the galaxy's switches file (data/settings.json) is never read or written as settings", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "atlas-settings-"));
+    await mkdir(path.join(root, "data"));
+    await writeFile(path.join(root, "data/settings.json"), JSON.stringify({ switches: { gmail: false } }));
+    await writeFile(path.join(root, ".env"), "ANTHROPIC_API_KEY=sk-ant-x\n");
+    const env: NodeJS.ProcessEnv = { ANTHROPIC_API_KEY: "sk-ant-x" };
+    expect(applySettings(root, env)).toBe("imported");
+    expect(env.ANTHROPIC_API_KEY).toBe("sk-ant-x");
+    expect(JSON.parse(await readFile(path.join(root, "data/settings.json"), "utf8"))).toEqual({ switches: { gmail: false } });
+    // A file of the wrong shape isn't settings either.
+    await writeFile(path.join(root, "data/atlas-settings.json"), JSON.stringify({ switches: {} }));
+    expect(readSettings(root)).toBeUndefined();
   });
 
   it("merges the page's changes: a value sets, empty or null removes", () => {
@@ -46,7 +60,7 @@ describe("the settings routes", () => {
   const setup = async () => {
     const root = await mkdtemp(path.join(tmpdir(), "atlas-settings-"));
     await mkdir(path.join(root, "data"));
-    await writeFile(path.join(root, "data/settings.json"), JSON.stringify({ env: { ANTHROPIC_API_KEY: "sk-ant-secret", CALENDAR: "on", BARE_MODE: "on" } }));
+    await writeFile(path.join(root, "data/atlas-settings.json"), JSON.stringify({ env: { ANTHROPIC_API_KEY: "sk-ant-secret", CALENDAR: "on", BARE_MODE: "on" } }));
     const app = new Hono();
     registerSettingsRoutes(app as never, { root, supervised: false, log, env: { ANTHROPIC_API_KEY: "sk-ant-secret", CALENDAR: "on", BARE_MODE: "on" } });
     const put = (body: unknown) => app.request("/settings", { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });

@@ -1316,7 +1316,7 @@ Confirmed (2026-11-12):
   takes parts of the deps away per question (a whole tool group, write
   access, one Gmail mailbox through a wrapped reader, plans, fixes,
   tasks, blinds) and never adds; `makeSwitchedAnswerer` reads
-  `data/settings.json` (`{ off: [...] }`) before every question and
+  `data/atlas-settings.json` (`{ off: [...] }`) before every question and
   rebuilds the answerer only when the switches change. `GET /reach` adds
   each node's switches; `POST /settings { id, on }`. Not yet: the code
   agent's login vs API key, and switches for the background jobs (the
@@ -1421,7 +1421,7 @@ Confirmed (2026-11-12):
   24-hour window need Meta templates: not yet.
 
 - **Settings from the page (#310):** Data sources holds every setting `.env`
-  had, grouped by source (`src/settings-catalog.ts`), in `data/settings.json`
+  had, grouped by source (`src/settings-catalog.ts`), in `data/atlas-settings.json`
   (gitignored, 0600, this Mac only). The first start copies `.env` in; after
   that the settings file is the whole truth, and `.env` isn't needed. Secrets
   go to the page only as set or not set, and typing replaces one. Save checks

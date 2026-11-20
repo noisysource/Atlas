@@ -11,7 +11,7 @@
 //
 // Local only. It prints no settings or keys.
 //
-// #310: settings come from data/settings.json (set in Data sources; the first
+// #310: settings come from data/atlas-settings.json (set in Data sources; the first
 // start copies .env in). When the page applies new settings, the server stops
 // with code 75 and starts again here with them; voice and the tunnel stay up.
 // With TUNNEL=on and WHATSAPP=on it also runs the Cloudflare tunnel for
@@ -47,7 +47,7 @@ const { voice, open } = args.ok ? args.value : { voice: true, open: true };
 const settingsDid = applySettings(root, process.env);
 if (settingsDid === "imported")
   say(
-    "Copied .env into data/settings.json: from now on, settings are changed in Data sources.",
+    "Copied .env into data/atlas-settings.json: from now on, settings are changed in Data sources.",
   );
 const config = loadConfig(process.env);
 if (!config.ok) fail(config.error);
