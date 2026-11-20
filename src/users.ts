@@ -94,8 +94,8 @@ export const whoLines = (user: User, main: User): string | undefined => {
   if (user.main) return undefined;
   const accounts =
     user.accounts.length > 0
-      ? ` Her Google account${user.accounts.length > 1 ? "s" : ""} in Atlas: ${user.accounts.map((a) => `"${a}"`).join(", ")}; "my calendar" or "my email" means ${user.accounts.length > 1 ? "those" : "that one"}, and a calendar read or a new event goes there unless she names someone else's.`
-      : ` She has no Google account connected to Atlas yet; ${main.name}'s are his, so read them only when she asks about him or the family.`;
+      ? ` Her Google account${user.accounts.length > 1 ? "s" : ""} in Atlas: ${user.accounts.map((a) => `"${a}"`).join(", ")}; "my calendar" or "my email" means ${user.accounts.length > 1 ? "those" : "that one"}, and a calendar read or a new event goes there unless she names someone else's. Email and Drive: only ${user.accounts.length > 1 ? "those" : "that one"}; ${main.name}'s email and files aren't hers to read.`
+      : ` She has no Google account connected to Atlas yet; ${main.name}'s calendars are his, so read them only when she asks about him or the family, and his email and files aren't hers to read.`;
   return [
     `<who>You're talking to ${user.name}, not ${main.name}. Atlas is ${main.name}'s assistant, shared with his household. Where these instructions say "he", "his" or "him" about the person you're talking to, they mean ${user.name}; ${main.name}'s own accounts stay his.${accounts}`,
     `Her memories are hers: what you remember for her isn't shown to ${main.name}, and his aren't shown to her. Only the tools that are hers are offered; if she asks for something else (his email, his code, his companies' systems), say it's ${main.name}'s and he can ask himself.</who>`,

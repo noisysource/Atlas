@@ -2136,7 +2136,14 @@ let memoryContexts = [];
 
 /** @param {string} path @param {RequestInit} [init] */
 const memoryRequest = async (path, init) => {
-  const res = await fetch(path, init);
+  // Each person sees only their own memories (#290). Early on, before the household is read, it's his.
+  let who = "renato";
+  try {
+    who = people.who();
+  } catch {
+    // Not ready yet.
+  }
+  const res = await fetch(`${path}${path.includes("?") ? "&" : "?"}who=${encodeURIComponent(who)}`, init);
   const body = await res.json().catch(() => null);
   if (!res.ok) throw new Error(body && typeof body.message === "string" ? body.message : `status ${res.status}`);
   return body;
@@ -2751,6 +2758,7 @@ const people = (() => {
     show();
     renderControls();
     await keeper.restore();
+    void refreshBadge();
     setStatus(`Talking to ${next.name}.`);
   };
   pick.addEventListener("change", () => void switchTo(pick.value));

@@ -5,6 +5,9 @@
 //   POST   /memories/wipe       { contextId }: delete all of a context's memories
 //   POST   /memories/seen       { ids }: mark memories as seen (clears the badge)
 //
+// Each takes ?who=<person id> (#290): someone who isn't the main user sees and
+// changes only their own; no who, or the main user's id, is the main user's.
+//
 // They sit behind the same guards as /ask: the Host allowlist, and JSON-only
 // POSTs (a cross-site page can't send JSON or DELETE without a CORS
 // preflight, which this server never answers). Responses are never cached.
@@ -12,6 +15,7 @@
 
 import type { Context as HonoContext, Hono } from "hono";
 import { z } from "zod";
+import { scopedMemoryStore } from "./memory-scope.js";
 import type { MemoryStore } from "./memory-store.js";
 import type { ServerEnv } from "./server.js";
 import type { Context, Logger, Memory } from "./types.js";
@@ -44,6 +48,7 @@ export const toMemoryView = (m: Memory, contexts: readonly Context[]): MemoryVie
 });
 
 const MEMORY_ID = /^[A-Za-z0-9-]{1,100}$/;
+const WHO = /^[a-z0-9-]{1,32}$/;
 const WipeBody = z.object({ contextId: z.string().min(1).max(64) }).strict();
 const SeenBody = z.object({ ids: z.array(z.string().regex(MEMORY_ID)).max(1000) }).strict();
 
@@ -54,8 +59,15 @@ const isJson = (contentType: string | undefined): boolean =>
 
 export const registerMemoryRoutes = (
   app: Hono<ServerEnv>,
-  deps: { readonly store: MemoryStore; readonly contexts: readonly Context[]; readonly log: Logger },
+  deps: { readonly store: MemoryStore; readonly contexts: readonly Context[]; readonly log: Logger; readonly mainId?: string },
 ): void => {
+  /** The store as the person asking sees it: theirs only. */
+  const storeOf = (c: HonoContext<ServerEnv>): MemoryStore => {
+    const who = c.req.query("who");
+    // The main user's are the ones that aren't anyone else's; a who that isn't an id sees nothing.
+    if (who === undefined || who === (deps.mainId ?? "renato")) return scopedMemoryStore(deps.store, undefined);
+    return scopedMemoryStore(deps.store, WHO.test(who) ? who : "nobody");
+  };
   const noStore = async (c: HonoContext<ServerEnv>, next: () => Promise<void>) => {
     await next();
     c.header("Cache-Control", "no-store");
@@ -81,7 +93,7 @@ export const registerMemoryRoutes = (
   app.use("/memories/*", noStore);
 
   app.get("/memories", async (c) => {
-    const memories = (await deps.store.list()).map((m) => toMemoryView(m, deps.contexts));
+    const memories = (await storeOf(c).list()).map((m) => toMemoryView(m, deps.contexts));
     deps.log.info("memories listed", { requestId: c.get("requestId"), count: memories.length });
     return c.json({
       memories,
@@ -93,7 +105,7 @@ export const registerMemoryRoutes = (
   app.post("/memories/seen", jsonOnly, async (c) => {
     const body = SeenBody.safeParse(await readJson(c));
     if (!body.success) return c.json(errorBody("Send { ids: [...] } with memory ids."), 400);
-    await deps.store.markSeen(body.data.ids);
+    await storeOf(c).markSeen(body.data.ids);
     return c.json({ seen: body.data.ids.length });
   });
 
@@ -101,7 +113,7 @@ export const registerMemoryRoutes = (
     const body = WipeBody.safeParse(await readJson(c));
     const context = body.success ? memoryContexts.find((ctx) => ctx.id === body.data.contextId) : undefined;
     if (!context) return c.json(errorBody("Send { contextId } with one of your contexts."), 400);
-    const removed = await deps.store.wipe({ contextId: context.id });
+    const removed = await storeOf(c).wipe({ contextId: context.id });
     deps.log.info("memories wiped", { requestId: c.get("requestId"), contextId: context.id, count: removed });
     return c.json({ wiped: removed, contextId: context.id });
   });
@@ -109,7 +121,7 @@ export const registerMemoryRoutes = (
   app.delete("/memories/:id", async (c) => {
     const id = c.req.param("id");
     if (!MEMORY_ID.test(id)) return c.json(errorBody("That isn't a memory id."), 400);
-    const deleted = await deps.store.delete(id);
+    const deleted = await storeOf(c).delete(id);
     deps.log.info("memory deleted", { requestId: c.get("requestId"), found: deleted });
     return deleted ? c.json({ deleted: id }) : c.json(errorBody("There's no memory with that id."), 404);
   });
