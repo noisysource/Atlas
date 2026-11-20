@@ -191,6 +191,8 @@ export type WhatsAppDeps = {
   readonly mainUser: string;
   /** #304: what answers a voice call (Gemini Live), for the person calling; no calls without it. */
   readonly callBrain?: (who: string, ask: (question: string) => Promise<string>) => CallBrain;
+  /** #304: which brain answers what's asked on a call: Google (faster) when it's set up. */
+  readonly callAskBrain?: "claude" | "google";
   readonly fetch?: typeof fetch;
   readonly now?: () => number;
   readonly newId?: () => string;
@@ -258,14 +260,14 @@ export const makeWhatsApp = (deps: WhatsAppDeps) => {
   };
 
   /** A question to Atlas, as this person; what to send back. */
-  const ask = async (chat: Chat, who: string, question: string): Promise<string> => {
+  const ask = async (chat: Chat, who: string, question: string, brain: "claude" | "google" = "claude"): Promise<string> => {
     const response = object(
       await deps
         .local("/ask", {
           question,
           history: chat.history,
           conversationId: chat.conversationId,
-          brain: "claude",
+          brain,
           ...(who !== deps.mainUser ? { user: who } : {}),
         })
         .catch(() => undefined),
@@ -329,7 +331,8 @@ export const makeWhatsApp = (deps: WhatsAppDeps) => {
     // Asked on the call: the same as a message; a card goes to the chat, to answer there.
     const askOnCall = async (question: string): Promise<string> => {
       const before = chat.waiting.length;
-      const reply = await ask(chat, who, question);
+      // On a call, the faster brain answers (as on the page in Google mode): every second is heard.
+      const reply = await ask(chat, who, question, deps.callAskBrain ?? "claude");
       if (chat.waiting.length > before) {
         const first = chat.waiting[0];
         if (first) await send(keys, c.from, askLine(first));
