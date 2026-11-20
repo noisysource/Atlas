@@ -15,7 +15,7 @@
 //    and the email, then type the password (it won't show). It signs in and
 //    reads the blinds and lights once, then keeps it all in
 //    data/house/firebase.json (gitignored, only you can read it).
-// 4. Set HOUSE_CONTROL=on in .env (with HOUSE=on) and restart Atlas.
+// 4. Set HOUSE_CONTROL=on in Data sources (with HOUSE=on) and restart Atlas.
 //
 // Nothing moves here: it only reads.
 
@@ -80,4 +80,4 @@ for (const m of homeModules) {
 }
 if (others.size > 0) console.log(`  Other modules, not blinds or lights: ${[...others].map(([t, n]) => `${t} ×${n}`).join(", ")}.`);
 console.log(`  Saved to ${path} (only you can read it; gitignored).`);
-console.log("\nPut HOUSE_CONTROL=on in .env (with HOUSE=on) and restart Atlas. Every change asks for your OK.");
+console.log("\nPut HOUSE_CONTROL=on in Data sources (with HOUSE=on) and restart Atlas. Every change asks for your OK.");

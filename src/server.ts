@@ -34,6 +34,7 @@ import { parseAskRequest } from "./request.js";
 import type { Deps } from "./types.js";
 import { MAIN_ID, userOf } from "./users.js";
 import type { LogBuffer } from "./log-buffer.js";
+import { registerSettingsRoutes } from "./settings-routes.js";
 import { WEB_SECURITY_HEADERS, type WebAssets } from "./web.js";
 
 /** Enough for a 2000-char question plus 20 turns of 4000 chars, with room for JSON overhead. */
@@ -124,6 +125,8 @@ export const makeServer = (
     readonly turns?: TurnRegistry;
     /** #305: the log kept for the panel's Logs tab (GET /logs). */
     readonly logs?: LogBuffer;
+    /** #310: Data sources can change the settings (local only): where they are, and whether npm run atlas restarts it. */
+    readonly settings?: { readonly root: string; readonly supervised: boolean };
     readonly newTurnId?: () => string;
     /** Atlas's voice (#73): GET /tts and POST /speak. Unset = no voice routes. */
     readonly tts?: { readonly providers: TtsProviders; readonly config: TtsConfig };
@@ -183,6 +186,9 @@ export const makeServer = (
       await next();
     });
   }
+
+  // #310: settings from the page (Data sources), after the host check like every route.
+  if (options.settings) registerSettingsRoutes(app, { ...options.settings, log: deps.log });
 
   // #305: the panel's Logs tab: entries after the last one it has. Metadata only (log.ts).
   const logBuffer = options.logs;

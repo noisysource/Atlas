@@ -1420,6 +1420,21 @@ Confirmed (2026-11-12):
   logs never carry a number or a message. Proactive messages outside the
   24-hour window need Meta templates: not yet.
 
+- **Settings from the page (#310):** Data sources holds every setting `.env`
+  had, grouped by source (`src/settings-catalog.ts`), in `data/settings.json`
+  (gitignored, 0600, this Mac only). The first start copies `.env` in; after
+  that the settings file is the whole truth, and `.env` isn't needed. Secrets
+  go to the page only as set or not set, and typing replaces one. Save checks
+  the result with `loadConfig` before writing. **Restart to apply**: the
+  server stops with code 75, and `npm run atlas` starts it again with the new
+  settings, keeping voice and the tunnel up. Google sources have **Connect an
+  account**, which runs that source's connect script on the Mac (Google's
+  sign-in opens in the browser) and shows its output. Vendus, house, GitHub
+  and gcloud keys are still set once in a terminal. WhatsApp's keys go in
+  `data/whatsapp.json`. With `TUNNEL=on`, `npm run atlas` runs cloudflared's
+  quick tunnel and points Meta's webhook at its new address with the app's
+  token (app ID | secret). Production never reads the settings file.
+
 ## Out of scope for M0
 
 Vendus, Cloud Run deployment or the Pi (#53), real memory (#24, #56),

@@ -8,7 +8,7 @@ import { showMorningBrief } from "./morning.js";
 import { startTasksPanel, taskGlance } from "./tasks.js";
 import { startRemindersPanel } from "./reminders.js";
 import { makeCostsView } from "./costs.js";
-import { renderTools } from "./tools-tab.js";
+import { makeSourcesPage } from "./sources-page.js";
 import { makeLogsTab } from "./logs-tab.js";
 import { makeSystemPanel } from "./system-panel.js";
 import { ago } from "./chats-lib.js";
@@ -366,6 +366,7 @@ startUniverse(/** @type {HTMLCanvasElement} */ (byId("universe")), {
 const sidePanel = byId("side");
 const toolsTab = byId("tools-tab");
 const logsTab = makeLogsTab(byId("logs-tab"));
+const sourcesPage = makeSourcesPage(toolsTab, { nodes: () => reachNodes });
 /** @type {import("./brain.js").ReachNode[]} */
 let reachNodes = [];
 const side = (() => {
@@ -381,7 +382,8 @@ const side = (() => {
     const usable = panes.some((p) => p.dataset.tab === tab) ? tab : "settings";
     current = usable;
     for (const p of panes) p.hidden = p.dataset.tab !== usable;
-    if (usable === "tools") renderTools(toolsTab, reachNodes);
+    // #310: Data sources: every setting, by source, set here instead of .env.
+    if (usable === "tools") void sourcesPage.load();
   };
   const show = (/** @type {boolean} */ open) => {
     sidePanel.hidden = !open;
@@ -476,7 +478,7 @@ const refreshReach = async () => {
     if (Array.isArray(body.nodes)) {
       reachNodes = /** @type {import("./brain.js").ReachNode[]} */ (body.nodes);
       brainView.setReach(reachNodes);
-      if (side.isOpen && side.tab === "tools") renderTools(toolsTab, reachNodes);
+      if (side.isOpen && side.tab === "tools") sourcesPage.render();
       systemPanel?.render();
     }
   } catch {

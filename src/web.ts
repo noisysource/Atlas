@@ -52,6 +52,7 @@ export const FILES: readonly { path: string; file: string; contentType: string }
   { path: "/logs-lib.js", file: "logs-lib.js", contentType: "text/javascript; charset=utf-8" },
   { path: "/system-panel.js", file: "system-panel.js", contentType: "text/javascript; charset=utf-8" },
   { path: "/chats-lib.js", file: "chats-lib.js", contentType: "text/javascript; charset=utf-8" },
+  { path: "/sources-page.js", file: "sources-page.js", contentType: "text/javascript; charset=utf-8" },
   { path: "/costs-lib.js", file: "costs-lib.js", contentType: "text/javascript; charset=utf-8" },
   { path: "/live.js", file: "live.js", contentType: "text/javascript; charset=utf-8" },
   { path: "/live-lib.js", file: "live-lib.js", contentType: "text/javascript; charset=utf-8" },

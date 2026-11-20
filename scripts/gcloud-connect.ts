@@ -74,4 +74,4 @@ else {
   console.log(`    gcloud projects add-iam-policy-binding ${target.projectId} --member=serviceAccount:${target.serviceAccount} --role=roles/datastore.viewer`);
 }
 console.log(`✓ Saved to ${file} (names only; no key is stored).`);
-console.log("\nPut GCLOUD=on in .env (with BARE_MODE=on) and restart Atlas.");
+console.log("\nPut GCLOUD=on in Data sources (with BARE_MODE=on) and restart Atlas.");

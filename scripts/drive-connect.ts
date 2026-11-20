@@ -103,4 +103,4 @@ const about = await fetch("https://www.googleapis.com/drive/v3/about?fields=user
   .then(async (r) => (r.ok ? ((await r.json()) as { user?: { emailAddress?: unknown } }) : undefined))
   .catch(() => undefined);
 console.log(typeof about?.user?.emailAddress === "string" ? `✓ Connected "${which}" to ${about.user.emailAddress}.` : "✗ Couldn't read the account's address; check the Google Drive API is enabled.");
-console.log("\nNow put DRIVE=on (and DRIVE_WRITE=on if you allowed writing) in .env, with BARE_MODE=on, and restart Atlas.");
+console.log("\nNow put DRIVE=on (and DRIVE_WRITE=on if you allowed writing) in Data sources, with BARE_MODE=on, and restart Atlas.");

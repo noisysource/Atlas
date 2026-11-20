@@ -44,6 +44,8 @@ const KeysFile = z
     phoneNumberId: z.string().regex(/^\d{5,30}$/),
     appSecret: z.string().regex(/^[A-Za-z0-9]{16,128}$/),
     verifyToken: z.string().min(12).max(200),
+    // #310: the Meta app's ID, so the webhook's address can be updated by itself when the tunnel's changes.
+    appId: z.string().regex(/^\d{5,30}$/).optional(),
     // International numbers, digits only (as WhatsApp sends them) → who they are.
     numbers: z.record(z.string().regex(/^\d{8,15}$/), z.string().regex(/^[a-z][a-z0-9-]{0,23}$/)),
   })

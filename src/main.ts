@@ -9,6 +9,7 @@ import { makeBackgroundTasks } from "./background.js";
 import { loadConfig } from "./config.js";
 import { formatModelRef } from "./llm/model-ref.js";
 import { makeJsonLogger } from "./log.js";
+import { applySettings } from "./settings.js";
 import { isRoutine, makeLogBuffer } from "./log-buffer.js";
 
 const isRoutineLine = (line: string): boolean => {
@@ -57,6 +58,8 @@ const refuse = (reason: string): never => {
   process.exit(1);
 };
 
+// #310: the settings set from the page (data/settings.json) over .env; the first start copies .env in.
+const settingsDid = process.env.NODE_ENV === "production" ? "none" : applySettings(process.cwd(), process.env);
 const config = loadConfig(process.env);
 if (!config.ok) refuse(config.error);
 const cfg = config.ok ? config.value : refuse("unreachable");
@@ -180,6 +183,7 @@ const app = makeServer(deps.ok ? deps.value : refuse("unreachable"), {
   warm,
   turns,
   logs,
+  ...(cfg.env === "production" ? {} : { settings: { root: process.cwd(), supervised: process.env.ATLAS_SUPERVISED === "1" } }),
   tts,
   stt,
   turn: cfg.turn,
@@ -197,6 +201,7 @@ const app = makeServer(deps.ok ? deps.value : refuse("unreachable"), {
 });
 
 const server = serve({ fetch: app.fetch, hostname: cfg.host, port: cfg.port }, (info) => {
+  if (settingsDid !== "none") log.info("settings", { from: settingsDid === "imported" ? ".env, copied into data/settings.json" : "data/settings.json" });
   log.info("listening", {
     url: `http://${cfg.host}:${info.port}`,
     env: cfg.env,
