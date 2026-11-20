@@ -148,3 +148,20 @@ describe("guards and logs", () => {
     expect((await app.request("/memories")).status).toBe(404);
   });
 });
+
+describe("each person's memories (#290)", () => {
+  it("shows him his and her hers, and she can't delete his", async () => {
+    const { req, store, ids } = await setup();
+    await add2(store, "Pilates on Tuesdays", "personal@marisa");
+    const his = (await (await req("GET", "/memories")).json()) as { memories: { id: string; text: string }[] };
+    expect(his.memories.map((m) => m.text)).not.toContain("Pilates on Tuesdays");
+    expect(((await (await req("GET", "/memories?who=renato")).json()) as { memories: unknown[] }).memories).toHaveLength(3);
+    const hers = (await (await req("GET", "/memories?who=marisa")).json()) as { memories: { contextId: string; contextName: string; text: string }[] };
+    expect(hers.memories).toEqual([expect.objectContaining({ text: "Pilates on Tuesdays", contextId: "personal", contextName: "Personal" })]);
+    expect((await req("DELETE", `/memories/${ids.a}?who=marisa`)).status).toBe(404);
+    expect(await store.get(ids.a)).toBeDefined();
+    expect(((await (await req("GET", "/memories?who=Not%20an%20id")).json()) as { memories: unknown[] }).memories).toEqual([]);
+  });
+});
+
+const add2 = (s: MemoryStore, text: string, contextId: string) => s.add({ contextId: contextId as ContextId, kind: "fact", text, origin: "auto", source: "req-0" });

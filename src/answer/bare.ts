@@ -1131,7 +1131,10 @@ export const makeBareAnswerer = (deps: {
       if (offered.has(call.name)) onReach?.(call.name);
       const group = groupOfTool(call.name);
       // #290: only her tools for someone who isn't him, whatever the model asks for; the brief reads his email.
-      if (guest && ((group && !available.includes(group)) || call.name === DAY_BRIEF_TOOL.name)) {
+      // Her email and files are hers: a guest's Gmail and Drive calls reach only her own accounts.
+      const askedAccount = typeof call.input === "object" && call.input !== null ? (call.input as Record<string, unknown>).account : undefined;
+      const otherAccount = guest && (group === "gmail" || group === "drive") && typeof askedAccount === "string" && !guest.accounts.some((a) => a === askedAccount);
+      if (guest && ((group && !available.includes(group)) || call.name === DAY_BRIEF_TOOL.name || otherAccount)) {
         onStep?.({ kind: "tool", name: call.name, args: "", by: "model", ok: false, error: "refused: not hers" });
         return { callId: call.id, content: `Refused: that's ${deps.userName ?? "the main user"}'s, not ${guest.name}'s. Say so in one sentence.`, isError: true };
       }

@@ -16,7 +16,7 @@ import { makeJsonLogger } from "../src/log.js";
 import { scopedMemoryStore } from "../src/memory-scope.js";
 import { makeMemoryStoreInMemory } from "../src/memory-store.js";
 import { makePrecheck } from "../src/precheck.js";
-import { ok } from "../src/result.js";
+import { err, ok } from "../src/result.js";
 import { makeServer } from "../src/server.js";
 import type { AnswerUser, Context, ContextId, Deps } from "../src/types.js";
 import { GUEST_GROUPS, parseUsers, userOf, whoLines, type User } from "../src/users.js";
@@ -195,6 +195,36 @@ describe("an answer for Marisa (#290)", () => {
     expect(steps.find((s) => s.name === "vendus_invoices")).toMatchObject({ ok: false, error: "refused: not hers" });
     expect(read).toEqual(["marisa"]);
     expect(JSON.stringify(requests[1]?.messages)).toContain("not Marisa's");
+  });
+
+  it("with Gmail among her tools, searches only her own account", async () => {
+    const parsed = parseUsers("marisa=Marisa;accounts=marisa;tools=calendar,house,gmail", "Renato");
+    if (!parsed.ok) throw new Error(parsed.error);
+    const searched: string[] = [];
+    const { llm } = scripted([
+      calls({ id: "1", name: "gmail_search", input: { account: "personal", query: "is:unread" } }, { id: "2", name: "gmail_search", input: { account: "marisa", query: "is:unread" } }),
+      text("Two unread."),
+    ]);
+    const answer = makeBareAnswerer({
+      llm,
+      userName: "Renato",
+      tools: true,
+      gmail: {
+        reader: {
+          search: async (r) => {
+            searched.push(r.account);
+            return ok([]);
+          },
+          read: async () => err({ code: "api", message: "none" }),
+        },
+        isEc: () => false,
+      },
+    });
+    const steps: { name: string; ok: boolean; error?: string }[] = [];
+    await answer({ context: personal, question: "Any unread email?", history: [], memories: [], now: NOW, user: marisaOf(parsed.value), onStep: (s) => void (s.kind === "tool" && steps.push(s)) });
+    expect(searched).toEqual(["marisa"]);
+    expect(steps[0]).toMatchObject({ name: "gmail_search", ok: false, error: "refused: not hers" });
+    expect(whoLines(userOf(parsed.value, "marisa"), parsed.value[0] as User)).toContain("email and files aren't hers to read");
   });
 });
 
