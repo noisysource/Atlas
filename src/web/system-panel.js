@@ -28,7 +28,7 @@ export const seconds = (ms) => (ms < 1000 ? `${Math.round(ms)} ms` : `${(ms / 10
 
 /**
  * @param {HTMLElement} root the panel
- * @param {{ brain: () => string, who: () => string | undefined, sources: () => { on: number, all: number } }} deps
+ * @param {{ brain: () => string, switchBrain?: () => void, who: () => string | undefined, sources: () => { on: number, all: number } }} deps
  */
 export const makeSystemPanel = (root, deps) => {
   const body = /** @type {HTMLElement} */ (root.querySelector(".system-body"));
@@ -44,6 +44,18 @@ export const makeSystemPanel = (root, deps) => {
     if (hint) c.append(el("span", "sys-hint", hint));
     return c;
   };
+  /** The brain card switches the brain (Local → Claude → Google), like the button in Settings. */
+  const brainCard = () => {
+    const c = card("Brain", deps.brain(), deps.switchBrain ? "tap to switch" : "");
+    if (deps.switchBrain) {
+      const b = Object.assign(document.createElement("button"), { type: "button", className: "sys-card sys-card-button" });
+      b.setAttribute("aria-label", `Brain: ${deps.brain()}. Switch`);
+      b.append(...c.childNodes);
+      b.addEventListener("click", () => deps.switchBrain?.());
+      return b;
+    }
+    return c;
+  };
   const section = (/** @type {string} */ title, /** @type {HTMLElement[]} */ items, wide = false) => {
     const s = el("section", "sys-section");
     const grid = el("div", wide ? "sys-list" : "sys-grid");
@@ -57,7 +69,7 @@ export const makeSystemPanel = (root, deps) => {
     const who = deps.who();
     body.replaceChildren(
       section("Session", [card("Questions", String(session.asked)), card("Last answer", session.lastMs === undefined ? "—" : seconds(session.lastMs))]),
-      section("Atlas", [card("Brain", deps.brain()), card("Sources", src.all === 0 ? "—" : `${src.on} / ${src.all}`, "connected"), ...(who ? [card("Talking to", who)] : [])]),
+      section("Atlas", [brainCard(), card("Sources", src.all === 0 ? "—" : `${src.on} / ${src.all}`, "connected"), ...(who ? [card("Talking to", who)] : [])]),
       section("Cost", costs ? [card("Today", costs.today, `${costs.calls} calls`), card("This month", costs.month)] : [card("Cost", "—", "not available")]),
       ...(costs && costs.services.length > 0
         ? [

@@ -87,7 +87,8 @@ export const buildAskBody = ({ question, context, history, conversationId, remem
 /** @typedef {"claude" | "local" | "google"} Brain */
 
 /** The page's brain choice (#88; #248: Google): Local unless another was picked. @param {string | null} saved @returns {Brain} */
-export const parseBrain = (saved) => (saved === "claude" || saved === "google" ? saved : "local");
+// #307: with nothing saved, Claude: the brain with his tools (the local one has none but the calendar).
+export const parseBrain = (saved) => (saved === "local" || saved === "google" ? saved : "claude");
 
 /** Each brain's mark and short name. @type {Record<Brain, { icon: string, name: string }>} */
 export const BRAINS = { local: { icon: "🧠", name: "Local" }, claude: { icon: "☁️", name: "Claude" }, google: { icon: "✦", name: "Google" } };

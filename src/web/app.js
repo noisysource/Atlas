@@ -860,6 +860,8 @@ const renderControls = () => {
   brainButton.setAttribute("aria-pressed", String(state.brain !== "local"));
   brainButton.textContent = `${brainIcon(state.brain)} ${brainName(state.brain)}`;
   brainButton.title = `Answering: ${brainLabels[state.brain] ?? state.brain}. Tap to switch: ${brainsAvailable.map(brainName).join(", ")}.`;
+  // #307: the System panel shows the brain too.
+  systemPanel?.render();
   conversationButton.setAttribute("aria-pressed", String(state.conversation));
   conversationButton.textContent = state.conversation ? "💬 Conversation on" : "💬 Conversation off";
   autoNote.hidden = !(state.conversation && state.autoBlocked);
@@ -2805,7 +2807,8 @@ void people.ready.then(() => keeper.restore());
 // #307: the System panel on the right: this session, the brain, what's connected, what it costs.
 /** @type {ReturnType<typeof makeSystemPanel> | undefined} */
 var systemPanel = makeSystemPanel(byId("system"), {
-  brain: () => brainLabels[state.brain] ?? state.brain,
+  brain: () => brainName(state.brain),
+  switchBrain: () => brainButton.click(),
   who: () => people.name(),
   sources: () => ({ on: reachNodes.filter((n) => n.status === "on" || n.status === "ready").length, all: reachNodes.filter((n) => n.status !== "kiro").length }),
 });

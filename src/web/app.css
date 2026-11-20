@@ -4084,3 +4084,17 @@ body[data-side="true"] .app .center .layout {
   }
 }
 
+
+/* The brain card in the System panel is a button: tap to switch brains. */
+.sys-card-button {
+  align-items: flex-start;
+  font: inherit;
+  text-align: left;
+  letter-spacing: normal;
+  cursor: pointer;
+  box-shadow: none;
+}
+
+.sys-card-button:hover {
+  border-color: rgb(74 123 255 / 0.5);
+}
