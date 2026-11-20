@@ -33,6 +33,7 @@ import type { TtsProviders } from "./tts/registry.js";
 import { parseAskRequest } from "./request.js";
 import type { Deps } from "./types.js";
 import { MAIN_ID, userOf } from "./users.js";
+import type { LogBuffer } from "./log-buffer.js";
 import { WEB_SECURITY_HEADERS, type WebAssets } from "./web.js";
 
 /** Enough for a 2000-char question plus 20 turns of 4000 chars, with room for JSON overhead. */
@@ -121,6 +122,8 @@ export const makeServer = (
     readonly memories?: MemoryStore;
     /** Streamed answers waiting for their playback report (#72). */
     readonly turns?: TurnRegistry;
+    /** #305: the log kept for the panel's Logs tab (GET /logs). */
+    readonly logs?: LogBuffer;
     readonly newTurnId?: () => string;
     /** Atlas's voice (#73): GET /tts and POST /speak. Unset = no voice routes. */
     readonly tts?: { readonly providers: TtsProviders; readonly config: TtsConfig };
@@ -178,6 +181,16 @@ export const makeServer = (
         return c.json(errorBody("This server only accepts requests to localhost."), 403);
       }
       await next();
+    });
+  }
+
+  // #305: the panel's Logs tab: entries after the last one it has. Metadata only (log.ts).
+  const logBuffer = options.logs;
+  if (logBuffer) {
+    app.get("/logs", (c) => {
+      const after = Number(c.req.query("after") ?? "0");
+      const entries = logBuffer.after(Number.isFinite(after) && after >= 0 ? after : 0);
+      return c.json({ entries });
     });
   }
 

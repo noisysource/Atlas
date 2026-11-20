@@ -9,6 +9,15 @@ import { makeBackgroundTasks } from "./background.js";
 import { loadConfig } from "./config.js";
 import { formatModelRef } from "./llm/model-ref.js";
 import { makeJsonLogger } from "./log.js";
+import { isRoutine, makeLogBuffer } from "./log-buffer.js";
+
+const isRoutineLine = (line: string): boolean => {
+  try {
+    return isRoutine(JSON.parse(line) as Record<string, unknown>);
+  } catch {
+    return false;
+  }
+};
 import { openSqliteMemoryStore, startMemoryPurge } from "./memory-sqlite.js";
 import { msUntil, startNightlyIntrospection } from "./introspection.js";
 import { startDailyAt } from "./morning.js";
@@ -29,7 +38,17 @@ import { readFile as readKeysFile } from "node:fs/promises";
 
 const SHUTDOWN_TIMEOUT_MS = 10_000;
 
-const log = makeJsonLogger({ fields: { service: "atlas" } });
+// #305: every line is kept for the page's Logs tab; the terminal leaves out the page's own
+// polling when it went fine (LOG_TERMINAL=all shows everything, as before).
+const logs = makeLogBuffer();
+const terminalAll = process.env.LOG_TERMINAL === "all";
+const log = makeJsonLogger({
+  fields: { service: "atlas" },
+  write: (line) => {
+    logs.add(line);
+    if (terminalAll || !isRoutineLine(line)) process.stdout.write(`${line}\n`);
+  },
+});
 
 const refuse = (reason: string): never => {
   log.error("refusing to start", { reason });
@@ -160,6 +179,7 @@ const warm = (): void => {
 const app = makeServer(deps.ok ? deps.value : refuse("unreachable"), {
   warm,
   turns,
+  logs,
   tts,
   stt,
   turn: cfg.turn,

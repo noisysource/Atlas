@@ -3502,3 +3502,70 @@ button.trace-head:hover:not(:disabled) {
     flex: 0 0 min(40rem, calc((100vw - var(--side-w)) * 0.55));
   }
 }
+
+/* #305: the Logs tab: filters on top, one compact row per entry, repeats folded. */
+.logs-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-bottom: 0.6rem;
+}
+
+.logs-bar select,
+.logs-bar input[type="search"] {
+  flex: 1 1 8rem;
+  min-width: 0;
+  font-size: 12px;
+}
+
+.logs-routine {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  color: #8a93ad;
+  font-size: 12px;
+}
+
+.logs-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.log-row {
+  display: grid;
+  grid-template-columns: auto auto 1fr;
+  gap: 0 0.5rem;
+  padding: 0.25rem 0.3rem;
+  border-bottom: 1px solid #10141f;
+  color: #8a93ad;
+}
+
+.log-time {
+  color: #5d6680;
+}
+
+.log-area {
+  color: #9fb4e8;
+}
+
+.log-message {
+  color: #cfd6ea;
+}
+
+.log-details {
+  grid-column: 1 / -1;
+  overflow-wrap: anywhere;
+  color: #5d6680;
+}
+
+.log-row.sev-warning .log-message {
+  color: #f0c36b;
+}
+
+.log-row.sev-error .log-message {
+  color: #ff7a7a;
+}
