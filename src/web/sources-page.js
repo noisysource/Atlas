@@ -1,4 +1,4 @@
-// Data sources (#310): every setting Atlas has, by what it's for, set here
+// The Tools page (#310, named Data sources at first): every setting Atlas has, by what it's for, set here
 // instead of in .env. Each card shows its source's status (from the galaxy's
 // /reach), its switches and fields, and for Google sources a Connect button
 // that opens Google's sign-in on this Mac. Save writes data/atlas-settings.json;
@@ -164,7 +164,7 @@ export const makeSourcesPage = (root, deps) => {
       if (s.command) card.append(el("p", "src-hint", `One-time setup in a terminal: ${s.command}`));
       return card;
     });
-    root.replaceChildren(el("h2", "page-title", "Data sources"), el("p", "note", "Everything Atlas uses, set here instead of .env. Save, then Restart to apply."), bar, ...cards);
+    root.replaceChildren(el("h2", "page-title", "Tools"), el("p", "note", "What Atlas can use, and how: each card turns a set of tools on, with its accounts and keys. Set here instead of .env; Save, then Restart to apply."), bar, ...cards);
     showBar();
   };
 
@@ -177,7 +177,7 @@ export const makeSourcesPage = (root, deps) => {
       editedWa = {};
       render();
     } catch {
-      root.replaceChildren(el("h2", "page-title", "Data sources"), el("p", "note", "Settings can only be changed on this Mac, with Atlas started by npm run atlas."));
+      root.replaceChildren(el("h2", "page-title", "Tools"), el("p", "note", "Settings can only be changed on this Mac, with Atlas started by npm run atlas."));
     }
   };
 

@@ -361,7 +361,7 @@ startUniverse(/** @type {HTMLCanvasElement} */ (byId("universe")), {
 }
 
 // #307: OpenJarvis-style pages. The menu on the left picks one: Chat (the galaxy and the conversation), or
-// Dashboard, Data sources, Memory, Skills, Logs, Settings, shown in the middle in its place. (#300's
+// Dashboard, Tools, Memory, Skills, Logs, Settings, shown in the middle in its place. (#300's
 // panel became these pages: `side` keeps its name, open(tab) shows a page, close() goes back to Chat.)
 const sidePanel = byId("side");
 const toolsTab = byId("tools-tab");
@@ -382,7 +382,7 @@ const side = (() => {
     const usable = panes.some((p) => p.dataset.tab === tab) ? tab : "settings";
     current = usable;
     for (const p of panes) p.hidden = p.dataset.tab !== usable;
-    // #310: Data sources: every setting, by source, set here instead of .env.
+    // #310: Tools: every setting, by source, set here instead of .env.
     if (usable === "tools") void sourcesPage.load();
   };
   const show = (/** @type {boolean} */ open) => {

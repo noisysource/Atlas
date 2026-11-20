@@ -1,4 +1,4 @@
-// What Data sources shows and lets him set (#310): every setting .env had,
+// What Tools shows and lets him set (#310): every setting .env had,
 // grouped by what it's for, with a label, a hint, and whether it's secret.
 // Only keys listed here can be set from the page.
 

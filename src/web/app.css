@@ -4099,7 +4099,7 @@ body[data-side="true"] .app .center .layout {
   border-color: rgb(74 123 255 / 0.5);
 }
 
-/* #310: Data sources: a card per source, its switches and fields, Save and Restart on top. */
+/* #310: Tools: a card per source, its switches and fields, Save and Restart on top. */
 .page-title {
   margin: 0 0 0.3rem;
   font-size: 1.05rem;

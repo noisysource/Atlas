@@ -1,4 +1,4 @@
-// Data sources' routes (#310): read and change Atlas's settings from the page,
+// Tools' routes (#310): read and change Atlas's settings from the page,
 // restart to apply them, and connect Google accounts. Local only (the host
 // check before every route), and never in production.
 //

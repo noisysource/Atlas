@@ -11,7 +11,7 @@
 //
 // Local only. It prints no settings or keys.
 //
-// #310: settings come from data/atlas-settings.json (set in Data sources; the first
+// #310: settings come from data/atlas-settings.json (set in Tools; the first
 // start copies .env in). When the page applies new settings, the server stops
 // with code 75 and starts again here with them; voice and the tunnel stay up.
 // With TUNNEL=on and WHATSAPP=on it also runs the Cloudflare tunnel for
@@ -47,7 +47,7 @@ const { voice, open } = args.ok ? args.value : { voice: true, open: true };
 const settingsDid = applySettings(root, process.env);
 if (settingsDid === "imported")
   say(
-    "Copied .env into data/atlas-settings.json: from now on, settings are changed in Data sources.",
+    "Copied .env into data/atlas-settings.json: from now on, settings are changed in Tools.",
   );
 const config = loadConfig(process.env);
 if (!config.ok) fail(config.error);
@@ -225,7 +225,7 @@ const startAtlas = (env: NodeJS.ProcessEnv) =>
       env: { ...env, ATLAS_SUPERVISED: "1" },
       onExit: (code) => {
         if (code !== RESTART_CODE) return false;
-        // Settings changed in Data sources: read them again and start the server with them.
+        // Settings changed in Tools: read them again and start the server with them.
         const fresh: NodeJS.ProcessEnv = { ...process.env };
         applySettings(root, fresh);
         say("Applying the new settings: restarting Atlas.");

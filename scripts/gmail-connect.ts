@@ -107,4 +107,4 @@ const profile = await fetch("https://gmail.googleapis.com/gmail/v1/users/me/prof
   .catch(() => undefined);
 console.log(typeof profile?.emailAddress === "string" ? `✓ Connected "${which}" to ${profile.emailAddress}.` : "✗ Couldn't read the account's address; check the Gmail API is enabled.");
 console.log(write ? "✓ Drafts and sending allowed (always after your OK)." : "");
-console.log("\nNow put GMAIL=on in Data sources (with BARE_MODE=on) and restart Atlas: a running Atlas keeps its old connections until it restarts.");
+console.log("\nNow put GMAIL=on in Tools (with BARE_MODE=on) and restart Atlas: a running Atlas keeps its old connections until it restarts.");

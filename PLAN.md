@@ -1420,7 +1420,7 @@ Confirmed (2026-11-12):
   logs never carry a number or a message. Proactive messages outside the
   24-hour window need Meta templates: not yet.
 
-- **Settings from the page (#310):** Data sources holds every setting `.env`
+- **Settings from the page (#310):** Tools holds every setting `.env`
   had, grouped by source (`src/settings-catalog.ts`), in `data/atlas-settings.json`
   (gitignored, 0600, this Mac only). The first start copies `.env` in; after
   that the settings file is the whole truth, and `.env` isn't needed. Secrets

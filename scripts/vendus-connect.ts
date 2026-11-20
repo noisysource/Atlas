@@ -54,4 +54,4 @@ await mkdir(dirname(config.vendus.keyPath), { recursive: true, mode: 0o700 });
 await writeFile(config.vendus.keyPath, JSON.stringify({ apiKey: key }), { mode: 0o600 });
 await chmod(config.vendus.keyPath, 0o600);
 console.log(`✓ Vendus is connected (read-only in Atlas). Key saved to ${config.vendus.keyPath} (only you can read it; gitignored).`);
-console.log("\nPut VENDUS=on in Data sources (with BARE_MODE=on) and restart Atlas.");
+console.log("\nPut VENDUS=on in Tools (with BARE_MODE=on) and restart Atlas.");

@@ -86,4 +86,4 @@ await nodeTokenFiles.writeFile(path, JSON.stringify(list, null, 2));
 console.log(`✓ Saved the ${owner} token to ${path} (only you can read it; gitignored).`);
 console.log(own.length > 0 ? `✓ It can see ${own.length} ${owner} repo(s) (${own.filter((r) => r.private === true).length} private).` : `! It can't see any ${owner} repos yet: check the token's resource owner and repository access.`);
 console.log(`  Owners connected: ${list.map((t) => t.owner).join(", ")}.`);
-console.log(write ? "\nNow put CODE_FIX=on in Data sources (with GITHUB=on and CODE_AGENT=on) and restart Atlas." : "\nNow put GITHUB=on in Data sources (with BARE_MODE=on) and restart Atlas.");
+console.log(write ? "\nNow put CODE_FIX=on in Tools (with GITHUB=on and CODE_AGENT=on) and restart Atlas." : "\nNow put GITHUB=on in Tools (with BARE_MODE=on) and restart Atlas.");

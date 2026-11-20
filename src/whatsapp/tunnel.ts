@@ -29,7 +29,7 @@ export const pointWebhook = async (deps: {
     ) as typeof keys;
   } catch {
     deps.say(
-      "WhatsApp isn't set up yet (Data sources → WhatsApp), so Meta's webhook wasn't changed.",
+      "WhatsApp isn't set up yet (Tools → WhatsApp), so Meta's webhook wasn't changed.",
     );
     return false;
   }
@@ -39,7 +39,7 @@ export const pointWebhook = async (deps: {
     typeof keys.verifyToken !== "string"
   ) {
     deps.say(
-      `Set the App ID in Data sources → WhatsApp so the webhook updates itself; for now put ${deps.url}/whatsapp/webhook in Meta by hand.`,
+      `Set the App ID in Tools → WhatsApp so the webhook updates itself; for now put ${deps.url}/whatsapp/webhook in Meta by hand.`,
     );
     return false;
   }

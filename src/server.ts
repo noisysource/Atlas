@@ -125,7 +125,7 @@ export const makeServer = (
     readonly turns?: TurnRegistry;
     /** #305: the log kept for the panel's Logs tab (GET /logs). */
     readonly logs?: LogBuffer;
-    /** #310: Data sources can change the settings (local only): where they are, and whether npm run atlas restarts it. */
+    /** #310: Tools can change the settings (local only): where they are, and whether npm run atlas restarts it. */
     readonly settings?: { readonly root: string; readonly supervised: boolean };
     readonly newTurnId?: () => string;
     /** Atlas's voice (#73): GET /tts and POST /speak. Unset = no voice routes. */
@@ -187,7 +187,7 @@ export const makeServer = (
     });
   }
 
-  // #310: settings from the page (Data sources), after the host check like every route.
+  // #310: settings from the page (Tools), after the host check like every route.
   if (options.settings) registerSettingsRoutes(app, { ...options.settings, log: deps.log });
 
   // #305: the panel's Logs tab: entries after the last one it has. Metadata only (log.ts).
