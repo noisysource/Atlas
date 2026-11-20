@@ -247,6 +247,7 @@ const whatsappServer = (() => {
     keys,
     local,
     mainUser: "renato",
+    ...(cfg.gemini.enabled ? { callAskBrain: "google" as const } : {}),
     // #304: calls are answered by Gemini Live, asking this server for anything real.
     ...(liveCall
       ? {
