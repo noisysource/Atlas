@@ -13,6 +13,7 @@
 
 import type { BrainStore } from "./current-brain.js";
 import { exchangeOf, keptText, type Dataset } from "./dataset.js";
+import { runInTurn } from "./turn-context.js";
 import { randomUUID } from "node:crypto";
 import { Hono, type Context } from "hono";
 import { bodyLimit } from "hono/body-limit";
@@ -160,7 +161,9 @@ export const makeServer = (
   const turns = options.turns ?? makeTurnRegistry({ log: deps.log });
   const allowedHosts = options.allowedHosts?.map((h) => h.toLowerCase());
   /** #295: one /ask into the dataset, after the reply (never in its way). */
-  const keep = (request: AskRequest, response: AskResponse, started: number, channel: "page" | "whatsapp", steps?: readonly PathStep[]): void => {
+  const keep = (request: AskRequest, response: AskResponse, started: number, channel: "page" | "whatsapp", steps?: readonly PathStep[], turn?: string): void => {
+    // #299: how long it took, beside what it cost (never its words).
+    if (turn && response.type !== "handoff") deps.costs?.answer?.({ kind: "answer", at: deps.now().toISOString(), turn, brain: request.brain ?? "claude", ms: Math.round(performance.now() - started), outcome: response.type, channel });
     const dataset = options.dataset;
     if (!dataset) return;
     const entry = exchangeOf(request, response, { at: deps.now(), ms: performance.now() - started, mainId: "renato", channel, ...(steps ? { steps } : {}) });
@@ -254,8 +257,8 @@ export const makeServer = (
       if (!wantsStream(c.req.header("accept"))) {
         const askStarted = performance.now();
         const steps: PathStep[] = [];
-        const response = await handleAsk(askDeps, request.value, { requestId, onStep: (step) => void steps.push(step) });
-        keep(request.value, response, askStarted, channel, steps);
+        const response = await runInTurn(requestId, () => handleAsk(askDeps, request.value, { requestId, onStep: (step) => void steps.push(step) }));
+        keep(request.value, response, askStarted, channel, steps, requestId);
         return c.json(response);
       }
 
@@ -286,7 +289,7 @@ export const makeServer = (
 
         send("start", { turnId });
         const steps: PathStep[] = [];
-        const response = await handleAsk(askDeps, request.value, {
+        const response = await runInTurn(requestId, () => handleAsk(askDeps, request.value, {
           requestId,
           signal: controller.signal,
           // Raw text only for the timing; what's sent is each sentence the honesty guard passed (#96).
@@ -311,7 +314,7 @@ export const makeServer = (
               stages.memoriesMs = fields.ms;
             }
           },
-        });
+        }));
         const timing = {
           ...stages,
           ...(firstTokenMs !== undefined ? { firstTokenMs } : {}),
@@ -320,7 +323,7 @@ export const makeServer = (
         };
         send("timing", timing);
         send(response.type === "answer" ? "done" : "reply", response);
-        keep(request.value, response, started, channel, steps);
+        keep(request.value, response, started, channel, steps, requestId);
         await writes;
         askDeps.log.info("ask stream", { outcome: controller.signal.aborted ? "cancelled" : response.type, sentences, ...timing });
       });
@@ -486,6 +489,12 @@ export const makeServer = (
       c.header("Cache-Control", "no-store");
       return c.json(await costs.summary());
     });
+    const detail = costs.detail;
+    if (detail)
+      app.get("/costs/detail", async (c) => {
+        c.header("Cache-Control", "no-store");
+        return c.json(await detail());
+      });
   }
 
   // #138: his answer to opening an issue for a gap. Only "yes" opens it.
@@ -773,8 +782,9 @@ export const makeServer = (
         const request = parseAskRequest({ question, history, brain: "google" });
         if (!request.ok) return { type: "error", message: request.error };
         const liveStarted = performance.now();
-        const response = await handleAsk(deps, request.value, meta);
-        keep({ ...request.value, spoken: true }, response, liveStarted, "page");
+        const turn = randomUUID();
+        const response = await runInTurn(turn, () => handleAsk(deps, request.value, meta));
+        keep({ ...request.value, spoken: true }, response, liveStarted, "page", undefined, turn);
         return response;
       },
       log: deps.log,

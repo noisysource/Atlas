@@ -21,7 +21,7 @@ import type { HouseChanges } from "./house/house-changes.js";
 import type { Gaps } from "./gaps/gaps.js";
 import type { Reminders } from "./reminders/reminders.js";
 import type { TalkStore } from "./talk.js";
-import type { CostSummary } from "./costs.js";
+import type { AnswerEvent, CostDetail, CostSummary } from "./costs.js";
 import type { LiveSessions } from "./live/routes.js";
 import type { CalendarChanges } from "./calendar/change.js";
 import type { InboxTidy } from "./gmail/tidy.js";
@@ -410,7 +410,7 @@ export type Deps = {
   /** #250: Gemini Live sessions, one per page, when ✦ Google may talk by voice. */
   readonly live?: LiveSessions;
   /** #247: what Atlas costs, per service: GET /costs. */
-  readonly costs?: { readonly summary: () => Promise<CostSummary> };
+  readonly costs?: { readonly summary: () => Promise<CostSummary>; /** #299 */ readonly detail?: () => Promise<CostDetail>; readonly answer?: (a: AnswerEvent) => void };
   /** #138: his answer to opening an issue for a gap (POST /gaps/issue). Only "yes" opens it. */
   readonly gapIssue?: Pick<Gaps, "decide">;
   /** #166: his answer to moving the blinds (POST /house/blinds). Only "yes" moves them. */

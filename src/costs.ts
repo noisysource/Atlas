@@ -17,6 +17,7 @@ import type { Result } from "./result.js";
 import type { ModelRef } from "./llm/model-ref.js";
 import type { CodeAgent } from "./code/agent.js";
 import type { TaskRunner } from "./code/task-runner.js";
+import { currentTurn } from "./turn-context.js";
 
 export const PRICES_AS_OF = "2026-11-16";
 
@@ -80,6 +81,19 @@ export type CostEvent = {
   readonly usd?: number;
   /** A task on his Claude login: what it would have cost on the API. */
   readonly apiEquivalentUsd?: number;
+  /** #299: the answer this call was part of (its request id). */
+  readonly turn?: string;
+};
+
+/** #299: one answer's timing, for the dashboard: never its words. */
+export type AnswerEvent = {
+  readonly kind: "answer";
+  readonly at: string;
+  readonly turn: string;
+  readonly brain: string;
+  readonly ms: number;
+  readonly outcome: string;
+  readonly channel: string;
 };
 
 export type Usage = LlmUsage & { readonly audioInputTokens?: number; readonly audioOutputTokens?: number };
@@ -121,7 +135,13 @@ export const eventOf = (ref: ModelRef, purpose: string, u: Usage, searches: numb
 export type CostLog = {
   readonly record: (e: CostEvent) => void;
   readonly all: () => Promise<readonly CostEvent[]>;
+  /** #299: an answer's timing, in the same file. */
+  readonly answer?: (a: AnswerEvent) => void;
+  readonly answers?: () => Promise<readonly AnswerEvent[]>;
 };
+
+const isAnswer = (v: unknown): v is AnswerEvent =>
+  typeof v === "object" && v !== null && (v as AnswerEvent).kind === "answer" && typeof (v as AnswerEvent).turn === "string" && typeof (v as AnswerEvent).ms === "number";
 
 const isEvent = (v: unknown): v is CostEvent =>
   typeof v === "object" && v !== null && typeof (v as CostEvent).at === "string" && typeof (v as CostEvent).service === "string" && typeof (v as CostEvent).model === "string";
@@ -129,33 +149,39 @@ const isEvent = (v: unknown): v is CostEvent =>
 /** data/costs.jsonl: one line per call, appended in order. A failed write never fails the answer. */
 export const makeCostLog = (deps: { readonly path: string; readonly onError?: (e: unknown) => void }): CostLog => {
   let queue: Promise<void> = Promise.resolve();
+  const append = (line: unknown): void => {
+    queue = queue
+      .then(() => mkdir(dirname(deps.path), { recursive: true }))
+      .then(() => appendFile(deps.path, `${JSON.stringify(line)}\n`, { mode: 0o600 }))
+      .catch((error: unknown) => deps.onError?.(error));
+  };
+  const lines = async (): Promise<unknown[]> => {
+    await queue;
+    const text = await readFile(deps.path, "utf8").catch(() => "");
+    return text.split("\n").flatMap((line) => {
+      if (line.trim() === "") return [];
+      try {
+        return [JSON.parse(line) as unknown];
+      } catch {
+        return [];
+      }
+    });
+  };
   return {
-    record: (e) => {
-      queue = queue
-        .then(() => mkdir(dirname(deps.path), { recursive: true }))
-        .then(() => appendFile(deps.path, `${JSON.stringify(e)}\n`, { mode: 0o600 }))
-        .catch((error: unknown) => deps.onError?.(error));
-    },
-    all: async () => {
-      await queue;
-      const text = await readFile(deps.path, "utf8").catch(() => "");
-      return text.split("\n").flatMap((line) => {
-        if (line.trim() === "") return [];
-        try {
-          const v: unknown = JSON.parse(line);
-          return isEvent(v) ? [v] : [];
-        } catch {
-          return [];
-        }
-      });
-    },
+    record: (e) => append(e),
+    all: async () => (await lines()).filter(isEvent),
+    answer: (a) => append(a),
+    answers: async () => (await lines()).filter(isAnswer),
   };
 };
 
 /** Counts every call of an LlmCall (#247), by its model and purpose. */
 export const meteredLlm = (llm: LlmCall, ref: ModelRef, purpose: string, log: CostLog, now: () => Date = () => new Date()): LlmCall => {
   const count = (got: Result<LlmResponse, LlmError>): Result<LlmResponse, LlmError> => {
-    if (got.ok) log.record(eventOf(ref, purpose, got.value.usage, got.value.web?.searches ?? 0, now()));
+    if (got.ok) {
+      const turn = currentTurn();
+      log.record({ ...eventOf(ref, purpose, got.value.usage, got.value.web?.searches ?? 0, now()), ...(turn ? { turn } : {}) });
+    }
     return got;
   };
   const call = async (request: LlmRequest) => count(await llm(request));
@@ -295,3 +321,88 @@ export const meteredTaskRunner = (runner: TaskRunner, log: CostLog, model: strin
   if (got.ok) log.record(codeEvent("subscription", model, "coding task", got.value.costUsd, now()));
   return got;
 };
+
+// ---- #299: the dashboard's detail ----------------------------------------------
+
+export type AnswerCost = {
+  readonly at: string;
+  readonly brain: string;
+  readonly channel: string;
+  readonly outcome: string;
+  readonly ms: number;
+  readonly calls: number;
+  readonly models: readonly string[];
+  readonly inputTokens: number;
+  readonly outputTokens: number;
+  readonly cacheReadTokens: number;
+  readonly cacheWriteTokens: number;
+  readonly usd: number;
+};
+
+export type ModelRow = { readonly service: Service; readonly model: string; readonly calls: number; readonly inputTokens: number; readonly outputTokens: number; readonly cacheReadTokens: number; readonly cacheWriteTokens: number; readonly cacheHitPct: number; readonly usd: number };
+export type LatencyRow = { readonly brain: string; readonly answers: number; readonly medianMs: number; readonly p90Ms: number; readonly avgUsd: number };
+export type DayRow = { readonly day: string; readonly usd: number; readonly calls: number; readonly answers: number };
+
+export type CostDetail = {
+  readonly answers: readonly AnswerCost[];
+  readonly days: readonly DayRow[];
+  readonly models: readonly ModelRow[];
+  readonly latency: readonly LatencyRow[];
+};
+
+const pct = (sorted: readonly number[], q: number): number => (sorted.length === 0 ? 0 : (sorted[Math.min(sorted.length - 1, Math.floor(q * sorted.length))] ?? 0));
+
+/** Per answer (the last 30), per day (the last 30), per model (this month), and how long answers take by brain (7 days). */
+export const costDetail = (events: readonly CostEvent[], answers: readonly AnswerEvent[], opts: { readonly now: Date; readonly timeZone: string }): CostDetail => {
+  const today = dayIn(opts.now, opts.timeZone);
+  const month = today.slice(0, 7);
+  const weekStart = dayIn(new Date(opts.now.getTime() - 6 * 86_400_000), opts.timeZone);
+  const byTurn = new Map<string, CostEvent[]>();
+  for (const e of events) if (e.turn) byTurn.set(e.turn, [...(byTurn.get(e.turn) ?? []), e]);
+  const sum = (list: readonly CostEvent[], k: "inputTokens" | "outputTokens" | "cacheReadTokens" | "cacheWriteTokens" | "usd"): number => list.reduce((t, e) => t + (e[k] ?? 0), 0);
+  const priced: AnswerCost[] = answers.map((a) => {
+    const list = byTurn.get(a.turn) ?? [];
+    return {
+      at: a.at,
+      brain: a.brain,
+      channel: a.channel,
+      outcome: a.outcome,
+      ms: a.ms,
+      calls: list.length,
+      models: [...new Set(list.map((e) => e.model))],
+      inputTokens: sum(list, "inputTokens"),
+      outputTokens: sum(list, "outputTokens"),
+      cacheReadTokens: sum(list, "cacheReadTokens"),
+      cacheWriteTokens: sum(list, "cacheWriteTokens"),
+      usd: sum(list, "usd"),
+    };
+  });
+  const days: DayRow[] = [];
+  for (let i = 29; i >= 0; i--) {
+    const day = dayIn(new Date(opts.now.getTime() - i * 86_400_000), opts.timeZone);
+    if (days.some((d) => d.day === day)) continue;
+    const list = events.filter((e) => dayIn(new Date(e.at), opts.timeZone) === day);
+    days.push({ day, usd: sum(list, "usd"), calls: list.length, answers: answers.filter((a) => dayIn(new Date(a.at), opts.timeZone) === day).length });
+  }
+  const models = new Map<string, ModelRow>();
+  for (const e of events) {
+    if (!dayIn(new Date(e.at), opts.timeZone).startsWith(month)) continue;
+    const key = `${e.service}:${e.model}`;
+    const m = models.get(key) ?? { service: e.service, model: e.model, calls: 0, inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, cacheHitPct: 0, usd: 0 };
+    models.set(key, { ...m, calls: m.calls + 1, inputTokens: m.inputTokens + (e.inputTokens ?? 0), outputTokens: m.outputTokens + (e.outputTokens ?? 0), cacheReadTokens: m.cacheReadTokens + (e.cacheReadTokens ?? 0), cacheWriteTokens: m.cacheWriteTokens + (e.cacheWriteTokens ?? 0), usd: m.usd + (e.usd ?? 0) });
+  }
+  const modelRows = [...models.values()]
+    .map((m) => {
+      const prompt = m.inputTokens + m.cacheReadTokens + m.cacheWriteTokens;
+      return { ...m, cacheHitPct: prompt === 0 ? 0 : Math.round((m.cacheReadTokens / prompt) * 100) };
+    })
+    .sort((a, b) => b.usd - a.usd || b.calls - a.calls);
+  const week = priced.filter((a) => dayIn(new Date(a.at), opts.timeZone) >= weekStart && a.outcome === "answer");
+  const latency = [...new Set(week.map((a) => a.brain))].map((brain) => {
+    const list = week.filter((a) => a.brain === brain);
+    const ms = list.map((a) => a.ms).sort((x, y) => x - y);
+    return { brain, answers: list.length, medianMs: pct(ms, 0.5), p90Ms: pct(ms, 0.9), avgUsd: list.length === 0 ? 0 : list.reduce((t, a) => t + a.usd, 0) / list.length };
+  });
+  return { answers: [...priced].sort((a, b) => a.at.localeCompare(b.at)).slice(-30).reverse(), days, models: modelRows, latency };
+};
+

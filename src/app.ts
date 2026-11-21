@@ -52,7 +52,7 @@ import { makeClassifier } from "./classify.js";
 import type { Config, Env } from "./config.js";
 import { loadContexts } from "./contexts.js";
 import type { ModelRef } from "./llm/model-ref.js";
-import { eventOf, makeCostLog, meteredCodeAgent, meteredLlm, meteredTaskRunner, summarize, type CostLog } from "./costs.js";
+import { costDetail, eventOf, makeCostLog, meteredCodeAgent, meteredLlm, meteredTaskRunner, summarize, type CostLog } from "./costs.js";
 import { liveInstruction, makeLiveSession } from "./live/live.js";
 import { makeLiveSessions, type LiveSessions } from "./live/routes.js";
 
@@ -870,7 +870,12 @@ export const buildDeps = async (inputs: AppInputs): Promise<Result<Deps, string>
     ...(calendarChanges ? { calendarChange: calendarChanges } : {}),
     ...(reminders ? { reminders } : {}),
     talk,
-    costs: { summary: async () => summarize(await costLog.all(), { now: new Date(), timeZone: config.timeZone, subscriptions: config.costs.subscriptions }) },
+    costs: {
+      summary: async () => summarize(await costLog.all(), { now: new Date(), timeZone: config.timeZone, subscriptions: config.costs.subscriptions }),
+      // #299: per answer, day, model and brain.
+      detail: async () => costDetail(await costLog.all(), (await costLog.answers?.()) ?? [], { now: new Date(), timeZone: config.timeZone }),
+      ...(costLog.answer ? { answer: costLog.answer } : {}),
+    },
     // #250: Gemini Live for the microphone, with the Google brain; its audio and text counted as voice.
     ...(geminiKey && config.gemini.live.enabled
       ? {

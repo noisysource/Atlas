@@ -1479,6 +1479,15 @@ Confirmed (2026-11-12):
   draft, "imported from owner/repo". Scripts aren't imported. An imported or
   learned change to an approved skill makes it a draft again.
 
+- **Costs dashboard (#299):** each model call is counted under the answer it
+  was part of (the `/ask` request id, carried with AsyncLocalStorage in
+  `turn-context.ts`), and each answer's time, brain and channel go in the same
+  `data/costs.jsonl` (no words). `GET /costs/detail` gives the last 30 answers
+  (calls, models, tokens, cost, time), spend per day for 30 days, each model
+  this month (tokens, share read from cache, cost) and, per brain over 7 days,
+  the usual and slowest-1-in-10 answer times and the cost per answer. The
+  Dashboard page draws the days as bars (hover for each, or as a table).
+
 ## Out of scope for M0
 
 Vendus, Cloud Run deployment or the Pi (#53), real memory (#24, #56),

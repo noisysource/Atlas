@@ -4271,3 +4271,16 @@ body[data-side="true"] .app .center .layout {
 .skills-import-row { display: flex; gap: 8px; }
 .skills-import-row input { flex: 1; min-width: 0; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--line, rgba(255,255,255,0.14)); background: transparent; color: inherit; font: inherit; font-size: 14px; }
 .skills-import .note { margin: 0; }
+
+/* #299: the dashboard's detail. */
+.costs-section { margin-top: 22px; }
+.costs-section h3 { font-size: 14px; margin: 0 0 8px; font-weight: 600; }
+.costs-chart { position: relative; }
+.costs-chart svg { width: 100%; height: auto; display: block; }
+.costs-bar { fill: var(--accent); }
+.costs-hit { fill: transparent; cursor: default; outline: none; }
+.costs-hit:hover, .costs-hit:focus { fill: color-mix(in srgb, var(--accent) 10%, transparent); }
+.costs-axis { stroke: var(--muted); stroke-opacity: 0.4; stroke-width: 1; }
+.costs-tick { fill: var(--muted); font-size: 11px; }
+.costs-tip { position: absolute; top: -4px; transform: translateX(-50%); white-space: nowrap; font-size: 12px; padding: 4px 8px; border-radius: 6px; background: var(--surface, #fff); color: inherit; border: 1px solid color-mix(in srgb, var(--muted) 35%, transparent); pointer-events: none; }
+.costs-chart details { margin-top: 6px; font-size: 13px; }
