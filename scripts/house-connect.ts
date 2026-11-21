@@ -46,15 +46,20 @@ const output = new Writable({
     done();
   },
 });
-const rl = createInterface({ input: process.stdin, output, terminal: true });
-const password = await new Promise<string>((resolve) => {
-  rl.question(`Password of ${email} (it won't show): `, (answer) => {
-    rl.close();
-    process.stdout.write("\n");
-    resolve(answer);
-  });
-  muted = true;
-});
+// From the Tools page (#310), the secret comes in ATLAS_CONNECT_SECRET instead of being typed here.
+const fromPage = process.env.ATLAS_CONNECT_SECRET;
+const password =
+  fromPage !== undefined
+    ? fromPage
+    : await new Promise<string>((resolve) => {
+        const rl = createInterface({ input: process.stdin, output, terminal: true });
+        rl.question(`Password of ${email} (it won't show): `, (answer) => {
+          rl.close();
+          process.stdout.write("\n");
+          resolve(answer);
+        });
+        muted = true;
+      });
 
 const user = checkFirebaseUser({ project, region, apiKey, email, password }) ?? fail("That doesn't look right (project id, web API key, email, region, or a password under 8 characters). Nothing was saved.");
 const call = makeCallable({ user: async () => user });

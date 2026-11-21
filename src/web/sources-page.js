@@ -9,7 +9,8 @@
 import { statusOf } from "./tools-tab.js";
 
 /** @typedef {{ key: string, label: string, kind: "toggle" | "secret" | "text" | "number" | "select", hint?: string, options?: string[], placeholder?: string, defaultOn?: boolean }} Field */
-/** @typedef {{ id: string, title: string, about: string, node?: string, fields: Field[], connect?: { script: string, flags?: string[] }, command?: string }} Section */
+/** @typedef {{ script: string, title: string, hint?: string, fields: { name: string, label: string, kind: "text" | "secret" | "toggle", placeholder?: string, optional?: boolean }[] }} ConnectForm */
+/** @typedef {{ id: string, title: string, about: string, node?: string, fields: Field[], connect?: { script: string, flags?: string[] }, command?: string, forms?: ConnectForm[] }} Section */
 
 const ACCOUNTS = ["personal", "noisysource", "kidclub", "marisa"];
 
@@ -95,6 +96,41 @@ export const makeSourcesPage = (root, deps) => {
     return row;
   };
 
+  /**
+   * Starts a connect script and shows its output until it ends (#310).
+   * @param {Record<string, unknown>} body @param {HTMLElement} out @param {HTMLButtonElement} go @param {string} done
+   */
+  const runConnect = async (body, out, go, done) => {
+    go.disabled = true;
+    out.hidden = false;
+    out.textContent = "Starting…";
+    try {
+      const res = await fetch("/settings/connect", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+      if (!res.ok) throw new Error((await res.json().catch(() => ({})))?.error?.message ?? "refused");
+      // Follow it until it ends.
+      for (let i = 0; i < 400; i++) {
+        await new Promise((r) => setTimeout(r, 1500));
+        const got = await (await fetch("/settings/connect", { cache: "no-store" })).json();
+        const c = got?.connect;
+        if (!c) break;
+        out.textContent = (c.lines ?? []).join("\n");
+        if (!c.running) {
+          out.textContent += c.code === 0 ? `\n\n${done}` : "\n\nIt didn't finish.";
+          if (c.code === 0 && data) {
+            data.changed = true;
+            showBar();
+          }
+          return c.code === 0;
+        }
+      }
+    } catch (e) {
+      out.textContent = `Couldn't start it: ${e instanceof Error ? e.message : "error"}.`;
+    } finally {
+      go.disabled = false;
+    }
+    return false;
+  };
+
   /** The Connect area of a Google source: an account, a button, what the sign-in says. @param {Section} s */
   const connectArea = (s) => {
     const box = el("div", "src-connect");
@@ -105,36 +141,54 @@ export const makeSourcesPage = (root, deps) => {
     go.type = "button";
     const out = el("pre", "src-connect-out");
     out.hidden = true;
-    go.addEventListener("click", async () => {
-      go.disabled = true;
-      out.hidden = false;
-      out.textContent = "Opening Google's sign-in in your browser…";
-      try {
-        const res = await fetch("/settings/connect", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ script: s.connect?.script, account: sel.value }) });
-        if (!res.ok) throw new Error((await res.json().catch(() => ({})))?.error?.message ?? "refused");
-        // Follow it until it ends.
-        for (let i = 0; i < 400; i++) {
-          await new Promise((r) => setTimeout(r, 1500));
-          const body = await (await fetch("/settings/connect", { cache: "no-store" })).json();
-          const c = body?.connect;
-          if (!c) break;
-          out.textContent = (c.lines ?? []).join("\n");
-          if (!c.running) {
-            out.textContent += c.code === 0 ? "\n\nConnected. Restart to apply." : "\n\nIt didn't finish.";
-            if (c.code === 0 && data) {
-              data.changed = true;
-              showBar();
-            }
-            break;
-          }
-        }
-      } catch (e) {
-        out.textContent = `Couldn't start it: ${e instanceof Error ? e.message : "error"}.`;
-      } finally {
-        go.disabled = false;
-      }
-    });
+    go.addEventListener("click", () => void runConnect({ script: s.connect?.script, account: sel.value }, out, go, "Connected. Restart to apply."));
     box.append(el("span", "src-label", "Accounts"), sel, go, out);
+    return box;
+  };
+
+  /** A connection set up from the page (#310): its fields, a button, what the check says. The secret is cleared after. @param {ConnectForm} f */
+  const connectForm = (f) => {
+    const box = /** @type {HTMLDetailsElement} */ (el("details", "src-connect src-form"));
+    box.append(el("summary", "", f.title));
+    if (f.hint) box.append(el("p", "src-hint", f.hint));
+    /** @type {Map<string, HTMLInputElement>} */
+    const inputs = new Map();
+    for (const field of f.fields) {
+      const row = el("label", `src-field kind-${field.kind}`);
+      const input = /** @type {HTMLInputElement} */ (el("input"));
+      input.type = field.kind === "secret" ? "password" : field.kind === "toggle" ? "checkbox" : "text";
+      input.autocomplete = "off";
+      input.spellcheck = false;
+      if (field.placeholder) input.placeholder = field.placeholder;
+      inputs.set(field.name, input);
+      if (field.kind === "toggle") row.append(input, el("span", "src-label", field.label));
+      else row.append(el("span", "src-label", `${field.label}${field.optional ? " (optional)" : ""}`), input);
+      box.append(row);
+    }
+    const go = /** @type {HTMLButtonElement} */ (el("button", "src-connect-go", "Connect"));
+    go.type = "button";
+    const out = el("pre", "src-connect-out");
+    out.hidden = true;
+    go.addEventListener("click", async () => {
+      /** @type {Record<string, unknown>} */
+      const body = { script: f.script };
+      for (const field of f.fields) {
+        const input = inputs.get(field.name);
+        if (!input) continue;
+        if (field.kind === "toggle") {
+          if (input.checked) body[field.name] = true;
+        } else if (input.value.trim() !== "") body[field.name] = field.kind === "secret" ? input.value : input.value.trim();
+        else if (!field.optional) {
+          out.hidden = false;
+          out.textContent = `${field.label} is needed.`;
+          return;
+        }
+      }
+      await runConnect(body, out, go, "Connected. Switch it on above if it isn't, then Restart to apply.");
+      // The secret isn't kept on the page.
+      for (const field of f.fields) if (field.kind === "secret") (inputs.get(field.name) ?? { value: "" }).value = "";
+    });
+    box.append(go, out);
     return box;
   };
 
@@ -161,7 +215,8 @@ export const makeSourcesPage = (root, deps) => {
         card.append(wa);
       }
       if (s.connect) card.append(connectArea(s));
-      if (s.command) card.append(el("p", "src-hint", `One-time setup in a terminal: ${s.command}`));
+      for (const f of s.forms ?? []) card.append(connectForm(f));
+      if (s.command && !(s.forms ?? []).length) card.append(el("p", "src-hint", `One-time setup in a terminal: ${s.command}`));
       return card;
     });
     root.replaceChildren(el("h2", "page-title", "Tools"), el("p", "note", "What Atlas can use, and how: each card turns a set of tools on, with its accounts and keys. Set here instead of .env; Save, then Restart to apply."), bar, ...cards);

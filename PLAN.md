@@ -1488,6 +1488,13 @@ Confirmed (2026-11-12):
   the usual and slowest-1-in-10 answer times and the cost per answer. The
   Dashboard page draws the days as bars (hover for each, or as a table).
 
+- **Connecting from the Tools page:** Vendus, the house, GitHub owners and
+  Google Cloud environments are set up from their cards, like Google
+  accounts: the fields go to the same `scripts/*-connect.ts` (checked first),
+  and a key, token or password only through the script's environment
+  (`ATLAS_CONNECT_SECRET`), never its arguments, the page or a log. The page
+  shows the script's own check. The terminal commands still work.
+
 ## Out of scope for M0
 
 Vendus, Cloud Run deployment or the Pi (#53), real memory (#24, #56),

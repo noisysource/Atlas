@@ -4284,3 +4284,8 @@ body[data-side="true"] .app .center .layout {
 .costs-tick { fill: var(--muted); font-size: 11px; }
 .costs-tip { position: absolute; top: -4px; transform: translateX(-50%); white-space: nowrap; font-size: 12px; padding: 4px 8px; border-radius: 6px; background: var(--surface, #fff); color: inherit; border: 1px solid color-mix(in srgb, var(--muted) 35%, transparent); pointer-events: none; }
 .costs-chart details { margin-top: 6px; font-size: 13px; }
+
+/* #310: connections set up from the Tools page. */
+.src-form { margin-top: 10px; }
+.src-form summary { cursor: pointer; font-weight: 600; font-size: 14px; }
+.src-form[open] { display: grid; gap: 8px; }

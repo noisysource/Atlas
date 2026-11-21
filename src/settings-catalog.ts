@@ -22,6 +22,14 @@ export type Connect = {
   readonly flags?: readonly string[];
 };
 
+/** #310: a connection set up from the page: its fields go to the script (a secret only by environment). */
+export type ConnectForm = {
+  readonly script: "vendus" | "house" | "github" | "gcloud";
+  readonly title: string;
+  readonly hint?: string;
+  readonly fields: readonly { readonly name: string; readonly label: string; readonly kind: "text" | "secret" | "toggle"; readonly placeholder?: string; readonly optional?: boolean }[];
+};
+
 export type Section = {
   readonly id: string;
   readonly title: string;
@@ -32,6 +40,8 @@ export type Section = {
   readonly connect?: Connect;
   /** A one-time setup that still runs in a terminal (it asks for a key). */
   readonly command?: string;
+  /** #310: the same setup, from the page. */
+  readonly forms?: readonly ConnectForm[];
 };
 
 const on = (key: string, label: string, hint?: string): Field => ({
@@ -193,6 +203,19 @@ export const SECTIONS: readonly Section[] = [
       on("ASK_SMALL", "Ask even for small, undoable changes"),
     ],
     command: "npm run house:connect",
+    forms: [
+      {
+        script: "house",
+        title: "Connect the house",
+        hint: "Atlas's own Firebase user in the domotics project; the web API key is the public one in the domotics app's .env.nsprod. It reads the blinds and lights once to check.",
+        fields: [
+          { name: "project", label: "Project", kind: "text", placeholder: "noisysource-prod" },
+          { name: "apiKey", label: "Web API key", kind: "text", placeholder: "AIza…" },
+          { name: "email", label: "Atlas's email", kind: "text", placeholder: "atlas@kidclub.pt" },
+          { name: "secret", label: "Its password", kind: "secret" },
+        ],
+      },
+    ],
   },
   {
     id: "kidclub",
@@ -207,6 +230,25 @@ export const SECTIONS: readonly Section[] = [
     ],
     command:
       "npm run vendus:connect · npm run gcloud:connect -- <env> <project>",
+    forms: [
+      {
+        script: "vendus",
+        title: "Connect Vendus",
+        hint: "The API key of Atlas's own Vendus user (Configurações → Utilizadores, then APPS → API), with the fewest rights. It's checked with one read of today's documents.",
+        fields: [{ name: "secret", label: "Vendus API key", kind: "secret" }],
+      },
+      {
+        script: "gcloud",
+        title: "Connect a Google Cloud environment",
+        hint: "Needs the gcloud tool signed in on this Mac, and Token Creator on the service accounts. No key is stored. A writer is only for database changes (each after your OK).",
+        fields: [
+          { name: "env", label: "Name", kind: "text", placeholder: "dev" },
+          { name: "project", label: "Project id", kind: "text", placeholder: "kidclub-dev" },
+          { name: "reader", label: "Reader account", kind: "text", placeholder: "jarvis-read@<project>.iam.gserviceaccount.com", optional: true },
+          { name: "writer", label: "Writer account", kind: "text", placeholder: "atlas-write@<project>.iam.gserviceaccount.com", optional: true },
+        ],
+      },
+    ],
   },
   {
     id: "code",
@@ -233,6 +275,18 @@ export const SECTIONS: readonly Section[] = [
       },
     ],
     command: "npm run github:connect -- <owner>",
+    forms: [
+      {
+        script: "github",
+        title: "Connect a GitHub owner",
+        hint: "A fine-grained token for that owner: all repos, Contents, Issues, Pull requests, Actions and Commit statuses read-only. A write token (Contents and Pull requests read and write) is only for fixes, after your OK.",
+        fields: [
+          { name: "owner", label: "Owner", kind: "text", placeholder: "noisysource" },
+          { name: "write", label: "This is the write token (for fixes)", kind: "toggle", optional: true },
+          { name: "secret", label: "Token", kind: "secret" },
+        ],
+      },
+    ],
   },
   {
     id: "whatsapp",

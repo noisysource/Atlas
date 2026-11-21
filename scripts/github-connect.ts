@@ -49,15 +49,20 @@ const output = new Writable({
     done();
   },
 });
-const rl = createInterface({ input: process.stdin, output, terminal: true });
-const token = await new Promise<string>((resolve) => {
-  rl.question(`Paste the ${write ? "write (Contents + Pull requests)" : "read-only"} token for "${owner}" (it won't show): `, (answer) => {
-    rl.close();
-    process.stdout.write("\n");
-    resolve(answer.trim());
-  });
-  muted = true;
-});
+// From the Tools page (#310), the secret comes in ATLAS_CONNECT_SECRET instead of being typed here.
+const fromPage = process.env.ATLAS_CONNECT_SECRET;
+const token =
+  fromPage !== undefined
+    ? fromPage.trim()
+    : await new Promise<string>((resolve) => {
+        const rl = createInterface({ input: process.stdin, output, terminal: true });
+        rl.question(`Paste the ${write ? "write (Contents + Pull requests)" : "read-only"} token for "${owner}" (it won't show): `, (answer) => {
+          rl.close();
+          process.stdout.write("\n");
+          resolve(answer.trim());
+        });
+        muted = true;
+      });
 if (!/^(github_pat_|ghp_)[A-Za-z0-9_]{20,}$/.test(token)) fail("That doesn't look like a GitHub token (they start with github_pat_). Nothing was saved.");
 
 // One read to check it: which repos it can see.

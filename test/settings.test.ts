@@ -7,7 +7,7 @@ import { Hono } from "hono";
 import { describe, expect, it } from "vitest";
 import { makeJsonLogger } from "../src/log.js";
 import { applySettings, mergeSettings, parseDotEnv, readSettings } from "../src/settings.js";
-import { numbersOf, numbersText, registerSettingsRoutes } from "../src/settings-routes.js";
+import { connectRun, numbersOf, numbersText, registerSettingsRoutes } from "../src/settings-routes.js";
 import { pointWebhook, tunnelUrlIn } from "../src/whatsapp/tunnel.js";
 import { changesOf } from "../src/web/sources-page.js";
 
@@ -149,5 +149,25 @@ describe("the WhatsApp tunnel", () => {
     const said: string[] = [];
     expect(await pointWebhook({ root, url: "https://x.trycloudflare.com", say: (l) => said.push(l), fetch: (async () => new Response("")) as unknown as typeof fetch })).toBe(false);
     expect(said[0]).toContain("isn't set up");
+  });
+});
+
+describe("connecting from the Tools page (#310)", () => {
+  it("runs each script with its arguments; a secret only through the environment", () => {
+    expect(connectRun({ script: "gmail", account: "kidclub" })).toEqual({ args: ["kidclub"], label: "gmail · kidclub", minutes: 5 });
+    expect(connectRun({ script: "vendus", secret: "abcdefghijklmnop" })).toEqual({ args: [], secret: "abcdefghijklmnop", label: "vendus", minutes: 1 });
+    const gh = connectRun({ script: "github", owner: "noisysource", write: true, secret: "github_pat_xxxxxxxxxxxxxxxxxxxxxxxx" });
+    expect(gh.args).toEqual(["noisysource", "--write"]);
+    expect(gh.label).not.toContain("github_pat");
+    expect(connectRun({ script: "house", project: "noisysource-prod", apiKey: "AIzaSyA0123456789012345678901234567890", email: "atlas@kidclub.pt", secret: "a-long-password" }).args).toEqual(["noisysource-prod", "AIzaSyA0123456789012345678901234567890", "atlas@kidclub.pt"]);
+    expect(connectRun({ script: "gcloud", env: "dev", project: "kidclub-dev", writer: "atlas-write@kidclub-dev.iam.gserviceaccount.com" }).args).toEqual(["dev", "kidclub-dev", "jarvis-read@kidclub-dev.iam.gserviceaccount.com", "atlas-write@kidclub-dev.iam.gserviceaccount.com"]);
+  });
+
+  it("refuses anything that isn't one of them, before running anything", async () => {
+    const app = new Hono();
+    registerSettingsRoutes(app as never, { root: await mkdtemp(path.join(tmpdir(), "atlas-connect-")), supervised: false, log: makeJsonLogger({ write: () => undefined }), env: {} });
+    const post = (body: unknown) => app.request("/settings/connect", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+    for (const bad of [{ script: "rm", account: "x" }, { script: "github", owner: "../x", secret: "github_pat_aaaaaaaaaaaaaaaaaaaaaaaaa" }, { script: "gcloud", env: "dev", project: "Bad Project" }, { script: "vendus", secret: "has spaces in it" }, { script: "vendus", secret: "abcdefghijk", extra: 1 }])
+      expect((await post(bad)).status, JSON.stringify(bad)).toBe(400);
   });
 });

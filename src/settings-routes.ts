@@ -39,12 +39,50 @@ const Change = z.record(z.string(), z.string().max(4000).nullable());
 const Body = z
   .object({ env: Change.optional(), whatsapp: Change.optional() })
   .strict();
-const ConnectBody = z
-  .object({
-    script: z.enum(["calendar", "gmail", "drive"]),
-    account: z.enum(GOOGLE_ACCOUNTS),
-  })
-  .strict();
+const SECRET = z.string().min(8).max(400).regex(/^[^\s]+$/, { error: "no spaces" });
+const ConnectBody = z.discriminatedUnion("script", [
+  z.object({ script: z.enum(["calendar", "gmail", "drive"]), account: z.enum(GOOGLE_ACCOUNTS) }).strict(),
+  // #310: the rest, from the page too. The secret goes to the script in its environment, never in its arguments or a log.
+  z.object({ script: z.literal("vendus"), secret: SECRET }).strict(),
+  z
+    .object({
+      script: z.literal("house"),
+      project: z.string().regex(/^[a-z][a-z0-9-]{4,29}$/),
+      apiKey: z.string().regex(/^AIza[0-9A-Za-z_-]{30,40}$/),
+      email: z.email().max(200),
+      secret: z.string().min(8).max(200),
+    })
+    .strict(),
+  z.object({ script: z.literal("github"), owner: z.string().regex(/^[A-Za-z0-9-]{1,39}$/), write: z.boolean().optional(), secret: SECRET }).strict(),
+  z
+    .object({
+      script: z.literal("gcloud"),
+      env: z.string().regex(/^[a-z][a-z0-9-]{0,19}$/),
+      project: z.string().regex(/^[a-z][a-z0-9-]{4,29}$/),
+      reader: z.email().max(200).optional(),
+      writer: z.email().max(200).optional(),
+    })
+    .strict(),
+]);
+type ConnectRequest = z.infer<typeof ConnectBody>;
+
+/** What runs for a connect: the script's arguments, its secret (by environment), and a label without secrets. Exported for tests. */
+export const connectRun = (b: ConnectRequest): { readonly args: readonly string[]; readonly secret?: string; readonly label: string; readonly minutes: number } => {
+  switch (b.script) {
+    case "calendar":
+    case "gmail":
+    case "drive":
+      return { args: [b.account], label: `${b.script} · ${b.account}`, minutes: 5 };
+    case "vendus":
+      return { args: [], secret: b.secret, label: "vendus", minutes: 1 };
+    case "house":
+      return { args: [b.project, b.apiKey, b.email], secret: b.secret, label: `house · ${b.project}`, minutes: 1 };
+    case "github":
+      return { args: [b.owner, ...(b.write ? ["--write"] : [])], secret: b.secret, label: `github · ${b.owner}${b.write ? " (write)" : ""}`, minutes: 1 };
+    case "gcloud":
+      return { args: [b.env, b.project, ...(b.reader || b.writer ? [b.reader ?? `jarvis-read@${b.project}.iam.gserviceaccount.com`] : []), ...(b.writer ? [b.writer] : [])], label: `gcloud · ${b.env}`, minutes: 2 };
+  }
+};
 
 /** "3519…=renato, 3519…=marisa" ↔ { "3519…": "renato", … }. */
 export const numbersOf = (text: string): Record<string, string> =>
@@ -209,7 +247,7 @@ export const registerSettingsRoutes = (
       return c.json(
         {
           error: {
-            message: "Send { script: calendar | gmail | drive, account }.",
+            message: "Send { script, … } with what that connection needs.",
           },
         },
         400,
@@ -219,10 +257,11 @@ export const registerSettingsRoutes = (
         { error: { message: "A sign-in is already open: finish it first." } },
         409,
       );
-    const { script, account } = body.data;
+    const { script } = body.data;
+    const plan = connectRun(body.data);
     const run = {
       running: true,
-      label: `${script} · ${account}`,
+      label: plan.label,
       lines: [] as string[],
       code: null as number | null,
     };
@@ -234,9 +273,9 @@ export const registerSettingsRoutes = (
         "--import",
         "tsx",
         path.join(deps.root, `scripts/${script}-connect.ts`),
-        account,
+        ...plan.args,
       ],
-      { cwd: deps.root, env: { ...env }, stdio: ["ignore", "pipe", "pipe"] },
+      { cwd: deps.root, env: { ...env, ...(plan.secret !== undefined ? { ATLAS_CONNECT_SECRET: plan.secret } : {}) }, stdio: ["ignore", "pipe", "pipe"] },
     );
     const take = (chunk: Buffer) => {
       for (const line of chunk.toString("utf8").split(/\r?\n/))
@@ -245,18 +284,14 @@ export const registerSettingsRoutes = (
     };
     child.stdout.on("data", take);
     child.stderr.on("data", take);
-    const timer = setTimeout(() => child.kill("SIGTERM"), 5 * 60_000);
+    const timer = setTimeout(() => child.kill("SIGTERM"), plan.minutes * 60_000);
     child.on("exit", (code) => {
       clearTimeout(timer);
       run.running = false;
       run.code = code ?? 1;
-      deps.log.info("account connect ended", {
-        script,
-        account,
-        code: run.code,
-      });
+      deps.log.info("account connect ended", { what: plan.label, code: run.code });
     });
-    deps.log.info("account connect started", { script, account });
+    deps.log.info("account connect started", { what: plan.label });
     return c.json({ ok: true });
   });
 
