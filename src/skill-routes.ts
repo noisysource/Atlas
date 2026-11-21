@@ -2,6 +2,7 @@
 //
 //   GET  /skills          every skill, drafts first
 //   POST /skills/decide   { id, decision: "approve" | "delete" }
+//   POST /skills/import   { link }: SKILL.md files from GitHub, as drafts (#297)
 //
 // Same guards as /memories: the Host allowlist, JSON-only POSTs, no-store.
 // Logs carry outcomes, never skill text.
@@ -17,7 +18,10 @@ const DecideBody = z.object({ id: z.string().regex(/^[a-f0-9]{8,64}$/), decision
 const errorBody = (message: string) => ({ type: "error" as const, message });
 const isJson = (contentType: string | undefined): boolean => (contentType ?? "").split(";")[0]?.trim().toLowerCase() === "application/json";
 
-export const registerSkillRoutes = (app: Hono<ServerEnv>, deps: { readonly store: SkillStore; readonly log: Logger }): void => {
+/** #297: what an import did, for the panel. */
+export type SkillImport = (link: string) => Promise<{ readonly ok: boolean; readonly text: string; readonly added: number }>;
+
+export const registerSkillRoutes = (app: Hono<ServerEnv>, deps: { readonly store: SkillStore; readonly log: Logger; readonly importSkills?: SkillImport }): void => {
   app.use("/skills", async (c, next) => {
     await next();
     c.header("Cache-Control", "no-store");
@@ -28,6 +32,18 @@ export const registerSkillRoutes = (app: Hono<ServerEnv>, deps: { readonly store
   });
 
   app.get("/skills", async (c) => c.json({ skills: skillsView(await deps.store.list()) }));
+
+  const importSkills = deps.importSkills;
+  if (importSkills) {
+    app.post("/skills/import", async (c) => {
+      if (!isJson(c.req.header("content-type"))) return c.json(errorBody("This needs Content-Type: application/json."), 415);
+      const body = z.object({ link: z.string().min(8).max(500) }).strict().safeParse(await c.req.json().catch(() => undefined));
+      if (!body.success) return c.json(errorBody("Send { link } with a GitHub link."), 400);
+      const done = await importSkills(body.data.link);
+      deps.log.info("skills imported", { ok: done.ok, added: done.added });
+      return c.json(done, done.ok ? 200 : 400);
+    });
+  }
 
   app.post("/skills/decide", async (c) => {
     if (!isJson(c.req.header("content-type"))) return c.json(errorBody("This needs Content-Type: application/json."), 415);

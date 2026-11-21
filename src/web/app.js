@@ -2307,7 +2307,13 @@ const skillsButton = /** @type {HTMLButtonElement} */ (byId("skills"));
 const skillsList = byId("skills-list");
 const skillsStatus = byId("skills-status");
 
-/** @typedef {{ id: string, title: string, when: string, steps: string[], status: "draft" | "active", source: string }} SkillView */
+/** @typedef {{ id: string, title: string, when: string, steps: string[], status: "draft" | "active", source: string, from?: string }} SkillView */
+
+/** "imported from owner/repo", from a raw GitHub link. Exported for tests via the page only. @param {string | undefined} from */
+const importedFrom = (from) => {
+  const m = typeof from === "string" ? /^https:\/\/raw\.githubusercontent\.com\/([^/]+)\/([^/]+)\//.exec(from) : null;
+  return m ? `imported from ${m[1]}/${m[2]}` : "imported";
+};
 
 /** @param {"approve" | "delete"} decision @param {string} id */
 const decideSkill = async (decision, id) => {
@@ -2337,7 +2343,7 @@ const renderSkills = async () => {
       head.textContent = `${s.status === "draft" ? "Draft · " : "✨ "}${s.title}`;
       const when = document.createElement("p");
       when.className = "memory-meta";
-      when.textContent = `When: ${s.when} · ${s.source === "introspection" ? "drafted overnight" : s.source === "learning" ? "learned from yesterday" : "taught in chat"}`;
+      when.textContent = `When: ${s.when} · ${s.source === "introspection" ? "drafted overnight" : s.source === "learning" ? "learned from yesterday" : s.source === "imported" ? importedFrom(s.from) : "taught in chat"}`;
       const steps = document.createElement("ol");
       for (const step of s.steps) steps.append(Object.assign(document.createElement("li"), { textContent: step }));
       const actions = document.createElement("div");
@@ -2369,6 +2375,29 @@ const openSkills = async () => {
 };
 
 byId("skills-close").addEventListener("click", () => side.close());
+
+// #297: skills from GitHub, as drafts.
+const skillsImport = /** @type {HTMLFormElement} */ (byId("skills-import"));
+skillsImport.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const input = /** @type {HTMLInputElement} */ (byId("skills-import-link"));
+  const go = /** @type {HTMLButtonElement} */ (skillsImport.querySelector("button"));
+  go.disabled = true;
+  skillsStatus.textContent = "Reading it from GitHub…";
+  try {
+    const res = await fetch("/skills/import", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ link: /^https:\/\//.test(input.value.trim()) ? input.value.trim() : `https://${input.value.trim().replace(/^\/+/, "")}` }) });
+    const body = await res.json().catch(() => ({}));
+    skillsStatus.textContent = typeof body.text === "string" ? body.text : typeof body.message === "string" ? body.message : "Couldn't import it.";
+    if (res.ok) {
+      input.value = "";
+      await renderSkills();
+    }
+  } catch {
+    skillsStatus.textContent = "Couldn't reach Atlas.";
+  } finally {
+    go.disabled = false;
+  }
+});
 // The button shows only when the server has skills (MEMORY=on).
 fetch("/skills")
   .then((res) => {

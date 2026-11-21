@@ -4264,3 +4264,10 @@ body[data-side="true"] .app .center .layout {
   font-size: 11px;
   white-space: pre-wrap;
 }
+
+/* #297: importing a skill from GitHub. */
+.skills-import { display: grid; gap: 6px; margin: 8px 0 14px; }
+.skills-import label { font-size: 13px; color: var(--muted, #9aa3b2); }
+.skills-import-row { display: flex; gap: 8px; }
+.skills-import-row input { flex: 1; min-width: 0; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--line, rgba(255,255,255,0.14)); background: transparent; color: inherit; font: inherit; font-size: 14px; }
+.skills-import .note { margin: 0; }

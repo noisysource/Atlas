@@ -25,12 +25,14 @@ export type Skill = {
   readonly when: string;
   readonly steps: readonly string[];
   readonly status: SkillStatus;
-  readonly source: "introspection" | "chat" | "learning";
+  readonly source: "introspection" | "chat" | "learning" | "imported";
+  /** #297: where an imported skill came from (a GitHub link). */
+  readonly from?: string;
   readonly createdAt: string;
   readonly updatedAt: string;
 };
 
-export type NewSkill = Pick<Skill, "title" | "when" | "steps" | "source">;
+export type NewSkill = Pick<Skill, "title" | "when" | "steps" | "source"> & { readonly from?: string };
 
 export const SKILL_LIMITS = { title: 80, when: 200, step: 200, steps: 12, skills: 100 } as const;
 
@@ -110,7 +112,9 @@ export const makeSkillStore = (deps: {
         const at = now().toISOString();
         const same = skills.find((s) => normalise(s.title) === normalise(skill.title));
         if (same) {
-          const updated: Skill = { ...same, when: skill.when, steps: skill.steps, updatedAt: at };
+          // #296/#297: a change learned overnight or imported goes back to a draft, for his OK again.
+          const review = skill.source === "learning" || skill.source === "imported";
+          const updated: Skill = { ...same, when: skill.when, steps: skill.steps, updatedAt: at, ...(review ? { status: "draft" as const, source: skill.source, ...(skill.from ? { from: skill.from } : {}) } : {}) };
           return { next: skills.map((s) => (s.id === same.id ? updated : s)), result: updated };
         }
         const added: Skill = { id: newId(), ...skill, status: "draft", createdAt: at, updatedAt: at };

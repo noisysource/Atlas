@@ -872,7 +872,7 @@ export const makeServer = (
     });
   }
   if (options.memories) registerMemoryRoutes(app, { store: options.memories, contexts: deps.contexts, log: deps.log });
-  if (deps.skills) registerSkillRoutes(app, { store: deps.skills, log: deps.log });
+  if (deps.skills) registerSkillRoutes(app, { store: deps.skills, log: deps.log, ...(deps.importSkills ? { importSkills: deps.importSkills } : {}) });
 
   app.notFound((c) => c.json(errorBody("Not found."), 404));
 

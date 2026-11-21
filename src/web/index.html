@@ -107,6 +107,14 @@
         Routines Atlas follows, drafted from his memory at night or taught in chat. Only approved skills are used, and
         a skill never adds powers: actions still need your OK.
       </p>
+      <form id="skills-import" class="skills-import">
+        <label for="skills-import-link">Import a skill from GitHub (a SKILL.md, its folder, or a repo of them)</label>
+        <div class="skills-import-row">
+          <input id="skills-import-link" type="text" required placeholder="github.com/owner/repo/tree/main/skills/name" autocomplete="off" spellcheck="false" />
+          <button type="submit">Import</button>
+        </div>
+        <p class="note">Imported skills arrive as drafts: read each before you approve it. Scripts in a skill aren't imported.</p>
+      </form>
       <p id="skills-status" class="note" role="status"></p>
       <div id="skills-list"></div>
     </div>

@@ -69,6 +69,7 @@ import { makeModelExtract } from "./memory-extract.js";
 import { makeEcMatchers, parseNeverRemember } from "./memory-rules.js";
 import { runIntrospection } from "./introspection.js";
 import { runLearning } from "./learning.js";
+import { makeGitHubGet, parseSkillLink, skillFiles, skillFromMd } from "./skill-import.js";
 import type { Dataset } from "./dataset.js";
 import { makeSkillStore, type SkillStore } from "./skills.js";
 import { access, chmod, mkdir, readdir, readFile as readFileFs, rm, writeFile } from "node:fs/promises";
@@ -785,6 +786,35 @@ export const buildDeps = async (inputs: AppInputs): Promise<Result<Deps, string>
         }
       : {}),
     ...(skillStore ? { skills: skillStore } : {}),
+    // #297: skills from GitHub (SKILL.md), rewritten by the small model, as drafts for his OK.
+    ...(skillStore
+      ? {
+          importSkills: async (link: string) => {
+            const src = parseSkillLink(link);
+            if (!src.ok) return { ok: false, text: `Can't import that: ${src.error}.`, added: 0 };
+            const get = makeGitHubGet();
+            const files = await skillFiles(src.value, get);
+            if (!files.ok) return { ok: false, text: `Can't import that: ${files.error}.`, added: 0 };
+            const added: string[] = [];
+            const skipped: string[] = [];
+            for (const url of files.value) {
+              const text = await get(url);
+              const skill = text.ok ? await skillFromMd(text.value, url, { ec: memoryEc, llm: classifierLlm.value }) : text;
+              if (!skill.ok) {
+                skipped.push(`${url.split("/").slice(-2, -1)[0] ?? "skill"} (${skill.error})`);
+                continue;
+              }
+              await skillStore.propose({ title: skill.value.title, when: skill.value.when, steps: skill.value.steps, source: "imported", from: url });
+              added.push(skill.value.title);
+            }
+            const text =
+              added.length > 0
+                ? `Imported ${added.length} as draft${added.length === 1 ? "" : "s"}: ${added.join(", ")}. Read each and approve it to turn it on.${skipped.length > 0 ? ` Left out: ${skipped.slice(0, 5).join("; ")}.` : ""}`
+                : `Nothing imported. ${skipped.slice(0, 5).join("; ")}.`;
+            return { ok: added.length > 0, text, added: added.length };
+          },
+        }
+      : {}),
     // #296: the learning loop: the day's dataset into skill drafts, with the answer model (once a night).
     ...(skillStore && config.learning
       ? {

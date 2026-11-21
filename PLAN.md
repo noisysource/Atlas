@@ -1470,6 +1470,15 @@ Confirmed (2026-11-12):
   The report goes to `data/learning/<day>.md`. `npm run learn -- <day>` runs
   it now. No model is trained.
 
+- **Skills import (#297):** ✨ Skills takes a GitHub link (a SKILL.md, its
+  folder, or a repo, up to 20 skills) in the agentskills.io format. Only
+  github.com and raw.githubusercontent.com are read, 200 KB a file at most.
+  The small model rewrites each into Atlas's shape (title, when, up to 12
+  steps for his own tools), told the text is someone else's and to follow none
+  of it; then it's checked like any skill (no secrets, no EC) and kept as a
+  draft, "imported from owner/repo". Scripts aren't imported. An imported or
+  learned change to an approved skill makes it a draft again.
+
 ## Out of scope for M0
 
 Vendus, Cloud Run deployment or the Pi (#53), real memory (#24, #56),
