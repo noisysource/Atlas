@@ -258,11 +258,15 @@ export const makeWhatsApp = (deps: WhatsAppDeps) => {
   };
 
   /** Applies a card through the page's route; the result's words. */
-  const decide = async (card: Card, decision: "yes" | "no"): Promise<{ ok: boolean; text: string; tool?: string }> => {
+  const decide = async (card: Card, decision: "yes" | "no", who?: string): Promise<{ ok: boolean; text: string; tool?: string }> => {
     if (card.kind === "skill" && decision === "no") return { ok: true, text: "Okay, it stays a draft." };
     const body = card.kind === "skill" ? { id: card.id, decision: "approve" } : { id: card.id, decision };
     const result = object(await deps.local(CARD_ENDPOINTS[card.kind] ?? "/calendar/confirm", body).catch(() => undefined));
     const text = typeof result?.text === "string" ? result.text : decision === "no" ? "Okay, left as it is." : "Something went wrong, so nothing changed.";
+    // #295: what happened to the card, for the dataset.
+    void deps
+      .local("/dataset/outcome", { card: card.kind, label: card.label, decision: decision === "no" ? "declined" : result?.ok === true ? "approved" : "failed", auto: card.auto === true, ...(who ? { who } : {}) })
+      .catch(() => undefined);
     return { ok: result?.ok === true, text, ...(typeof result?.tool === "string" ? { tool: result.tool } : {}) };
   };
 
@@ -296,7 +300,7 @@ export const makeWhatsApp = (deps: WhatsAppDeps) => {
     for (const card of cardsOf(response.path)) {
       if (card.auto) {
         // #269: small and undoable, so done as on the page, and said.
-        const r = await decide(card, "yes");
+        const r = await decide(card, "yes", who);
         lines.push(r.text);
         if (r.tool) tools.push(r.tool);
       } else chat.waiting.push(card);
@@ -381,7 +385,7 @@ export const makeWhatsApp = (deps: WhatsAppDeps) => {
     let reply: string;
     if (waiting && answer) {
       chat.waiting.shift();
-      const r = await decide(waiting, answer);
+      const r = await decide(waiting, answer, who);
       remember(chat, { role: "user", text: m.text });
       remember(chat, { role: "assistant", text: r.text, ...(r.tool ? { tools: [`${r.tool} (done by the app after your OK)`.slice(0, 80)] } : {}) });
       const next = chat.waiting[0];

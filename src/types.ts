@@ -25,7 +25,7 @@ import type { CostSummary } from "./costs.js";
 import type { LiveSessions } from "./live/routes.js";
 import type { CalendarChanges } from "./calendar/change.js";
 import type { InboxTidy } from "./gmail/tidy.js";
-import type { DriveWrites } from "./drive.js";
+import type { DriveClient, DriveWrites } from "./drive.js";
 import type { CodeMapView, Studies } from "./code/study.js";
 import type { ReachNode } from "./reach.js";
 import type { Result } from "./result.js";
@@ -398,6 +398,8 @@ export type Deps = {
   readonly dbWrites?: Pick<DbWrites, "decide">;
   /** #304: Gemini Live for WhatsApp calls (only with GEMINI_LIVE=on). The key stays on the Mac. */
   readonly liveCall?: { readonly apiKey: string; readonly model: string; readonly voice?: string };
+  /** #295: Drive, for the dataset's nightly copy (main.ts). */
+  readonly driveClient?: DriveClient;
   /** #219: his answer to moving or cancelling an event (POST /calendar/change). Only "yes" changes it. */
   readonly calendarChange?: Pick<CalendarChanges, "decide">;
   /** #218: his reminders, for the page (GET /reminders, POST /reminders/done). */

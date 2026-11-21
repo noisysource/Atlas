@@ -147,7 +147,9 @@ describe("WhatsApp: the webhook", () => {
     expect(sent[1]?.body).toBe("Done: added to your calendar.");
     // The next question carries the conversation so far.
     await post(message("351910000001", "Thanks"));
-    expect((asked[2]?.body.history as unknown[]).length).toBe(4);
+    // #295: the card's outcome went to the dataset in between.
+    expect(asked[2]).toMatchObject({ path: "/dataset/outcome", body: { card: "calendar", decision: "approved" } });
+    expect((asked[3]?.body.history as unknown[]).length).toBe(4);
   });
 
   it("small undoable cards are done at once, as on the page", async () => {

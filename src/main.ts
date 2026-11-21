@@ -24,6 +24,9 @@ import { msUntil, startNightlyIntrospection } from "./introspection.js";
 import { startDailyAt } from "./morning.js";
 import { makeMemoryStoreInMemory } from "./memory-store.js";
 import { makeBrainStore } from "./current-brain.js";
+import { dayOf, makeDataset, parseDatasetSettings } from "./dataset.js";
+import { backupDataset, parseDatasetDrive } from "./dataset-backup.js";
+import { isGoogleAccount } from "./google-accounts.js";
 import { localHosts, makeServer } from "./server.js";
 import { warmOllama } from "./llm/ollama.js";
 import { makeTurnRegistry } from "./turns.js";
@@ -83,6 +86,9 @@ const stopPurge = sqlite?.ok
 const background = makeBackgroundTasks({ log });
 // #312: the brain the page is on, so WhatsApp answers with the same one.
 const brainStore = makeBrainStore({ root: process.cwd() });
+// #295: every exchange as data, per person per day (production keeps none).
+const dataset =
+  cfg.env !== "production" && cfg.dataset.enabled ? makeDataset({ root: process.cwd(), settings: parseDatasetSettings("on", cfg.dataset.off), timeZone: cfg.timeZone, log }) : undefined;
 
 const deps = await buildDeps({ config: cfg, env: process.env, log, background, memoryStore });
 if (!deps.ok) refuse(deps.error);
@@ -201,7 +207,25 @@ const app = makeServer(deps.ok ? deps.value : refuse("unreachable"), {
   web: web.ok && vendor.ok ? { ...web.value, ...vendor.value } : refuse("unreachable"),
   // #290: the Memories panel shows each person their own (the routes scope it by ?who=).
   memories: memoryStore,
+  ...(dataset ? { dataset } : {}),
 });
+
+// #295: each finished day's dataset files copied to Drive, every night at 03:45.
+const datasetDrive = parseDatasetDrive(cfg.dataset.drive);
+const driveClient = deps.ok ? deps.value.driveClient : undefined;
+const stopDatasetBackup =
+  dataset && driveClient && isGoogleAccount(datasetDrive.account)
+    ? startDailyAt(
+        async () => {
+          const account = datasetDrive.account;
+          if (!isGoogleAccount(account)) return;
+          const done = await backupDataset({ dataset, drive: driveClient, account, folders: datasetDrive.folders, today: dayOf(new Date(), cfg.timeZone), log });
+          if (!done.ok) log.warn("dataset copy skipped", { reason: done.error.slice(0, 120) });
+        },
+        { timeZone: cfg.timeZone, hour: 3, minute: 45, msUntil, onError: () => log.warn("dataset copy failed", { reason: "unexpected" }) },
+      )
+    : undefined;
+if (dataset && !stopDatasetBackup) log.info("dataset kept on this Mac only", { why: driveClient ? "unknown Drive account" : "Drive is off" });
 
 const server = serve({ fetch: app.fetch, hostname: cfg.host, port: cfg.port }, (info) => {
   if (settingsDid !== "none") log.info("settings", { from: settingsDid === "imported" ? ".env, copied into data/atlas-settings.json" : "data/atlas-settings.json" });
@@ -245,7 +269,8 @@ const whatsappServer = (() => {
   const local = async (path: string, body: unknown): Promise<unknown> => {
     const res = await app.request(`http://127.0.0.1:${cfg.port}${path}`, {
       method: "POST",
-      headers: { host: `127.0.0.1:${cfg.port}`, "content-type": "application/json", accept: "application/json" },
+      // #295: so the dataset knows the exchange came from WhatsApp.
+      headers: { host: `127.0.0.1:${cfg.port}`, "content-type": "application/json", accept: "application/json", "x-atlas-channel": "whatsapp" },
       body: JSON.stringify(body),
     });
     return res.json();
@@ -298,6 +323,7 @@ const shutdown = (signal: string): void => {
       stopPurge?.();
       stopIntrospection?.();
       stopMorning?.();
+      stopDatasetBackup?.();
       stopProactive?.stop();
       stopRefresh?.();
       if (sqlite?.ok) sqlite.value.close();

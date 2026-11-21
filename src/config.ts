@@ -252,6 +252,8 @@ export type Config = {
   readonly proactive?: { readonly enabled: boolean; readonly from: string; readonly quiet: string };
   /** TOOL_CALLING (#104, default on): Claude decides itself when to use a tool; code validates each call. Off: code decides, as for the local brain. */
   readonly toolCalling: boolean;
+  /** DATASET (#295, default off): every exchange kept as JSONL per person per day; DATASET_OFF leaves people out; DATASET_DRIVE: where the nightly copy goes. */
+  readonly dataset: { readonly enabled: boolean; readonly off: string; readonly drive: string };
   /** LOCAL_MODE (#312, default on): the Local brain gets every tool, the household's limits off, and undoable changes done at once. Off: Local has no tools, as before. */
   readonly localMode: boolean;
   /**
@@ -553,6 +555,9 @@ const EnvSchema = z.object({
   GEMINI_SECRET_NAME: z.string().regex(/^[A-Za-z0-9_-]{1,255}$/).default("gemini-api-key"),
   GEMINI_LIVE: z.enum(["on", "off"]).default("on"),
   LOCAL_MODE: z.enum(["on", "off"]).default("on"),
+  DATASET: z.enum(["on", "off"]).default("off"),
+  DATASET_OFF: z.string().regex(/^[a-z0-9, -]{0,200}$/, { error: "must be ids like marisa, ines" }).optional(),
+  DATASET_DRIVE: z.string().regex(/^[a-z]{2,20}:[^:<>\\]{1,200}$/, { error: "must be account:folder/path, like noisysource:Atlas/dataset" }).optional(),
   GEMINI_LIVE_MODEL: z.string().regex(/^[a-z0-9][a-z0-9.-]{1,60}$/, { error: "must be a Gemini Live model id, like gemini-3.8-live" }).default("gemini-3.8-live"),
   GEMINI_LIVE_VOICE: z.string().regex(/^[A-Za-z]{2,30}$/, { error: "must be a Gemini voice name, like Charon" }).optional(),
   VENDUS_SECRET_NAME: optionalString,
@@ -689,6 +694,7 @@ export const loadConfig = (given: Env): Result<Config, string> => {
     },
     toolCalling: e.TOOL_CALLING !== "off",
     localMode: e.LOCAL_MODE === "on",
+    dataset: { enabled: e.DATASET === "on", off: e.DATASET_OFF ?? "", drive: e.DATASET_DRIVE ?? "noisysource:Atlas/dataset" },
     toolRouter: e.TOOL_ROUTER ?? "model",
     bareMemory: e.MEMORY === "on",
     introspection: e.MEMORY === "on" && e.INTROSPECTION === "on",

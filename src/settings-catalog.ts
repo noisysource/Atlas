@@ -114,6 +114,24 @@ export const SECTIONS: readonly Section[] = [
       on("PROFILE", "Use your profile (data/profile.md)"),
       on("MEMORY", "Remember across conversations"),
       on("INTROSPECTION", "Review memories every night"),
+      on(
+        "DATASET",
+        "Keep a dataset of exchanges (for learning)",
+        "Each question, the tools used, the answer, corrections and what happened to cards, as JSONL in data/dataset/<who>/, copied every night to Drive. EC/HRT is never kept.",
+      ),
+      {
+        key: "DATASET_OFF",
+        label: "People not recorded",
+        kind: "text",
+        placeholder: "marisa",
+      },
+      {
+        key: "DATASET_DRIVE",
+        label: "Nightly copy to (account:folder)",
+        kind: "text",
+        placeholder: "noisysource:Atlas/dataset",
+        hint: "Needs Drive with writes on for that account.",
+      },
     ],
   },
   {

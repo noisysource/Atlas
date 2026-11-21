@@ -840,6 +840,7 @@ export const buildDeps = async (inputs: AppInputs): Promise<Result<Deps, string>
       ? { liveCall: { apiKey: geminiKey.value.key, model: config.gemini.live.model, ...(config.gemini.live.voice ? { voice: config.gemini.live.voice } : {}) } }
       : {}),
     ...(inboxTidy ? { gmailTidy: inboxTidy } : {}),
+    ...(driveClient ? { driveClient } : {}),
     ...(driveWrites ? { driveWrites } : {}),
     ...(dbWrites ? { dbWrites } : {}),
     classify: makeClassifier({ contexts: contexts.value, llm: classifierLlm.value, log, thinking: config.turn.classifierThinking }),

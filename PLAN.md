@@ -1448,6 +1448,18 @@ Confirmed (2026-11-12):
   answers with that brain, and on Local declines calls with a message, since
   calls need Gemini Live.
 
+- **Dataset (#295, `DATASET=on`):** every `/ask` (page, voice, WhatsApp) is
+  kept as one JSONL line in `data/dataset/<who>/<day>.jsonl` (gitignored,
+  0600): the question, brain, context, tools offered and called (with their
+  checked args and results), skills, the answer, how long it took, and, when
+  the question corrects the answer before it, that wrong answer beside it.
+  Card outcomes (approved, declined, failed, undone) are kept too, from the
+  page and from WhatsApp (`POST /dataset/outcome`). Never kept: EC/HRT
+  handoffs, "don't remember this", and text that looks like a secret.
+  `DATASET_OFF` leaves people out. Each night at 03:45, finished days are
+  copied to Drive (`DATASET_DRIVE`, default `noisysource:Atlas/dataset`, in a
+  folder per person), once each; that needs Drive writes for that account.
+
 ## Out of scope for M0
 
 Vendus, Cloud Run deployment or the Pi (#53), real memory (#24, #56),

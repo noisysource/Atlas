@@ -35,6 +35,7 @@ data/settings.json
 # #310: the settings set in Data sources (API keys among them)
 data/atlas-settings.json
 data/brain.json
+data/dataset/
 # #218: his reminders
 data/reminders.json
 # #68: how Atlas talks (his settings)

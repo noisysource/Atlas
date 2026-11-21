@@ -663,6 +663,7 @@ const confirmCard = (proposal) => {
       const stillWaiting = [...document.querySelectorAll('.confirm[data-pending="true"]')].some((c) => NODE_OF_CARD[/** @type {keyof typeof NODE_OF_CARD} */ (/** @type {HTMLElement} */ (c).dataset.kind ?? "")] === node);
       if (node && !stillWaiting) brainView.decided(/** @type {import("./brain-lib.js").NodeId} */ (node), outcome);
       markDecided(card, outcome);
+      keepOutcome({ card: kind, label: proposal.label, decision: outcome === "done" ? "approved" : outcome === "declined" ? "declined" : "failed", auto });
       // #290: written down for the household (kept only while sharing is on).
       if (decision === "yes" && result.ok) people.record(kind, proposal.label);
       if (auto) {
@@ -750,6 +751,20 @@ const carryOn = (then) => {
 /** @type {Map<string, number>} */
 const carriedOn = new Map();
 
+/**
+ * #295: what happened to a card, for Atlas's dataset (kept only when DATASET=on).
+ * @param {{ card: string, label: string, decision: "approved" | "declined" | "failed" | "undone", auto?: boolean }} o
+ */
+const keepOutcome = (o) => {
+  let who = "renato";
+  try {
+    who = people.who();
+  } catch {
+    // Not ready yet: his.
+  }
+  void fetch("/dataset/outcome", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ ...o, who, conversationId: state.conversationId }) }).catch(() => undefined);
+};
+
 /** #269: Undo for an event added without a card. @param {string} token @param {HTMLElement} line */
 const undoButton = (token, line) => {
   const b = document.createElement("button");
@@ -767,6 +782,7 @@ const undoButton = (token, line) => {
       r = { ok: false, text: "I can't reach Atlas, so it's still on your calendar." };
     }
     line.textContent = typeof r.text === "string" ? r.text : "Something went wrong, so it's still on your calendar.";
+    if (r.ok) keepOutcome({ card: "calendar", label: line.textContent.slice(0, 200), decision: "undone", auto: true });
     if (r.ok) b.remove();
     else b.disabled = false;
     state.history = appendTurn(state.history, "assistant", line.textContent, typeof r.tool === "string" ? [`${r.tool} ${CARD_DONE}`] : []);

@@ -12,6 +12,7 @@
 //   CORS preflight, which this server never answers.
 
 import type { BrainStore } from "./current-brain.js";
+import { exchangeOf, keptText, type Dataset } from "./dataset.js";
 import { randomUUID } from "node:crypto";
 import { Hono, type Context } from "hono";
 import { bodyLimit } from "hono/body-limit";
@@ -32,7 +33,7 @@ import type { SttProvider } from "./stt/types.js";
 import { registerTtsRoutes } from "./tts-routes.js";
 import type { TtsProviders } from "./tts/registry.js";
 import { parseAskRequest } from "./request.js";
-import type { Deps } from "./types.js";
+import type { AskRequest, AskResponse, Deps, PathStep } from "./types.js";
 import { MAIN_ID, userOf } from "./users.js";
 import type { LogBuffer } from "./log-buffer.js";
 import { registerSettingsRoutes } from "./settings-routes.js";
@@ -135,6 +136,8 @@ export const makeServer = (
     readonly stt?: SttProvider;
     /** How the page runs a spoken turn (#75): GET /voice-settings. */
     readonly turn?: TurnConfig;
+    /** #295: every exchange and card outcome kept as data, per person per day. */
+    readonly dataset?: Dataset;
     /** Development: the page shows a timing line under each answer (#76). */
     readonly dev?: boolean;
     /** Spoken replies open with a short reaction (bare mode, #92): the page's fillers step back. */
@@ -156,6 +159,13 @@ export const makeServer = (
   const newTurnId = options.newTurnId ?? randomUUID;
   const turns = options.turns ?? makeTurnRegistry({ log: deps.log });
   const allowedHosts = options.allowedHosts?.map((h) => h.toLowerCase());
+  /** #295: one /ask into the dataset, after the reply (never in its way). */
+  const keep = (request: AskRequest, response: AskResponse, started: number, channel: "page" | "whatsapp", steps?: readonly PathStep[]): void => {
+    const dataset = options.dataset;
+    if (!dataset) return;
+    const entry = exchangeOf(request, response, { at: deps.now(), ms: performance.now() - started, mainId: "renato", channel, ...(steps ? { steps } : {}) });
+    if (entry) void dataset.record(entry);
+  };
   const app = new Hono<ServerEnv>();
 
   // Request id + one access-log line per request (method, path, status, time; no bodies).
@@ -240,8 +250,13 @@ export const makeServer = (
       const requestId = c.get("requestId");
       const askDeps = { ...deps, log: withLogFields(deps.log, { requestId }) };
 
+      const channel = c.req.header("x-atlas-channel") === "whatsapp" ? "whatsapp" : "page";
       if (!wantsStream(c.req.header("accept"))) {
-        return c.json(await handleAsk(askDeps, request.value, { requestId }));
+        const askStarted = performance.now();
+        const steps: PathStep[] = [];
+        const response = await handleAsk(askDeps, request.value, { requestId, onStep: (step) => void steps.push(step) });
+        keep(request.value, response, askStarted, channel, steps);
+        return c.json(response);
       }
 
       // Streaming (#72): start, then each sentence as it completes, then
@@ -270,6 +285,7 @@ export const makeServer = (
         };
 
         send("start", { turnId });
+        const steps: PathStep[] = [];
         const response = await handleAsk(askDeps, request.value, {
           requestId,
           signal: controller.signal,
@@ -280,7 +296,10 @@ export const makeServer = (
           onSentence: (text) => sendSentences([text]),
           // Live path for the brain view (#130): the same steps the final path carries.
           onReach: (tool) => send("reach", { tool }),
-          onStep: (step) => send("step", step),
+          onStep: (step) => {
+            steps.push(step);
+            send("step", step);
+          },
           ...(options.turn ? { firstClauseAfter: options.turn.firstChunkChars } : {}),
           deferWrapUp: (turn) => turns.hold(turnId, turn),
           onStage: (stage, fields) => {
@@ -301,6 +320,7 @@ export const makeServer = (
         };
         send("timing", timing);
         send(response.type === "answer" ? "done" : "reply", response);
+        keep(request.value, response, started, channel, steps);
         await writes;
         askDeps.log.info("ask stream", { outcome: controller.signal.aborted ? "cancelled" : response.type, sentences, ...timing });
       });
@@ -751,7 +771,11 @@ export const makeServer = (
       precheck: deps.precheck,
       ask: async (question, history, meta) => {
         const request = parseAskRequest({ question, history, brain: "google" });
-        return request.ok ? handleAsk(deps, request.value, meta) : { type: "error", message: request.error };
+        if (!request.ok) return { type: "error", message: request.error };
+        const liveStarted = performance.now();
+        const response = await handleAsk(deps, request.value, meta);
+        keep({ ...request.value, spoken: true }, response, liveStarted, "page");
+        return response;
       },
       log: deps.log,
     });
@@ -793,6 +817,29 @@ export const makeServer = (
         live: deps.live !== undefined && options.stt !== undefined,
         calendar: brains.calendar === true,
       });
+    });
+  }
+  // #295: what happened to a card (approved, declined, failed, undone), into the dataset.
+  const dataset = options.dataset;
+  if (dataset) {
+    app.post("/dataset/outcome", async (c) => {
+      if (!isJson(c.req.header("content-type"))) return c.json(errorBody("This needs Content-Type: application/json."), 415);
+      const b = (await c.req.json().catch(() => undefined)) as Record<string, unknown> | undefined;
+      const decision = b?.decision;
+      if (decision !== "approved" && decision !== "declined" && decision !== "failed" && decision !== "undone") return c.json(errorBody("decision must be approved, declined, failed or undone"), 400);
+      const card = typeof b?.card === "string" && /^[a-z-]{1,20}$/.test(b.card) ? b.card : "calendar";
+      const who = typeof b?.who === "string" && /^[a-z0-9-]{1,32}$/.test(b.who) ? b.who : "renato";
+      const kept = await dataset.record({
+        type: "outcome",
+        at: deps.now().toISOString(),
+        who,
+        ...(typeof b?.conversationId === "string" ? { conversationId: b.conversationId.slice(0, 80) } : {}),
+        card,
+        label: keptText(typeof b?.label === "string" ? b.label : "").slice(0, 300),
+        decision,
+        auto: b?.auto === true,
+      });
+      return c.json({ kept });
     });
   }
   const current = brains?.current;
