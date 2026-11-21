@@ -784,6 +784,7 @@ export const buildDeps = async (inputs: AppInputs): Promise<Result<Deps, string>
       : {}),
     ...(skillStore ? { skills: skillStore } : {}),
     nativeTools: (calendar !== undefined || gmail !== undefined || drive !== undefined || config.bareMemory) && config.toolCalling,
+    localNativeTools: config.localMode && config.toolCalling,
     ...(calendarConfirm ? { calendarConfirm } : {}),
     ...(calendarUndo ? { calendarUndo } : {}),
     ...(proactive ? { proactive } : {}),
@@ -911,25 +912,30 @@ export const buildDeps = async (inputs: AppInputs): Promise<Result<Deps, string>
                   ),
                 }
               : {}),
-            local: makeBareAnswerer({
-              llm: localLlm.value,
-              // What only Claude reaches, so the local model says to switch instead of guessing.
-              elsewhere: [
-                ...(gmail ? ["his email"] : []),
-                ...(github ? ["GitHub and the plans he follows"] : []),
-                ...(config.gcloud.enabled ? ["Google Cloud"] : []),
-                ...(config.house.enabled ? ["the house"] : []),
-                ...(vendusGet ? ["the invoices"] : []),
-                ...(decisions ? ["his decisions log"] : []),
-              ],
-              ...(config.userName ? { userName: config.userName } : {}),
-              spokenSentences: config.turn.spokenSentences,
-              pauses: config.turn.punctuationStyle,
-              ...(config.bareProfile ? { profile } : {}),
-              ...(calendar ? { calendar } : {}),
-              talk,
-              log,
-            }),
+            // #312: Local mode: the local model with Atlas's same tools, all of them every time,
+            // the household's limits off and undoable changes done at once. Off: no tools, as before.
+            local:
+              config.localMode && claudeDeps && config.toolCalling
+                ? makeSwitchedAnswerer(makeBareAnswerer, { ...omit(claudeDeps, "webSearch"), llm: localLlm.value, route: { mode: "all" }, local: true }, settings)
+                : makeBareAnswerer({
+                    llm: localLlm.value,
+                    // What only Claude reaches, so the local model says to switch instead of guessing.
+                    elsewhere: [
+                      ...(gmail ? ["his email"] : []),
+                      ...(github ? ["GitHub and the plans he follows"] : []),
+                      ...(config.gcloud.enabled ? ["Google Cloud"] : []),
+                      ...(config.house.enabled ? ["the house"] : []),
+                      ...(vendusGet ? ["the invoices"] : []),
+                      ...(decisions ? ["his decisions log"] : []),
+                    ],
+                    ...(config.userName ? { userName: config.userName } : {}),
+                    spokenSentences: config.turn.spokenSentences,
+                    pauses: config.turn.punctuationStyle,
+                    ...(config.bareProfile ? { profile } : {}),
+                    ...(calendar ? { calendar } : {}),
+                    talk,
+                    log,
+                  }),
           }),
         }
       : {}),

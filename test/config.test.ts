@@ -46,6 +46,7 @@ describe("loadConfig", () => {
       codeAgent: { enabled: false, maxUsd: 0.5, maxTurns: 25, reposPath: "data/repos", auth: "auto", model: "claude-sonnet-5-5", study: { maxUsd: 5, maxTurns: 150, notesPath: "data/code" }, refresh: { mode: "check", maxStudies: 2 }, tasks: { enabled: false, maxUsd: 3, maxTurns: 80, path: "data/tasks" }, fix: { enabled: false, maxUsd: 2, maxTurns: 60, writeTokensPath: "data/github-write-tokens.json", fixesPath: "data/fixes" } },
       bareMemory: false,
       introspection: false,
+      localMode: true,
       ollamaThink: false,
       userName: undefined,
       contextsPath: "contexts.md",

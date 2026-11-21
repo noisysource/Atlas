@@ -5,17 +5,22 @@
 // keep_alive keeps the model loaded between turns, so a turn doesn't pay for
 // loading it; `warmOllama` loads it at startup. JSON output (`outputSchema`)
 // goes through Ollama's `format`, for structured requests like the
-// calendar's (#100). Tools aren't supported yet: such requests are refused
-// clearly. Effort, thinking and
-// prompt caching have no Ollama equivalent and are ignored.
+// calendar's (#100). Tools go as Ollama's function tools (Local mode): the
+// calls come back in message.tool_calls, and their results go back as "tool"
+// messages. Effort, thinking and prompt caching have no Ollama equivalent and
+// are ignored.
 
 import { err, ok, type Result } from "../result.js";
-import type { LlmCall, LlmError, LlmMessage, LlmRequest, LlmResponse, LlmStreamed } from "./types.js";
+import type { LlmCall, LlmError, LlmMessage, LlmRequest, LlmResponse, LlmStreamed, LlmToolCall } from "./types.js";
 
 /** How long Ollama keeps the model in memory after a request. */
 export const OLLAMA_KEEP_ALIVE = "30m";
 
-type ChatMessage = { readonly role: "system" | "user" | "assistant"; readonly content: string };
+type OllamaToolCall = { readonly function: { readonly name: string; readonly arguments: unknown } };
+type ChatMessage =
+  | { readonly role: "system" | "user"; readonly content: string }
+  | { readonly role: "assistant"; readonly content: string; readonly tool_calls?: readonly OllamaToolCall[] }
+  | { readonly role: "tool"; readonly content: string; readonly tool_name?: string };
 
 const ABORTED: LlmError = { kind: "aborted", message: "Cancelled", retryable: false };
 
@@ -27,13 +32,23 @@ const down = (base: URL): LlmError => ({
 });
 
 /** The shared request as Ollama chat messages: the system prompt (and its uncached suffix) first. */
-export const toOllamaMessages = (request: LlmRequest): ChatMessage[] => [
-  { role: "system", content: request.systemSuffix ? `${request.system}\n\n${request.systemSuffix}` : request.system },
-  ...request.messages.map((m: LlmMessage): ChatMessage => {
-    if ("toolResults" in m) return { role: "user", content: m.toolResults.map((r) => r.content).join("\n") };
-    return { role: m.role, content: m.text };
-  }),
-];
+export const toOllamaMessages = (request: LlmRequest): ChatMessage[] => {
+  // Ollama has no call ids: a result names its tool instead.
+  const names = new Map<string, string>();
+  const out: ChatMessage[] = [{ role: "system", content: request.systemSuffix ? `${request.system}\n\n${request.systemSuffix}` : request.system }];
+  for (const m of request.messages as readonly LlmMessage[]) {
+    if ("toolResults" in m) {
+      for (const r of m.toolResults) {
+        const name = names.get(r.callId);
+        out.push({ role: "tool", content: r.content, ...(name ? { tool_name: name } : {}) });
+      }
+    } else if (m.role === "assistant") {
+      for (const c of m.toolCalls ?? []) names.set(c.id, c.name);
+      out.push({ role: "assistant", content: m.text, ...(m.toolCalls && m.toolCalls.length > 0 ? { tool_calls: m.toolCalls.map((c) => ({ function: { name: c.name, arguments: c.input } })) } : {}) });
+    } else out.push({ role: "user", content: m.text });
+  }
+  return out;
+};
 
 /**
  * `think`: whether a thinking model (e.g. qwen3) thinks before answering.
@@ -46,6 +61,7 @@ export const ollamaBody = (model: string, request: LlmRequest, think?: boolean) 
   stream: true,
   keep_alive: OLLAMA_KEEP_ALIVE,
   ...(think !== undefined ? { think } : {}),
+  ...(request.tools && request.tools.length > 0 ? { tools: request.tools.map((t) => ({ type: "function", function: { name: t.name, description: t.description, parameters: t.inputSchema } })) } : {}),
   // Structured output (#100): Ollama keeps the reply to this JSON schema.
   ...(request.outputSchema ? { format: request.outputSchema } : {}),
   options: { num_predict: request.maxTokens },
@@ -85,11 +101,8 @@ export const makeOllamaLlm = (deps: {
   let think = deps.think;
 
   const stream = (request: LlmRequest, signal?: AbortSignal): LlmStreamed => {
-    if (request.tools && request.tools.length > 0) {
-      const refused = err<LlmError>({ kind: "bad_request", message: "The Ollama provider doesn't do tools yet", retryable: false });
-      return { text: (async function* () {})(), result: Promise.resolve(refused) };
-    }
     let full = "";
+    const calls: LlmToolCall[] = [];
     let settle: (r: Result<LlmResponse, LlmError>) => void = () => {};
     const result = new Promise<Result<LlmResponse, LlmError>>((resolve) => (settle = resolve));
     const text = (async function* () {
@@ -122,6 +135,18 @@ export const makeOllamaLlm = (deps: {
         );
         return;
       }
+      // #312: a model that can't call tools says so; Local mode needs one that can.
+      if (res.status === 400 && request.tools && request.tools.length > 0 && /tools?/i.test(await res.clone().text())) {
+        settle(
+          err({
+            kind: "bad_request",
+            message: `Ollama's ${deps.model} doesn't do tools`,
+            retryable: false,
+            userMessage: `The local model ${deps.model} can't use tools. Pick one that can (like qwen3:8b) in Tools → Brains, or turn Local mode off there.`,
+          }),
+        );
+        return;
+      }
       if (!res.ok || !res.body) {
         settle(err({ kind: "server", message: `Ollama answered ${res.status}`, retryable: res.status >= 500 }));
         return;
@@ -134,7 +159,22 @@ export const makeOllamaLlm = (deps: {
             settle(err({ kind: "server", message: "Ollama reported an error", retryable: false }));
             return;
           }
-          const message = line.message as { content?: unknown } | undefined;
+          const message = line.message as { content?: unknown; tool_calls?: unknown } | undefined;
+          if (Array.isArray(message?.tool_calls))
+            for (const c of message.tool_calls as { function?: { name?: unknown; arguments?: unknown } }[]) {
+              const name = c.function?.name;
+              if (typeof name !== "string" || name === "") continue;
+              const args = c.function?.arguments;
+              let input: unknown = args ?? {};
+              if (typeof args === "string") {
+                try {
+                  input = JSON.parse(args);
+                } catch {
+                  input = {};
+                }
+              }
+              calls.push({ id: `ollama-${calls.length + 1}`, name, input });
+            }
           const delta = typeof message?.content === "string" ? message.content : "";
           if (delta !== "") {
             full += delta;
@@ -159,6 +199,10 @@ export const makeOllamaLlm = (deps: {
           return;
         }
         settle(ok({ kind: "json", value, servedBy: `ollama:${deps.model}`, usage, payload: { provider: "ollama", data: null } }));
+        return;
+      }
+      if (calls.length > 0) {
+        settle(ok({ kind: "tool_calls", text: full, calls, servedBy: `ollama:${deps.model}`, usage, payload: { provider: "ollama", data: null } }));
         return;
       }
       settle(

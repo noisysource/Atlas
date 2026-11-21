@@ -1435,6 +1435,19 @@ Confirmed (2026-11-12):
   quick tunnel and points Meta's webhook at its new address with the app's
   token (app ID | secret). Production never reads the settings file.
 
+- **Local mode (#312, `LOCAL_MODE`, on by default):** the Local brain (Ollama)
+  answers with Atlas's same tools, called natively (Ollama function tools).
+  Nothing leaves the Mac, so the privacy limits come off: every tool every
+  time (no router), the household's limits off, and an undoable change is done
+  at once (the house, his own events without guests, tidying email, Drive
+  folders, the dev database). What reaches other people (sending, invites,
+  PRs, coding tasks) and production still wait for his OK. The EC handoff to
+  Kiro and Vendus read-only don't change, and KidClub's health fields and
+  parents' emails stay masked (families' data, not his). The page tells the
+  server which brain it's on (`POST /brain`, `data/brain.json`); WhatsApp
+  answers with that brain, and on Local declines calls with a message, since
+  calls need Gemini Live.
+
 ## Out of scope for M0
 
 Vendus, Cloud Run deployment or the Pi (#53), real memory (#24, #56),
