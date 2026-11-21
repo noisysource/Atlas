@@ -48,6 +48,7 @@ describe("loadConfig", () => {
       introspection: false,
       localMode: true,
       dataset: { enabled: false, off: "", drive: "noisysource:Atlas/dataset" },
+      learning: false,
       ollamaThink: false,
       userName: undefined,
       contextsPath: "contexts.md",

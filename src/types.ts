@@ -25,6 +25,7 @@ import type { CostSummary } from "./costs.js";
 import type { LiveSessions } from "./live/routes.js";
 import type { CalendarChanges } from "./calendar/change.js";
 import type { InboxTidy } from "./gmail/tidy.js";
+import type { Dataset } from "./dataset.js";
 import type { DriveClient, DriveWrites } from "./drive.js";
 import type { CodeMapView, Studies } from "./code/study.js";
 import type { ReachNode } from "./reach.js";
@@ -430,6 +431,8 @@ export type Deps = {
   readonly reach?: () => Promise<readonly ReachNode[]>;
   /** #108: reviews short-term memory (drop, promote, merge; skill and tool drafts). With MEMORY=on. */
   readonly introspect?: () => Promise<IntrospectionReport>;
+  /** #296: the learning loop for one day of the dataset, with the answer model; skills it proposes wait for his OK. */
+  readonly learn?: (dataset: Dataset, day: string) => Promise<unknown>;
   /** #177: the morning brief, prepared at BRIEF_AT and shown on the page (GET /brief/today). */
   readonly morningBrief?: MorningBriefs;
   /** #288: the conversation, kept across restarts. */

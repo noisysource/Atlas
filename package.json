@@ -24,6 +24,7 @@
     "gcloud:connect": "tsx --env-file-if-exists=.env scripts/gcloud-connect.ts",
     "github:connect": "tsx --env-file-if-exists=.env scripts/github-connect.ts",
     "memory:reflect": "tsx --env-file-if-exists=.env scripts/memory-reflect.ts",
+    "learn": "tsx scripts/learn.ts",
     "memory": "tsx --env-file-if-exists=.env scripts/memory.ts",
     "voice:setup": "bash scripts/voice-setup.sh",
     "voice:up": "bash scripts/voice-up.sh",

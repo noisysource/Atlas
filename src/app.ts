@@ -68,6 +68,8 @@ import { makeMemoryHooks, makeSafeMemoryHooks } from "./memory.js";
 import { makeModelExtract } from "./memory-extract.js";
 import { makeEcMatchers, parseNeverRemember } from "./memory-rules.js";
 import { runIntrospection } from "./introspection.js";
+import { runLearning } from "./learning.js";
+import type { Dataset } from "./dataset.js";
 import { makeSkillStore, type SkillStore } from "./skills.js";
 import { access, chmod, mkdir, readdir, readFile as readFileFs, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
@@ -783,6 +785,26 @@ export const buildDeps = async (inputs: AppInputs): Promise<Result<Deps, string>
         }
       : {}),
     ...(skillStore ? { skills: skillStore } : {}),
+    // #296: the learning loop: the day's dataset into skill drafts, with the answer model (once a night).
+    ...(skillStore && config.learning
+      ? {
+          learn: (dataset: Dataset, day: string) =>
+            runLearning({
+              dataset,
+              llm: answerLlm.value,
+              skills: skillStore,
+              ec: memoryEc,
+              day,
+              log,
+              writeReport: async (d, markdown) => {
+                await mkdir("data/learning", { recursive: true, mode: 0o700 });
+                const file = `data/learning/${d}.md`;
+                await writeFile(file, markdown, { mode: 0o600 });
+                await chmod(file, 0o600);
+              },
+            }),
+        }
+      : {}),
     nativeTools: (calendar !== undefined || gmail !== undefined || drive !== undefined || config.bareMemory) && config.toolCalling,
     localNativeTools: config.localMode && config.toolCalling,
     ...(calendarConfirm ? { calendarConfirm } : {}),

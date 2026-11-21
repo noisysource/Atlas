@@ -2337,7 +2337,7 @@ const renderSkills = async () => {
       head.textContent = `${s.status === "draft" ? "Draft · " : "✨ "}${s.title}`;
       const when = document.createElement("p");
       when.className = "memory-meta";
-      when.textContent = `When: ${s.when} · ${s.source === "introspection" ? "drafted overnight" : "taught in chat"}`;
+      when.textContent = `When: ${s.when} · ${s.source === "introspection" ? "drafted overnight" : s.source === "learning" ? "learned from yesterday" : "taught in chat"}`;
       const steps = document.createElement("ol");
       for (const step of s.steps) steps.append(Object.assign(document.createElement("li"), { textContent: step }));
       const actions = document.createElement("div");

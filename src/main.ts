@@ -225,6 +225,18 @@ const stopDatasetBackup =
         { timeZone: cfg.timeZone, hour: 3, minute: 45, msUntil, onError: () => log.warn("dataset copy failed", { reason: "unexpected" }) },
       )
     : undefined;
+// #296: at 04:15, yesterday's dataset becomes skill drafts (after the copy, before the morning).
+const learn = deps.ok ? deps.value.learn : undefined;
+const stopLearning =
+  dataset && learn
+    ? startDailyAt(
+        async () => {
+          const yesterday = dayOf(new Date(Date.now() - 86_400_000), cfg.timeZone);
+          await learn(dataset, yesterday);
+        },
+        { timeZone: cfg.timeZone, hour: 4, minute: 15, msUntil, onError: () => log.warn("learning failed", { reason: "unexpected" }) },
+      )
+    : undefined;
 if (dataset && !stopDatasetBackup) log.info("dataset kept on this Mac only", { why: driveClient ? "unknown Drive account" : "Drive is off" });
 
 const server = serve({ fetch: app.fetch, hostname: cfg.host, port: cfg.port }, (info) => {
@@ -324,6 +336,7 @@ const shutdown = (signal: string): void => {
       stopIntrospection?.();
       stopMorning?.();
       stopDatasetBackup?.();
+      stopLearning?.();
       stopProactive?.stop();
       stopRefresh?.();
       if (sqlite?.ok) sqlite.value.close();

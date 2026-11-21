@@ -25,7 +25,7 @@ export type Skill = {
   readonly when: string;
   readonly steps: readonly string[];
   readonly status: SkillStatus;
-  readonly source: "introspection" | "chat";
+  readonly source: "introspection" | "chat" | "learning";
   readonly createdAt: string;
   readonly updatedAt: string;
 };

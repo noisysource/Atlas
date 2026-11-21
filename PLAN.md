@@ -1460,6 +1460,16 @@ Confirmed (2026-11-12):
   copied to Drive (`DATASET_DRIVE`, default `noisysource:Atlas/dataset`, in a
   folder per person), once each; that needs Drive writes for that account.
 
+- **Learning loop (#296, `LEARNING=on`, needs the dataset):** at 04:15 the
+  day before is read for signals: corrections, cards declined, undone or
+  failed, tool errors, and the same question asked three or more times. Only
+  on a day with signals, the answer model gets them (each cut short; never an
+  exchange the Local brain answered) and proposes up to three skills and a few
+  notes. Skills are checked like any (no secrets, no EC) and wait as drafts in
+  ✨ Skills ("learned from yesterday"); nothing changes until he approves one.
+  The report goes to `data/learning/<day>.md`. `npm run learn -- <day>` runs
+  it now. No model is trained.
+
 ## Out of scope for M0
 
 Vendus, Cloud Run deployment or the Pi (#53), real memory (#24, #56),

@@ -119,6 +119,11 @@ export const SECTIONS: readonly Section[] = [
         "Keep a dataset of exchanges (for learning)",
         "Each question, the tools used, the answer, corrections and what happened to cards, as JSONL in data/dataset/<who>/, copied every night to Drive. EC/HRT is never kept.",
       ),
+      on(
+        "LEARNING",
+        "Learn from yesterday, every night (needs the dataset)",
+        "Corrections, undone cards and errors become skill drafts in ✨ Skills, for your OK. Local-brain exchanges aren't sent.",
+      ),
       {
         key: "DATASET_OFF",
         label: "People not recorded",
