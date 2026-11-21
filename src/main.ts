@@ -23,7 +23,7 @@ import { openSqliteMemoryStore, startMemoryPurge } from "./memory-sqlite.js";
 import { msUntil, startNightlyIntrospection } from "./introspection.js";
 import { startDailyAt } from "./morning.js";
 import { makeMemoryStoreInMemory } from "./memory-store.js";
-import { scopedMemoryStore } from "./memory-scope.js";
+import { makeBrainStore } from "./current-brain.js";
 import { localHosts, makeServer } from "./server.js";
 import { warmOllama } from "./llm/ollama.js";
 import { makeTurnRegistry } from "./turns.js";
@@ -81,6 +81,8 @@ const stopPurge = sqlite?.ok
 
 // The memory wrap-up runs here, after each reply.
 const background = makeBackgroundTasks({ log });
+// #312: the brain the page is on, so WhatsApp answers with the same one.
+const brainStore = makeBrainStore({ root: process.cwd() });
 
 const deps = await buildDeps({ config: cfg, env: process.env, log, background, memoryStore });
 if (!deps.ok) refuse(deps.error);
@@ -193,11 +195,12 @@ const app = makeServer(deps.ok ? deps.value : refuse("unreachable"), {
     default: "local",
     labels: { local: `Local · ${cfg.models.local.model}`, claude: `Claude · ${cfg.models.answer.model}`, ...(cfg.gemini.enabled ? { google: `Google · ${cfg.gemini.model.model}` } : {}) },
     calendar: cfg.calendar.enabled,
+    current: brainStore,
   },
   ...(cfg.env === "production" ? {} : { allowedHosts: localHosts(cfg.port) }),
   web: web.ok && vendor.ok ? { ...web.value, ...vendor.value } : refuse("unreachable"),
-  // #290: the Memories panel shows his; someone else's stay out of it.
-  memories: scopedMemoryStore(memoryStore, undefined),
+  // #290: the Memories panel shows each person their own (the routes scope it by ?who=).
+  memories: memoryStore,
 });
 
 const server = serve({ fetch: app.fetch, hostname: cfg.host, port: cfg.port }, (info) => {
@@ -252,6 +255,7 @@ const whatsappServer = (() => {
     keys,
     local,
     mainUser: "renato",
+    brain: brainStore.get,
     ...(cfg.gemini.enabled ? { callAskBrain: "google" as const } : {}),
     // #304: calls are answered by Gemini Live, asking this server for anything real.
     ...(liveCall

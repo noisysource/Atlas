@@ -252,6 +252,8 @@ export type Config = {
   readonly proactive?: { readonly enabled: boolean; readonly from: string; readonly quiet: string };
   /** TOOL_CALLING (#104, default on): Claude decides itself when to use a tool; code validates each call. Off: code decides, as for the local brain. */
   readonly toolCalling: boolean;
+  /** LOCAL_MODE (#312, default on): the Local brain gets every tool, the household's limits off, and undoable changes done at once. Off: Local has no tools, as before. */
+  readonly localMode: boolean;
   /**
    * TOOL_ROUTER (#175, default model): which tools Claude gets per question.
    * "model": the question's words, the last answers' tools and a one-word
@@ -550,6 +552,7 @@ const EnvSchema = z.object({
   GEMINI_ROUTER_MODEL: z.string().regex(/^[a-z0-9][a-z0-9.-]{1,60}$/, { error: "must be a Gemini model id, like gemini-3.5-flash-lite" }).default("gemini-3.5-flash-lite"),
   GEMINI_SECRET_NAME: z.string().regex(/^[A-Za-z0-9_-]{1,255}$/).default("gemini-api-key"),
   GEMINI_LIVE: z.enum(["on", "off"]).default("on"),
+  LOCAL_MODE: z.enum(["on", "off"]).default("on"),
   GEMINI_LIVE_MODEL: z.string().regex(/^[a-z0-9][a-z0-9.-]{1,60}$/, { error: "must be a Gemini Live model id, like gemini-3.8-live" }).default("gemini-3.8-live"),
   GEMINI_LIVE_VOICE: z.string().regex(/^[A-Za-z]{2,30}$/, { error: "must be a Gemini voice name, like Charon" }).optional(),
   VENDUS_SECRET_NAME: optionalString,
@@ -685,6 +688,7 @@ export const loadConfig = (given: Env): Result<Config, string> => {
       tokensPath: e.GOOGLE_TOKENS_PATH ?? DEFAULTS.googleTokensPath,
     },
     toolCalling: e.TOOL_CALLING !== "off",
+    localMode: e.LOCAL_MODE === "on",
     toolRouter: e.TOOL_ROUTER ?? "model",
     bareMemory: e.MEMORY === "on",
     introspection: e.MEMORY === "on" && e.INTROSPECTION === "on",

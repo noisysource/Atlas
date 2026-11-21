@@ -82,6 +82,14 @@ export const SECTIONS: readonly Section[] = [
         placeholder: "Charon",
       },
       {
+        ...on(
+          "LOCAL_MODE",
+          "Local mode: the Local brain gets every tool",
+          "Nothing leaves the Mac, so the limits come off: every tool, Marisa's limits off, undoable changes done at once. Sending, invites, PRs and production still ask. WhatsApp follows the brain; calls are declined on Local.",
+        ),
+        defaultOn: true,
+      },
+      {
         key: "OLLAMA_MODEL",
         label: "Local model (Ollama)",
         kind: "text",

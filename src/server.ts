@@ -11,6 +11,7 @@
 //   "simple" requests are refused, and a cross-site JSON request needs a
 //   CORS preflight, which this server never answers.
 
+import type { BrainStore } from "./current-brain.js";
 import { randomUUID } from "node:crypto";
 import { Hono, type Context } from "hono";
 import { bodyLimit } from "hono/body-limit";
@@ -146,6 +147,8 @@ export const makeServer = (
       readonly labels: { readonly claude: string; readonly local: string; readonly google?: string };
       /** CALENDAR=on (#100): the page notes once that, with Claude, event titles go to Anthropic. */
       readonly calendar?: boolean;
+      /** #312: the brain the page is on, kept for WhatsApp: GET and POST /brain. */
+      readonly current?: BrainStore;
     };
   } = {},
 ): Hono<ServerEnv> => {
@@ -790,6 +793,22 @@ export const makeServer = (
         live: deps.live !== undefined && options.stt !== undefined,
         calendar: brains.calendar === true,
       });
+    });
+  }
+  const current = brains?.current;
+  if (current) {
+    app.get("/brain", async (c) => {
+      c.header("Cache-Control", "no-store");
+      return c.json({ brain: await current.get() });
+    });
+    app.post("/brain", async (c) => {
+      if (!isJson(c.req.header("content-type"))) return c.json({ type: "error", message: "This needs Content-Type: application/json." }, 415);
+      const body = (await c.req.json().catch(() => undefined)) as { brain?: unknown } | undefined;
+      const brain = body?.brain;
+      if (brain !== "claude" && brain !== "local" && brain !== "google") return c.json({ type: "error", message: 'brain must be "claude", "local" or "google"' }, 400);
+      await current.set(brain);
+      deps.log.info("brain set", { brain });
+      return c.json({ brain });
     });
   }
   const turnConfig = options.turn;

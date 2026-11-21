@@ -2476,9 +2476,14 @@ const showCalendarNote = () => {
   save(CALENDAR_NOTE_SEEN, "1");
 };
 
+/** #312: tells Atlas which brain the page is on, so WhatsApp answers with the same one. */
+const shareBrain = () =>
+  void fetch("/brain", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ brain: state.brain }) }).catch(() => undefined);
+
 brainButton.addEventListener("click", () => {
   state.brain = nextBrain(state.brain, brainsAvailable);
   save("atlas.brain", state.brain);
+  shareBrain();
   renderControls();
   showCalendarNote();
 });
@@ -2495,6 +2500,7 @@ void fetch("/brains")
     if (brainsAvailable.length === 0) brainsAvailable = ["local", "claude"];
     // A saved Google choice with Google switched off falls back to Claude.
     if (!brainsAvailable.includes(state.brain)) state.brain = "claude";
+    shareBrain();
     calendarOn = body?.calendar === true;
     renderControls();
     showCalendarNote();

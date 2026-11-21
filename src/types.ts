@@ -370,6 +370,8 @@ export type Deps = {
    * invented calendar contents) is off for Claude. The rest of the guard stays.
    */
   readonly nativeTools?: boolean;
+  /** #312: Local mode: the local brain calls tools itself too. */
+  readonly localNativeTools?: boolean;
   /**
    * Reach 2: Renato's answer to a proposed event (POST /calendar/confirm).
    * "yes" creates it through Google and returns a sentence built from

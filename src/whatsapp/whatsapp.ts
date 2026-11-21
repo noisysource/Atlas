@@ -164,6 +164,9 @@ export const CARD_ENDPOINTS: Readonly<Record<string, string>> = {
   fix: "/code/fix",
 };
 
+/** #312: why a call is declined while Atlas is on the Local brain. */
+export const LOCAL_NO_CALLS = "I'm on the local brain right now, so everything stays on the Mac, and calls need the cloud. Write to me here instead, or switch me to Claude or Google for calls.";
+
 export type Card = { readonly id: string; readonly label: string; readonly kind: string; readonly auto?: boolean; readonly then?: string };
 
 type Step = { readonly kind?: string; readonly confirm?: { readonly id?: unknown; readonly label?: unknown; readonly kind?: unknown; readonly auto?: unknown; readonly then?: unknown } };
@@ -195,6 +198,8 @@ export type WhatsAppDeps = {
   readonly callBrain?: (who: string, ask: (question: string) => Promise<string>) => CallBrain;
   /** #304: which brain answers what's asked on a call: Google (faster) when it's set up. */
   readonly callAskBrain?: "claude" | "google";
+  /** #312: the brain the page is on. Local: messages go to the local model, and calls are declined. */
+  readonly brain?: () => Promise<"claude" | "local" | "google">;
   readonly fetch?: typeof fetch;
   readonly now?: () => number;
   readonly newId?: () => string;
@@ -262,7 +267,10 @@ export const makeWhatsApp = (deps: WhatsAppDeps) => {
   };
 
   /** A question to Atlas, as this person; what to send back. */
-  const ask = async (chat: Chat, who: string, question: string, brain: "claude" | "google" = "claude"): Promise<string> => {
+  const ask = async (chat: Chat, who: string, question: string, onCall?: "claude" | "google"): Promise<string> => {
+    // The page's brain; on a call, the faster one. Local stays local.
+    const current = (await deps.brain?.().catch(() => undefined)) ?? "claude";
+    const brain = current === "local" ? "local" : (onCall ?? current);
     const response = object(
       await deps
         .local("/ask", {
@@ -326,6 +334,13 @@ export const makeWhatsApp = (deps: WhatsAppDeps) => {
     if (!who || !deps.callBrain) {
       await callAction(keys, c.id)("reject");
       deps.log?.info("whatsapp call rejected", { reason: who ? "calls aren't set up" : "unknown number" });
+      return;
+    }
+    // #312: on Local, nothing goes to the cloud, and a call needs Gemini Live.
+    if ((await deps.brain?.().catch(() => undefined)) === "local") {
+      await callAction(keys, c.id)("reject");
+      deps.log?.info("whatsapp call rejected", { reason: "local brain" });
+      await send(keys, c.from, LOCAL_NO_CALLS);
       return;
     }
     deps.log?.info("whatsapp call", { who });

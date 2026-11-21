@@ -774,6 +774,15 @@ export const makeBareAnswerer = (deps: {
   readonly tools?: boolean;
   /** #269: small, undoable changes go ahead without a card (the page does them at once). */
   readonly autoSmall?: boolean;
+  /**
+   * #312: Local mode. The brain runs on this Mac, so nothing leaves it: every
+   * tool is offered (no router), the household's limits are off, and an
+   * undoable change is done at once (the house, his own calendar without
+   * guests, tidying email, Drive folders, the dev database). What reaches
+   * other people or production still waits for his OK, and the EC handoff
+   * and Vendus read-only stay as they are.
+   */
+  readonly local?: boolean;
   /** #146: which calendar and Gmail accounts are connected, checked each turn. */
   readonly connected?: () => Promise<Connected>;
   /** #125: his GitHub repos, read-only. With tools only. EC-looking repos are Kiro's. */
@@ -981,7 +990,9 @@ export const makeBareAnswerer = (deps: {
   return async ({ question, history, onText, signal, spoken, onStep: onStepAsked, onReach, onOffered, now, remember, onToolSucceeded, user }) => {
     // #290: someone of his household who isn't him: her name, profile, memories, accounts and tools.
     const guest = user && !user.main ? user : undefined;
-    const available: readonly ToolGroup[] = guest ? connectedGroups.filter((g) => guest.groups.includes(g)) : connectedGroups;
+    // #312: in Local mode nothing leaves the Mac, and the household's limits are off.
+    const limited = guest && !deps.local ? guest : undefined;
+    const available: readonly ToolGroup[] = limited ? connectedGroups.filter((g) => limited.groups.includes(g)) : connectedGroups;
     /** #278: the current call's next step, put on any card it shows. */
     let thenOfCall: string | undefined;
     const onStep = onStepAsked
@@ -1090,7 +1101,7 @@ export const makeBareAnswerer = (deps: {
         ...(routing && missing.length > 0 ? [toolsMoreTool(missing)] : []),
       ];
       // #290: the brief reads his email, so it isn't hers.
-      return guest ? list.filter((t) => t.name !== DAY_BRIEF_TOOL.name) : list;
+      return limited ? list.filter((t) => t.name !== DAY_BRIEF_TOOL.name) : list;
     };
     const request: LlmRequest = {
       system: spoken === true ? system.spoken : system.typed,
@@ -1102,6 +1113,7 @@ export const makeBareAnswerer = (deps: {
           nowLine(now, deps.timeZone ?? deps.calendar?.timeZone ?? DEFAULT_TIME_ZONE),
           // #290: who this is, and what the household did lately, when sharing is on.
           ...(user?.lines ?? []),
+          ...(guest && deps.local ? [`<local>Local mode: you run on this Mac and nothing leaves it, so everything Atlas has is ${guest.name}'s to use too, ${deps.userName ?? "his"} accounts included.</local>`] : []),
           connected,
           studied,
           toolsSoFar(history),
@@ -1147,10 +1159,10 @@ export const makeBareAnswerer = (deps: {
       // #290: only her tools for someone who isn't him, whatever the model asks for; the brief reads his email.
       // Her email and files are hers: a guest's Gmail and Drive calls reach only her own accounts.
       const askedAccount = typeof call.input === "object" && call.input !== null ? (call.input as Record<string, unknown>).account : undefined;
-      const otherAccount = guest && (group === "gmail" || group === "drive") && typeof askedAccount === "string" && !guest.accounts.some((a) => a === askedAccount);
-      if (guest && ((group && !available.includes(group)) || call.name === DAY_BRIEF_TOOL.name || otherAccount)) {
+      const otherAccount = limited && (group === "gmail" || group === "drive") && typeof askedAccount === "string" && !limited.accounts.some((a) => a === askedAccount);
+      if (limited && ((group && !available.includes(group)) || call.name === DAY_BRIEF_TOOL.name || otherAccount)) {
         onStep?.({ kind: "tool", name: call.name, args: "", by: "model", ok: false, error: "refused: not hers" });
-        return { callId: call.id, content: `Refused: that's ${deps.userName ?? "the main user"}'s, not ${guest.name}'s. Say so in one sentence.`, isError: true };
+        return { callId: call.id, content: `Refused: that's ${deps.userName ?? "the main user"}'s, not ${limited.name}'s. Say so in one sentence.`, isError: true };
       }
       if (group) used.add(group);
       if (call.name === DAY_BRIEF_TOOL.name && deps.brief === true && deps.calendar) {
@@ -1338,6 +1350,10 @@ export const makeBareAnswerer = (deps: {
           onStep?.({ kind: "tool", name: call.name, args: account, by: "model", ok: false, error: `refused: ${proposed.error.slice(0, 60)}` });
           return { callId: call.id, content: `Not proposed: ${proposed.error}. Say so plainly.`, isError: true };
         }
+        if (deps.local) {
+          onStep?.({ kind: "tool", name: call.name, args: account, by: "model", ok: true, result: "doing it now", confirm: { id: proposed.value.id, label: proposed.value.label, kind: "drive", auto: true } });
+          return { callId: call.id, content: AUTO_SAY(proposed.value.label) };
+        }
         onStep?.({ kind: "tool", name: call.name, args: account, by: "model", ok: true, result: "waiting for your OK", confirm: { id: proposed.value.id, label: proposed.value.label, kind: "drive" } });
         return {
           callId: call.id,
@@ -1352,6 +1368,10 @@ export const makeBareAnswerer = (deps: {
         if (!proposed.ok) {
           onStep?.({ kind: "tool", name: call.name, args: account, by: "model", ok: false, error: `refused: ${proposed.error.slice(0, 60)}` });
           return { callId: call.id, content: `Not proposed: ${proposed.error}. Say so plainly.`, isError: true };
+        }
+        if (deps.local) {
+          onStep?.({ kind: "tool", name: call.name, args: account, by: "model", ok: true, result: "doing it now", confirm: { id: proposed.value.id, label: proposed.value.label, kind: "gmail-tidy", auto: true } });
+          return { callId: call.id, content: AUTO_SAY(proposed.value.label) };
         }
         onStep?.({ kind: "tool", name: call.name, args: account, by: "model", ok: true, result: "waiting for your OK", confirm: { id: proposed.value.id, label: proposed.value.label, kind: "gmail-tidy" } });
         return {
@@ -1444,7 +1464,7 @@ export const makeBareAnswerer = (deps: {
           onStep?.({ kind: "tool", name: call.name, args: asked.join(", "), by: "model", ok: false, error: `refused: ${proposed.error.slice(0, 60)}` });
           return { callId: call.id, content: `Not proposed: ${proposed.error}. Tell him plainly, or ask which blinds he means.`, isError: true };
         }
-        if (deps.autoSmall) {
+        if (deps.autoSmall || deps.local) {
           onStep?.({ kind: "tool", name: call.name, args: asked.join(", "), by: "model", ok: true, result: "doing it now", confirm: { id: proposed.value.id, label: proposed.value.label, kind: "house", auto: true } });
           return { callId: call.id, content: AUTO_SAY(proposed.value.label) };
         }
@@ -1488,7 +1508,7 @@ export const makeBareAnswerer = (deps: {
           onStep?.({ kind: "tool", name: call.name, args: "", by: "model", ok: false, error: `refused: ${proposed.error.slice(0, 60)}` });
           return { callId: call.id, content: `Not proposed: ${proposed.error}. Tell him plainly, or ask what he means.`, isError: true };
         }
-        if (deps.autoSmall && call.name === "house_thermostat") {
+        if ((deps.autoSmall && call.name === "house_thermostat") || deps.local) {
           onStep?.({ kind: "tool", name: call.name, args: "", by: "model", ok: true, result: "doing it now", confirm: { id: proposed.value.id, label: proposed.value.label, kind: "house-change", auto: true } });
           return { callId: call.id, content: AUTO_SAY(proposed.value.label) };
         }
@@ -1503,7 +1523,7 @@ export const makeBareAnswerer = (deps: {
           onStep?.({ kind: "tool", name: call.name, args: asked.join(", "), by: "model", ok: false, error: `refused: ${proposed.error.slice(0, 60)}` });
           return { callId: call.id, content: `Not proposed: ${proposed.error}. Tell him plainly, or ask which lights he means.`, isError: true };
         }
-        if (deps.autoSmall) {
+        if (deps.autoSmall || deps.local) {
           onStep?.({ kind: "tool", name: call.name, args: asked.join(", "), by: "model", ok: true, result: "doing it now", confirm: { id: proposed.value.id, label: proposed.value.label, kind: "lights", auto: true } });
           return { callId: call.id, content: AUTO_SAY(proposed.value.label) };
         }
@@ -1518,6 +1538,11 @@ export const makeBareAnswerer = (deps: {
         if (!proposed.ok) {
           onStep?.({ kind: "tool", name: call.name, args, by: "model", ok: false, error: `refused: ${proposed.error.slice(0, 60)}` });
           return { callId: call.id, content: `Not proposed: ${proposed.error}. Say so plainly.`, isError: true };
+        }
+        // Local mode: the dev database at once (it's backed up first); production always asks.
+        if (deps.local && !proposed.value.prod) {
+          onStep?.({ kind: "tool", name: call.name, args, by: "model", ok: true, result: "doing it now", confirm: { id: proposed.value.id, label: proposed.value.label, kind: "db-change", auto: true } });
+          return { callId: call.id, content: AUTO_SAY(proposed.value.label) };
         }
         onStep?.({ kind: "tool", name: call.name, args, by: "model", ok: true, result: "waiting for your OK", confirm: { id: proposed.value.id, label: proposed.value.label, kind: "db-change" } });
         return {
@@ -1538,6 +1563,10 @@ export const makeBareAnswerer = (deps: {
           onStep?.({ kind: "tool", name: call.name, args: account, by: "model", ok: false, error: `refused: ${proposed.error.slice(0, 60)}` });
           return { callId: call.id, content: `Not proposed: ${proposed.error}. Say so plainly.`, isError: true };
         }
+        if (deps.local) {
+          onStep?.({ kind: "tool", name: call.name, args: account, by: "model", ok: true, result: "doing it now", confirm: { id: proposed.value.id, label: proposed.value.label, kind: "calendar-change", auto: true } });
+          return { callId: call.id, content: AUTO_SAY(proposed.value.label) };
+        }
         onStep?.({ kind: "tool", name: call.name, args: account, by: "model", ok: true, result: "waiting for your OK", confirm: { id: proposed.value.id, label: proposed.value.label, kind: "calendar-change" } });
         return { callId: call.id, content: `Not changed yet: the app is asking him to confirm: ${proposed.value.label}. Say in one sentence that it needs his OK; never say it's done.` };
       }
@@ -1557,7 +1586,8 @@ export const makeBareAnswerer = (deps: {
         const id = cal.create.pending.add(checked.value);
         const label = proposalLabel(checked.value, today);
         deps.log?.info("calendar create proposed", { allDay: checked.value.start === undefined });
-        if (deps.autoSmall && isSmallProposal(checked.value)) {
+        // Local mode: his own event at once; an invitation reaches other people, so it asks.
+        if ((deps.autoSmall && isSmallProposal(checked.value)) || (deps.local && (checked.value.guests ?? []).length === 0)) {
           onStep?.({ kind: "tool", name: "calendar_create", args: proposalPathLabel(checked.value), by: "model", ok: true, result: "adding it now", confirm: { id, label, auto: true } });
           return { callId: call.id, content: AUTO_SAY(label) };
         }

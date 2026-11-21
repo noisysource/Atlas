@@ -122,16 +122,33 @@ describe("Ollama provider (#88)", () => {
     expect(!notInstalled.ok && notInstalled.error.userMessage).toContain('ollama pull qwen3:8b');
   });
 
-  it("refuses tools (not supported yet) without calling Ollama", async () => {
-    let called = false;
-    const base = await fakeOllama((_req, _b, res) => {
-      called = true;
-      res.end();
+  it("offers tools as Ollama function tools, and returns the calls it asks for (#312)", async () => {
+    let seen: Record<string, unknown> = {};
+    const base = await fakeOllama((_req, body, res) => {
+      seen = body;
+      res.writeHead(200, { "content-type": "application/x-ndjson" });
+      res.end(
+        `${JSON.stringify({ message: { role: "assistant", content: "", tool_calls: [{ function: { name: "calendar_read", arguments: { from: "2026-11-21", to: "2026-11-21" } } }] }, done: false })}\n${JSON.stringify({ message: { role: "assistant", content: "" }, done: true, prompt_eval_count: 900, eval_count: 20 })}\n`,
+      );
     });
     const llm = makeOllamaLlm({ model: "m", baseUrl: base });
-    const tools = [{ name: "t", description: "d", inputSchema: { type: "object" as const, properties: {} } }];
-    expect(await llm({ ...request, tools })).toMatchObject({ ok: false, error: { kind: "bad_request" } });
-    expect(called).toBe(false);
+    const tools = [{ name: "calendar_read", description: "Read a day", inputSchema: { type: "object" as const, properties: { from: { type: "string" } } } }];
+    const got = await llm({
+      ...request,
+      tools,
+      messages: [
+        { role: "user", text: "Tomorrow?" },
+        { role: "assistant", text: "", toolCalls: [{ id: "c1", name: "calendar_read", input: { from: "2026-11-20" } }] },
+        { role: "user", toolResults: [{ callId: "c1", content: "Nothing." }] },
+      ],
+    });
+    expect(seen.tools).toEqual([{ type: "function", function: { name: "calendar_read", description: "Read a day", parameters: tools[0]?.inputSchema } }]);
+    expect((seen.messages as unknown[]).slice(1)).toEqual([
+      { role: "user", content: "Tomorrow?" },
+      { role: "assistant", content: "", tool_calls: [{ function: { name: "calendar_read", arguments: { from: "2026-11-20" } } }] },
+      { role: "tool", content: "Nothing.", tool_name: "calendar_read" },
+    ]);
+    expect(got).toMatchObject({ ok: true, value: { kind: "tool_calls", calls: [{ id: "ollama-1", name: "calendar_read", input: { from: "2026-11-21", to: "2026-11-21" } }], usage: { inputTokens: 900 } } });
   });
 
   it("asks for JSON with Ollama's format, and returns it parsed (#100)", async () => {

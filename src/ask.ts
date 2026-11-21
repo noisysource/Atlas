@@ -253,7 +253,7 @@ export const handleAsk = async (deps: Deps, request: AskRequest, outer: AskMeta 
   // Claude with native tools: no calendar-claims check (it dropped true answers, e.g. about an event
   // Atlas had just added). Fake actions, promises and perception are still dropped.
   // #248: Google has the same native tools.
-  if (deps.nativeTools === true && (request.brain ?? "claude") !== "local") guard.resultsKnown();
+  if (deps.nativeTools === true && ((request.brain ?? "claude") !== "local" || deps.localNativeTools === true)) guard.resultsKnown();
   const streaming = outer.onText !== undefined || outer.onSentence !== undefined;
   const { onText: rawText, ...rest } = outer;
   const meta: AskMeta = streaming
