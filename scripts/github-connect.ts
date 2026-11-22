@@ -49,15 +49,20 @@ const output = new Writable({
     done();
   },
 });
-const rl = createInterface({ input: process.stdin, output, terminal: true });
-const token = await new Promise<string>((resolve) => {
-  rl.question(`Paste the ${write ? "write (Contents + Pull requests)" : "read-only"} token for "${owner}" (it won't show): `, (answer) => {
-    rl.close();
-    process.stdout.write("\n");
-    resolve(answer.trim());
-  });
-  muted = true;
-});
+// From the Tools page (#310), the secret comes in ATLAS_CONNECT_SECRET instead of being typed here.
+const fromPage = process.env.ATLAS_CONNECT_SECRET;
+const token =
+  fromPage !== undefined
+    ? fromPage.trim()
+    : await new Promise<string>((resolve) => {
+        const rl = createInterface({ input: process.stdin, output, terminal: true });
+        rl.question(`Paste the ${write ? "write (Contents + Pull requests)" : "read-only"} token for "${owner}" (it won't show): `, (answer) => {
+          rl.close();
+          process.stdout.write("\n");
+          resolve(answer.trim());
+        });
+        muted = true;
+      });
 if (!/^(github_pat_|ghp_)[A-Za-z0-9_]{20,}$/.test(token)) fail("That doesn't look like a GitHub token (they start with github_pat_). Nothing was saved.");
 
 // One read to check it: which repos it can see.
@@ -86,4 +91,4 @@ await nodeTokenFiles.writeFile(path, JSON.stringify(list, null, 2));
 console.log(`✓ Saved the ${owner} token to ${path} (only you can read it; gitignored).`);
 console.log(own.length > 0 ? `✓ It can see ${own.length} ${owner} repo(s) (${own.filter((r) => r.private === true).length} private).` : `! It can't see any ${owner} repos yet: check the token's resource owner and repository access.`);
 console.log(`  Owners connected: ${list.map((t) => t.owner).join(", ")}.`);
-console.log(write ? "\nNow put CODE_FIX=on in .env (with GITHUB=on and CODE_AGENT=on) and restart Atlas." : "\nNow put GITHUB=on in .env (with BARE_MODE=on) and restart Atlas.");
+console.log(write ? "\nNow put CODE_FIX=on in Tools (with GITHUB=on and CODE_AGENT=on) and restart Atlas." : "\nNow put GITHUB=on in Tools (with BARE_MODE=on) and restart Atlas.");

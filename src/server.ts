@@ -11,11 +11,15 @@
 //   "simple" requests are refused, and a cross-site JSON request needs a
 //   CORS preflight, which this server never answers.
 
+import type { BrainStore } from "./current-brain.js";
+import { exchangeOf, keptText, type Dataset } from "./dataset.js";
+import { runInTurn } from "./turn-context.js";
 import { randomUUID } from "node:crypto";
 import { Hono, type Context } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import { streamSSE } from "hono/streaming";
 import { z } from "zod";
+import { SavedConversation } from "./conversation.js";
 import { checkTalkChange, TALK_LABELS, TALK_OPTIONS } from "./talk.js";
 import { handleAsk } from "./ask.js";
 import { withLogFields } from "./log.js";
@@ -30,7 +34,10 @@ import type { SttProvider } from "./stt/types.js";
 import { registerTtsRoutes } from "./tts-routes.js";
 import type { TtsProviders } from "./tts/registry.js";
 import { parseAskRequest } from "./request.js";
-import type { Deps } from "./types.js";
+import type { AskRequest, AskResponse, Deps, PathStep } from "./types.js";
+import { MAIN_ID, userOf } from "./users.js";
+import type { LogBuffer } from "./log-buffer.js";
+import { registerSettingsRoutes } from "./settings-routes.js";
 import { WEB_SECURITY_HEADERS, type WebAssets } from "./web.js";
 
 /** Enough for a 2000-char question plus 20 turns of 4000 chars, with room for JSON overhead. */
@@ -119,6 +126,10 @@ export const makeServer = (
     readonly memories?: MemoryStore;
     /** Streamed answers waiting for their playback report (#72). */
     readonly turns?: TurnRegistry;
+    /** #305: the log kept for the panel's Logs tab (GET /logs). */
+    readonly logs?: LogBuffer;
+    /** #310: Tools can change the settings (local only): where they are, and whether npm run atlas restarts it. */
+    readonly settings?: { readonly root: string; readonly supervised: boolean };
     readonly newTurnId?: () => string;
     /** Atlas's voice (#73): GET /tts and POST /speak. Unset = no voice routes. */
     readonly tts?: { readonly providers: TtsProviders; readonly config: TtsConfig };
@@ -126,6 +137,8 @@ export const makeServer = (
     readonly stt?: SttProvider;
     /** How the page runs a spoken turn (#75): GET /voice-settings. */
     readonly turn?: TurnConfig;
+    /** #295: every exchange and card outcome kept as data, per person per day. */
+    readonly dataset?: Dataset;
     /** Development: the page shows a timing line under each answer (#76). */
     readonly dev?: boolean;
     /** Spoken replies open with a short reaction (bare mode, #92): the page's fillers step back. */
@@ -138,6 +151,8 @@ export const makeServer = (
       readonly labels: { readonly claude: string; readonly local: string; readonly google?: string };
       /** CALENDAR=on (#100): the page notes once that, with Claude, event titles go to Anthropic. */
       readonly calendar?: boolean;
+      /** #312: the brain the page is on, kept for WhatsApp: GET and POST /brain. */
+      readonly current?: BrainStore;
     };
   } = {},
 ): Hono<ServerEnv> => {
@@ -145,6 +160,15 @@ export const makeServer = (
   const newTurnId = options.newTurnId ?? randomUUID;
   const turns = options.turns ?? makeTurnRegistry({ log: deps.log });
   const allowedHosts = options.allowedHosts?.map((h) => h.toLowerCase());
+  /** #295: one /ask into the dataset, after the reply (never in its way). */
+  const keep = (request: AskRequest, response: AskResponse, started: number, channel: "page" | "whatsapp", steps?: readonly PathStep[], turn?: string): void => {
+    // #299: how long it took, beside what it cost (never its words).
+    if (turn && response.type !== "handoff") deps.costs?.answer?.({ kind: "answer", at: deps.now().toISOString(), turn, brain: request.brain ?? "claude", ms: Math.round(performance.now() - started), outcome: response.type, channel });
+    const dataset = options.dataset;
+    if (!dataset) return;
+    const entry = exchangeOf(request, response, { at: deps.now(), ms: performance.now() - started, mainId: "renato", channel, ...(steps ? { steps } : {}) });
+    if (entry) void dataset.record(entry);
+  };
   const app = new Hono<ServerEnv>();
 
   // Request id + one access-log line per request (method, path, status, time; no bodies).
@@ -176,6 +200,19 @@ export const makeServer = (
         return c.json(errorBody("This server only accepts requests to localhost."), 403);
       }
       await next();
+    });
+  }
+
+  // #310: settings from the page (Tools), after the host check like every route.
+  if (options.settings) registerSettingsRoutes(app, { ...options.settings, log: deps.log });
+
+  // #305: the panel's Logs tab: entries after the last one it has. Metadata only (log.ts).
+  const logBuffer = options.logs;
+  if (logBuffer) {
+    app.get("/logs", (c) => {
+      const after = Number(c.req.query("after") ?? "0");
+      const entries = logBuffer.after(Number.isFinite(after) && after >= 0 ? after : 0);
+      return c.json({ entries });
     });
   }
 
@@ -216,8 +253,13 @@ export const makeServer = (
       const requestId = c.get("requestId");
       const askDeps = { ...deps, log: withLogFields(deps.log, { requestId }) };
 
+      const channel = c.req.header("x-atlas-channel") === "whatsapp" ? "whatsapp" : "page";
       if (!wantsStream(c.req.header("accept"))) {
-        return c.json(await handleAsk(askDeps, request.value, { requestId }));
+        const askStarted = performance.now();
+        const steps: PathStep[] = [];
+        const response = await runInTurn(requestId, () => handleAsk(askDeps, request.value, { requestId, onStep: (step) => void steps.push(step) }));
+        keep(request.value, response, askStarted, channel, steps, requestId);
+        return c.json(response);
       }
 
       // Streaming (#72): start, then each sentence as it completes, then
@@ -246,7 +288,8 @@ export const makeServer = (
         };
 
         send("start", { turnId });
-        const response = await handleAsk(askDeps, request.value, {
+        const steps: PathStep[] = [];
+        const response = await runInTurn(requestId, () => handleAsk(askDeps, request.value, {
           requestId,
           signal: controller.signal,
           // Raw text only for the timing; what's sent is each sentence the honesty guard passed (#96).
@@ -256,7 +299,10 @@ export const makeServer = (
           onSentence: (text) => sendSentences([text]),
           // Live path for the brain view (#130): the same steps the final path carries.
           onReach: (tool) => send("reach", { tool }),
-          onStep: (step) => send("step", step),
+          onStep: (step) => {
+            steps.push(step);
+            send("step", step);
+          },
           ...(options.turn ? { firstClauseAfter: options.turn.firstChunkChars } : {}),
           deferWrapUp: (turn) => turns.hold(turnId, turn),
           onStage: (stage, fields) => {
@@ -268,7 +314,7 @@ export const makeServer = (
               stages.memoriesMs = fields.ms;
             }
           },
-        });
+        }));
         const timing = {
           ...stages,
           ...(firstTokenMs !== undefined ? { firstTokenMs } : {}),
@@ -277,6 +323,7 @@ export const makeServer = (
         };
         send("timing", timing);
         send(response.type === "answer" ? "done" : "reply", response);
+        keep(request.value, response, started, channel, steps, requestId);
         await writes;
         askDeps.log.info("ask stream", { outcome: controller.signal.aborted ? "cancelled" : response.type, sentences, ...timing });
       });
@@ -374,6 +421,18 @@ export const makeServer = (
     });
   }
 
+  // #292: their answer to a database change. Only "yes" changes it (one document, as the card showed it).
+  const dbWrites = deps.dbWrites;
+  if (dbWrites) {
+    const DbBody = z.object({ id: z.string().regex(/^[a-f0-9]{8,64}$/), decision: z.enum(["yes", "no"]) }).strict();
+    app.post("/gcloud/db/confirm", bodyLimit({ maxSize: 1024, onError: (c) => c.json(errorBody("The request is too large."), 413) }), async (c) => {
+      if (!isJson(c.req.header("content-type"))) return c.json(errorBody("POST /gcloud/db/confirm needs Content-Type: application/json."), 415);
+      const body = DbBody.safeParse(await c.req.json().catch(() => undefined));
+      if (!body.success) return c.json(errorBody('Send { id, decision: "yes" | "no" }.'), 400);
+      return c.json(await dbWrites.decide(body.data.id, body.data.decision));
+    });
+  }
+
   // #219: his answer to moving or cancelling an event. Only "yes" changes it.
   const calendarChange = deps.calendarChange;
   if (calendarChange) {
@@ -430,6 +489,12 @@ export const makeServer = (
       c.header("Cache-Control", "no-store");
       return c.json(await costs.summary());
     });
+    const detail = costs.detail;
+    if (detail)
+      app.get("/costs/detail", async (c) => {
+        c.header("Cache-Control", "no-store");
+        return c.json(await detail());
+      });
   }
 
   // #138: his answer to opening an issue for a gap. Only "yes" opens it.
@@ -610,6 +675,66 @@ export const makeServer = (
     );
   }
 
+  // #288: the conversation, kept across restarts: the page saves it after each turn and asks for it when it opens.
+  const conversation = deps.conversation;
+  if (conversation) {
+    // #290: one of the household, else the main user.
+    const whoOf = (v: string | undefined): string => (deps.users ? userOf(deps.users.list, v).id : v && /^[a-z][a-z0-9-]{0,30}$/.test(v) ? v : MAIN_ID);
+    app.get("/conversation", async (c) => {
+      const id = c.req.query("id");
+      return c.json({ conversation: (await conversation.read(whoOf(c.req.query("who")), id === undefined || id === "" ? undefined : id)) ?? null });
+    });
+    // #309: the past conversations, for the list under ＋ (newest first), and forgetting one.
+    app.get("/conversations", async (c) => c.json({ conversations: await conversation.list(whoOf(c.req.query("who"))).catch(() => []) }));
+    app.delete("/conversation", async (c) => c.json({ ok: await conversation.remove(whoOf(c.req.query("who")), c.req.query("id") ?? "") }));
+    app.put(
+      "/conversation",
+      async (c, next) => {
+        if (!isJson(c.req.header("content-type"))) return c.json(errorBody("PUT /conversation needs Content-Type: application/json."), 415);
+        await next();
+      },
+      bodyLimit({ maxSize: 256 * 1024, onError: (c) => c.json(errorBody("The conversation is too large."), 413) }),
+      async (c) => {
+        const body = SavedConversation.safeParse(await c.req.json().catch(() => undefined));
+        if (!body.success) return c.json(errorBody("Send { conversationId, history }."), 400);
+        await conversation.write(whoOf(c.req.query("who")), body.data).catch(() => deps.log.warn("conversation not saved", { reason: "write failed" }));
+        return c.json({ ok: true });
+      },
+    );
+  }
+
+  // #290: who Atlas can talk to, and the household's sharing switch.
+  const users = deps.users;
+  if (users) {
+    const household = deps.household;
+    app.get("/users", async (c) =>
+      c.json({ users: users.list.map((u) => ({ id: u.id, name: u.name })), sharing: household ? await household.sharing().catch(() => false) : null }),
+    );
+    if (household) {
+      const small = bodyLimit({ maxSize: 1024, onError: (c) => c.json(errorBody("The request is too large."), 413) });
+      const jsonOnly = (route: string) => async (c: Context, next: () => Promise<void>) => {
+        if (!isJson(c.req.header("content-type"))) return c.json(errorBody(`POST ${route} needs Content-Type: application/json.`), 415);
+        await next();
+        return undefined;
+      };
+      app.post("/household/sharing", jsonOnly("/household/sharing"), small, async (c) => {
+        const body = (await c.req.json().catch(() => undefined)) as { on?: unknown } | undefined;
+        if (typeof body?.on !== "boolean") return c.json(errorBody("Send { on: true | false }."), 400);
+        await household.setSharing(body.on);
+        deps.log.info("household sharing", { on: body.on });
+        return c.json({ ok: true, sharing: body.on });
+      });
+      // The page writes down what someone OKed; nothing is kept while sharing is off.
+      app.post("/household/record", jsonOnly("/household/record"), small, async (c) => {
+        const body = (await c.req.json().catch(() => undefined)) as { who?: unknown; kind?: unknown; label?: unknown } | undefined;
+        if (typeof body?.label !== "string" || body.label.trim() === "" || typeof body.kind !== "string" || !/^[a-z][a-z-]{0,23}$/.test(body.kind)) return c.json(errorBody("Send { who, kind, label }."), 400);
+        const who = userOf(users.list, typeof body.who === "string" ? body.who : undefined).id;
+        const kept = await household.record({ who, kind: body.kind, label: body.label }).catch(() => false);
+        return c.json({ ok: true, kept });
+      });
+    }
+  }
+
   // #271: what Atlas wants to tell him, since the last one the page has.
   const proactive = deps.proactive;
   if (proactive) {
@@ -655,7 +780,12 @@ export const makeServer = (
       precheck: deps.precheck,
       ask: async (question, history, meta) => {
         const request = parseAskRequest({ question, history, brain: "google" });
-        return request.ok ? handleAsk(deps, request.value, meta) : { type: "error", message: request.error };
+        if (!request.ok) return { type: "error", message: request.error };
+        const liveStarted = performance.now();
+        const turn = randomUUID();
+        const response = await runInTurn(turn, () => handleAsk(deps, request.value, meta));
+        keep({ ...request.value, spoken: true }, response, liveStarted, "page", undefined, turn);
+        return response;
       },
       log: deps.log,
     });
@@ -699,6 +829,45 @@ export const makeServer = (
       });
     });
   }
+  // #295: what happened to a card (approved, declined, failed, undone), into the dataset.
+  const dataset = options.dataset;
+  if (dataset) {
+    app.post("/dataset/outcome", async (c) => {
+      if (!isJson(c.req.header("content-type"))) return c.json(errorBody("This needs Content-Type: application/json."), 415);
+      const b = (await c.req.json().catch(() => undefined)) as Record<string, unknown> | undefined;
+      const decision = b?.decision;
+      if (decision !== "approved" && decision !== "declined" && decision !== "failed" && decision !== "undone") return c.json(errorBody("decision must be approved, declined, failed or undone"), 400);
+      const card = typeof b?.card === "string" && /^[a-z-]{1,20}$/.test(b.card) ? b.card : "calendar";
+      const who = typeof b?.who === "string" && /^[a-z0-9-]{1,32}$/.test(b.who) ? b.who : "renato";
+      const kept = await dataset.record({
+        type: "outcome",
+        at: deps.now().toISOString(),
+        who,
+        ...(typeof b?.conversationId === "string" ? { conversationId: b.conversationId.slice(0, 80) } : {}),
+        card,
+        label: keptText(typeof b?.label === "string" ? b.label : "").slice(0, 300),
+        decision,
+        auto: b?.auto === true,
+      });
+      return c.json({ kept });
+    });
+  }
+  const current = brains?.current;
+  if (current) {
+    app.get("/brain", async (c) => {
+      c.header("Cache-Control", "no-store");
+      return c.json({ brain: await current.get() });
+    });
+    app.post("/brain", async (c) => {
+      if (!isJson(c.req.header("content-type"))) return c.json({ type: "error", message: "This needs Content-Type: application/json." }, 415);
+      const body = (await c.req.json().catch(() => undefined)) as { brain?: unknown } | undefined;
+      const brain = body?.brain;
+      if (brain !== "claude" && brain !== "local" && brain !== "google") return c.json({ type: "error", message: 'brain must be "claude", "local" or "google"' }, 400);
+      await current.set(brain);
+      deps.log.info("brain set", { brain });
+      return c.json({ brain });
+    });
+  }
   const turnConfig = options.turn;
   if (turnConfig) {
     app.get("/voice-settings", (c) => {
@@ -713,7 +882,7 @@ export const makeServer = (
     });
   }
   if (options.memories) registerMemoryRoutes(app, { store: options.memories, contexts: deps.contexts, log: deps.log });
-  if (deps.skills) registerSkillRoutes(app, { store: deps.skills, log: deps.log });
+  if (deps.skills) registerSkillRoutes(app, { store: deps.skills, log: deps.log, ...(deps.importSkills ? { importSkills: deps.importSkills } : {}) });
 
   app.notFound((c) => c.json(errorBody("Not found."), 404));
 

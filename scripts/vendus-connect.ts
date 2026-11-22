@@ -35,15 +35,20 @@ const output = new Writable({
     done();
   },
 });
-const rl = createInterface({ input: process.stdin, output, terminal: true });
-const key = await new Promise<string>((resolve) => {
-  rl.question("Paste the Vendus API key of Atlas's Vendus user (it won't show): ", (answer) => {
-    rl.close();
-    process.stdout.write("\n");
-    resolve(answer.trim());
-  });
-  muted = true;
-});
+// From the Tools page (#310), the secret comes in ATLAS_CONNECT_SECRET instead of being typed here.
+const fromPage = process.env.ATLAS_CONNECT_SECRET;
+const key =
+  fromPage !== undefined
+    ? fromPage.trim()
+    : await new Promise<string>((resolve) => {
+        const rl = createInterface({ input: process.stdin, output, terminal: true });
+        rl.question("Paste the Vendus API key of Atlas's Vendus user (it won't show): ", (answer) => {
+          rl.close();
+          process.stdout.write("\n");
+          resolve(answer.trim());
+        });
+        muted = true;
+      });
 if (!/^[A-Za-z0-9._-]{16,200}$/.test(key)) fail("That doesn't look like a Vendus API key. Nothing was saved.");
 
 const today = new Date().toISOString().slice(0, 10);
@@ -54,4 +59,4 @@ await mkdir(dirname(config.vendus.keyPath), { recursive: true, mode: 0o700 });
 await writeFile(config.vendus.keyPath, JSON.stringify({ apiKey: key }), { mode: 0o600 });
 await chmod(config.vendus.keyPath, 0o600);
 console.log(`✓ Vendus is connected (read-only in Atlas). Key saved to ${config.vendus.keyPath} (only you can read it; gitignored).`);
-console.log("\nPut VENDUS=on in .env (with BARE_MODE=on) and restart Atlas.");
+console.log("\nPut VENDUS=on in Tools (with BARE_MODE=on) and restart Atlas.");

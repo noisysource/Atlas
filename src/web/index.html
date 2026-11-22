@@ -9,68 +9,36 @@
   </head>
   <body data-phase="idle" data-voice="false">
     <canvas id="universe" aria-hidden="true"></canvas>
-    <header>
-      <h1>Atlas</h1>
-      <button id="settings-toggle" type="button" aria-expanded="false" aria-controls="settings" title="Settings">
-        <span aria-hidden="true">⚙</span><span class="visually-hidden">Settings</span>
-      </button>
-      <div id="settings" class="settings" role="region" aria-label="Settings" hidden>
-        <p class="settings-title">settings</p>
-        <label>
-          <span class="visually-hidden">Language</span>
-          <select id="language" aria-label="Language">
-            <option value="en">English</option>
-            <option value="pt">Português</option>
-          </select>
-        </label>
-        <label>
-          <span class="visually-hidden">Voice</span>
-          <select id="voice" aria-label="Voice"></select>
-        </label>
-        <button id="brain" type="button" aria-pressed="false" title="Which model answers: Local (Ollama on this computer) or Claude">🧠 Local</button>
-        <button id="conversation" type="button" aria-pressed="true" title="After Atlas speaks, listen for the next question">💬 Conversation on</button>
-        <button id="mute" type="button" aria-pressed="false">🔊 Sound on</button>
-        <button id="read-typed" type="button" class="small" aria-pressed="false" title="Typed questions get text only. Turn on to have typed replies read aloud too.">🔈 Read typed replies: off</button>
-        <button id="remember" type="button" aria-pressed="true" title="Turn off to keep this conversation out of memory">🧠 Remembering</button>
-        <button id="memories" type="button" aria-haspopup="dialog">
-          Memories <span id="memories-badge" class="badge" hidden></span>
-        </button>
-        <button id="skills" type="button" aria-haspopup="dialog" hidden>✨ Skills</button>
-        <button id="codemaps" type="button" aria-haspopup="dialog">🗺 Code maps</button>
-        <button id="costs" type="button" aria-haspopup="dialog" title="What each service Atlas uses costs">💲 Costs</button>
-        <button id="copy-all" type="button" title="Copy the whole conversation as text">⧉ Copy all</button>
-        <button id="new-conversation" type="button">New conversation</button>
-      </div>
-    </header>
 
-    <dialog id="memories-panel" aria-labelledby="memories-title">
-      <div class="panel-head">
-        <h2 id="memories-title">What Atlas remembers</h2>
-        <button id="memories-close" type="button" aria-label="Close">✕</button>
-      </div>
-      <p class="note">
-        Saved automatically after answers, within the memory rules. Delete anything you don't want kept, or turn
-        off 🧠 Remembering for a conversation. Deleting is permanent.
-      </p>
-      <p id="memories-status" class="note" role="status"></p>
-      <div id="memories-list"></div>
-    </dialog>
 
-    <dialog id="skills-panel" aria-labelledby="skills-title">
-      <div class="panel-head">
-        <h2 id="skills-title">Atlas's skills</h2>
-        <button id="skills-close" type="button" aria-label="Close">✕</button>
-      </div>
-      <p class="note">
-        Routines Atlas follows, drafted from his memory at night or taught in chat. Only approved skills are used, and
-        a skill never adds powers: actions still need your OK.
-      </p>
-      <p id="skills-status" class="note" role="status"></p>
-      <div id="skills-list"></div>
-    </dialog>
-
+    <!-- #307: OpenJarvis-style: the menu on the left, the page in the middle, the system on the right. -->
+    <div class="app">
+      <nav class="rail" aria-label="Atlas">
+        <div class="rail-head">
+          <h1>atlas</h1>
+          <button id="new-conversation" class="rail-new" type="button" title="New conversation" aria-label="New conversation"><svg class="rail-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button>
+        </div>
+        <p id="rail-who" class="rail-who" hidden></p>
+        <!-- #309: the conversations so far, newest first; one click goes back to one. -->
+        <input id="chat-search" class="chat-search" type="search" placeholder="Search chats…" aria-label="Search chats" autocomplete="off" />
+        <ol id="chat-list" class="chat-list" aria-label="Conversations"></ol>
+        <div class="rail-nav" role="tablist" aria-label="Pages" aria-orientation="vertical">
+          <button type="button" role="tab" data-tab="chat" aria-selected="true"><svg class="rail-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v11H9l-5 4z"/></svg> Chat</button>
+          <button type="button" role="tab" data-tab="costs" aria-selected="false" id="costs"><svg class="rail-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg> Dashboard</button>
+          <button type="button" role="tab" data-tab="tools" aria-selected="false"><svg class="rail-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M14.7 6.3a4 4 0 0 0-5.4 5.1L4 16.7 7.3 20l5.3-5.3a4 4 0 0 0 5.1-5.4l-2.5 2.5-2.5-.5-.5-2.5z"/></svg> Tools</button>
+          <button type="button" role="tab" data-tab="memory" aria-selected="false" id="memories"><svg class="rail-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 3 8l9 5 9-5-9-5z"/><path d="m3 13 9 5 9-5"/><path d="m3 17.5 9 5 9-5"/></svg> Memory <span id="memories-badge" class="badge" hidden></span></button>
+          <button type="button" role="tab" data-tab="skills" aria-selected="false" id="skills" hidden><svg class="rail-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v4M12 17v4M3 12h4M17 12h4M6 6l2.5 2.5M15.5 15.5 18 18M6 18l2.5-2.5M15.5 8.5 18 6"/></svg> Skills</button>
+          <button type="button" role="tab" data-tab="logs" aria-selected="false"><svg class="rail-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h12v18H6z"/><path d="M9 8h6M9 12h6M9 16h4"/></svg> Logs</button>
+          <button type="button" role="tab" data-tab="settings" aria-selected="false" id="settings-toggle"><svg class="rail-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 9a3 3 0 1 0 0 6a3 3 0 1 0 0-6"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9 7 7M17 17l2.1 2.1M4.9 19.1 7 17M17 7l2.1-2.1"/></svg> Settings</button>
+        </div>
+      </nav>
+      <div class="center">
     <div class="layout">
-      <section id="brain-view" class="brain" aria-label="What Atlas is reaching for" data-working="false"></section>
+      <!-- #307: the galaxy, on top of the chat; it folds away and stays as you left it. -->
+      <div class="galaxy-band" data-open="true">
+        <button id="galaxy-toggle" class="galaxy-toggle" type="button" aria-expanded="true" aria-controls="brain-view">▾ Galaxy</button>
+        <section id="brain-view" class="brain" aria-label="What Atlas is reaching for" data-working="false"></section>
+      </div>
       <div class="chat">
     <div class="term-bar" aria-hidden="true"><span>atlas — session</span><span class="term-dots"><i></i><i></i><i></i></span></div>
     <main>
@@ -101,7 +69,82 @@
     </footer>
       </div>
     </div>
+    <!-- #307: the pages other than Chat (OpenJarvis-style): one shows at a time, in the middle. -->
+    <aside id="side" class="side pages" aria-label="Atlas's pages" hidden>
+      <section id="settings" class="settings side-tab" data-tab="settings" role="tabpanel" aria-label="Settings">
+        <label id="user-pick" hidden>
+          <span class="visually-hidden">Talking to</span>
+          <select id="user" aria-label="Who's talking to Atlas" title="Who's talking: each person has their own conversation, memories and tools. Saying &quot;it's Marisa&quot; switches too."></select>
+        </label>
+        <button id="sharing" type="button" aria-pressed="false" hidden title="When on, what each of you has Atlas do is shared, so he doesn't book or do it twice">🤝 Sharing: off</button>
+        
+        <label>
+          <span class="visually-hidden">Language</span>
+          <select id="language" aria-label="Language">
+            <option value="en">English</option>
+            <option value="pt">Português</option>
+          </select>
+        </label>
+        <label>
+          <span class="visually-hidden">Voice</span>
+          <select id="voice" aria-label="Voice"></select>
+        </label>
+        <button id="brain" type="button" aria-pressed="false" title="Which model answers: Local (Ollama on this computer) or Claude">🧠 Local</button>
+        <button id="conversation" type="button" aria-pressed="true" title="After Atlas speaks, listen for the next question">💬 Conversation on</button>
+        <button id="mute" type="button" aria-pressed="false">🔊 Sound on</button>
+        <button id="read-typed" type="button" class="small" aria-pressed="false" title="Typed questions get text only. Turn on to have typed replies read aloud too.">🔈 Read typed replies: off</button>
+        <button id="remember" type="button" aria-pressed="true" title="Turn off to keep this conversation out of memory">🧠 Remembering</button>
+        <button id="codemaps" type="button" aria-haspopup="dialog">🗺 Code maps</button>
+        <button id="copy-all" type="button" title="Copy the whole conversation as text">⧉ Copy all</button>
+      </section>
+      <section id="tools-tab" class="side-tab" data-tab="tools" role="tabpanel" aria-label="Tools" hidden></section>
+      <div class="side-tab" data-tab="skills" role="tabpanel" hidden id="skills-panel" aria-labelledby="skills-title">
+      <div class="panel-head">
+        <h2 id="skills-title">Atlas's skills</h2>
+        <button id="skills-close" type="button" aria-label="Close">✕</button>
+      </div>
+      <p class="note">
+        Routines Atlas follows, drafted from his memory at night or taught in chat. Only approved skills are used, and
+        a skill never adds powers: actions still need your OK.
+      </p>
+      <form id="skills-import" class="skills-import">
+        <label for="skills-import-link">Import a skill from GitHub (a SKILL.md, its folder, or a repo of them)</label>
+        <div class="skills-import-row">
+          <input id="skills-import-link" type="text" required placeholder="github.com/owner/repo/tree/main/skills/name" autocomplete="off" spellcheck="false" />
+          <button type="submit">Import</button>
+        </div>
+        <p class="note">Imported skills arrive as drafts: read each before you approve it. Scripts in a skill aren't imported.</p>
+      </form>
+      <p id="skills-status" class="note" role="status"></p>
+      <div id="skills-list"></div>
+    </div>
+      <div class="side-tab" data-tab="memory" role="tabpanel" hidden id="memories-panel" aria-labelledby="memories-title">
+      <div class="panel-head">
+        <h2 id="memories-title">What Atlas remembers</h2>
+        <button id="memories-close" type="button" aria-label="Close">✕</button>
+      </div>
+      <p class="note">
+        Saved automatically after answers, within the memory rules. Delete anything you don't want kept, or turn
+        off 🧠 Remembering for a conversation. Deleting is permanent.
+      </p>
+      <p id="memories-status" class="note" role="status"></p>
+      <div id="memories-list"></div>
+    </div>
+      <div class="side-tab" data-tab="costs" role="tabpanel" hidden id="costs-panel" aria-label="Costs"></div>
+      <section id="logs-tab" class="side-tab" data-tab="logs" role="tabpanel" aria-label="Logs" hidden></section>
+    </aside>
+      </div>
+      <!-- #307: what Atlas is doing and what it costs, always in view (folds away). -->
+      <aside id="system" class="system" aria-label="System">
+        <div class="system-head">
+          <p class="system-title">System</p>
+          <button id="system-toggle" type="button" aria-expanded="true" aria-label="Fold the system panel">⟩</button>
+        </div>
+        <div id="system-body" class="system-body"></div>
+        <!-- #309: "How he got there" (the last answer's trace) lives here now. -->
+        <div id="trace-slot" class="system-trace"></div>
+      </aside>
+    </div>
       <dialog id="codemap" aria-label="Code map"></dialog>
-      <dialog id="costs-panel" aria-label="Costs"></dialog>
   </body>
 </html>

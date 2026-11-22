@@ -165,7 +165,8 @@ describe("the Google brain", () => {
 
   it("on the page: the button goes Local → Claude → Google → Local, and skips Google when it's off", () => {
     expect(parseBrain("google")).toBe("google");
-    expect(parseBrain("other")).toBe("local");
+    expect(parseBrain("other")).toBe("claude");
+    expect(parseBrain("local")).toBe("local");
     expect(nextBrain("local", ["local", "claude", "google"])).toBe("claude");
     expect(nextBrain("claude", ["local", "claude", "google"])).toBe("google");
     expect(nextBrain("google", ["local", "claude", "google"])).toBe("local");

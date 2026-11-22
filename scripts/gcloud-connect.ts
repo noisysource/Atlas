@@ -13,6 +13,14 @@
 //    project id. It checks with one read of the logs, then writes
 //    data/gcloud/<env>.json: the project and the account's name, nothing secret.
 // 4. Set GCLOUD=on in .env and restart Atlas.
+//
+// #292, to let Atlas change that database (each change after your OK on a
+// card): a second, separate service account (e.g. "atlas-write") with Cloud
+// Datastore User, the same Token Creator for you, and its address as a 5th
+// argument:
+//   npm run gcloud:connect -- dev kidclub-dev jarvis-read@kidclub-dev.iam.gserviceaccount.com atlas-write@kidclub-dev.iam.gserviceaccount.com
+// Production is changed only with GCLOUD_PROD_WRITES=on too; leave its writer
+// out (read-only) unless you mean it.
 
 import { execFile } from "node:child_process";
 import { chmod, mkdir, writeFile } from "node:fs/promises";
@@ -29,7 +37,7 @@ const fail = (message: string): never => {
 const env = (process.argv[2] ?? "").toLowerCase();
 const project = process.argv[3] ?? "";
 if (!GCLOUD_ENV.test(env) || project === "") fail("Say which environment and project: npm run gcloud:connect -- dev <project-id>");
-const text = JSON.stringify({ project, serviceAccount: process.argv[4] ?? defaultServiceAccount(project) }, null, 2);
+const text = JSON.stringify({ project, serviceAccount: process.argv[4] ?? defaultServiceAccount(project), ...(process.argv[5] ? { writer: process.argv[5] } : {}) }, null, 2);
 const parsed = parseEnvFile(text);
 const target = parsed.ok ? parsed.value : fail(`${parsed.ok ? "" : parsed.error}. Nothing was saved.`);
 
@@ -66,4 +74,4 @@ else {
   console.log(`    gcloud projects add-iam-policy-binding ${target.projectId} --member=serviceAccount:${target.serviceAccount} --role=roles/datastore.viewer`);
 }
 console.log(`✓ Saved to ${file} (names only; no key is stored).`);
-console.log("\nPut GCLOUD=on in .env (with BARE_MODE=on) and restart Atlas.");
+console.log("\nPut GCLOUD=on in Tools (with BARE_MODE=on) and restart Atlas.");

@@ -188,7 +188,17 @@ export type Tasks = {
   /** Pass his words on; the turn runs in the background. */
   readonly tell: (id: string, message: string) => Promise<Result<string, string>>;
   readonly stop: (id: string) => boolean;
+  /**
+   * #288: after a restart, the tasks that were working (or waiting their
+   * turn) carry on where they stopped, in the same session; one still
+   * getting its copy starts again. Returns how many.
+   */
+  readonly recover: () => Promise<number>;
 };
+
+/** What a task resumed after a restart is told. */
+export const RESUME_PROMPT =
+  "Atlas was restarted while you were working on this, so your last turn was cut off. Carry on from where you stopped: check `git status` and `git log` first to see what's already done, then finish the work and report as usual.";
 
 type Card =
   | { readonly kind: "start"; readonly r: StartRequest; readonly until: number }
@@ -269,6 +279,8 @@ export const makeTasks = (deps: {
           maxTurns: deps.maxTurns,
           signal: controller.signal,
           onProgress: (s) => void update(id, { step: `${s.tool} ${s.target}`.trim() }),
+          // #288: kept at once, so a restart mid-turn can carry on in the same session.
+          onSession: (sessionId) => void update(id, { sessionId }),
         });
         running.delete(id);
         const latest = await find(id);
@@ -543,6 +555,19 @@ export const makeTasks = (deps: {
       const c = running.get(id);
       c?.abort();
       return c !== undefined;
+    },
+    recover: async () => {
+      const cut = (await all()).filter((t) => (t.status === "working" || t.status === "queued" || t.status === "preparing") && !running.has(t.id));
+      for (const t of cut) {
+        if (t.status === "preparing" || !t.sessionId) {
+          // Never got going: its copy may be half made, so start it again from scratch.
+          await deps.remove(path.join(deps.root, t.id)).catch(() => undefined);
+          await update(t.id, { status: "preparing", step: undefined });
+          void begin(t).catch(() => update(t.id, { status: "failed", message: "Preparing the task stopped with an error" }));
+        } else turn(t.id, RESUME_PROMPT);
+        deps.log?.info("task resumed after restart", { id: t.id });
+      }
+      return cut.length;
     },
   };
 };

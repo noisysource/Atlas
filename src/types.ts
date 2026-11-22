@@ -4,7 +4,13 @@
 // context id is a branded string that only the contexts parser should create.
 
 import type { Notice, Notices } from "./proactive.js";
+import type { ConversationStore } from "./conversation.js";
+import type { GoogleAccount } from "./google-accounts.js";
+import type { ToolGroup } from "./answer/tool-groups.js";
+import type { Household } from "./household.js";
+import type { User } from "./users.js";
 import type { Fixes } from "./code/fix.js";
+import type { DbWrites } from "./gcloud/db-write.js";
 import type { Tasks } from "./code/tasks.js";
 import type { MorningBriefs } from "./morning.js";
 import type { CodeRefresh } from "./code/freshness.js";
@@ -15,11 +21,12 @@ import type { HouseChanges } from "./house/house-changes.js";
 import type { Gaps } from "./gaps/gaps.js";
 import type { Reminders } from "./reminders/reminders.js";
 import type { TalkStore } from "./talk.js";
-import type { CostSummary } from "./costs.js";
+import type { AnswerEvent, CostDetail, CostSummary } from "./costs.js";
 import type { LiveSessions } from "./live/routes.js";
 import type { CalendarChanges } from "./calendar/change.js";
 import type { InboxTidy } from "./gmail/tidy.js";
-import type { DriveWrites } from "./drive.js";
+import type { Dataset } from "./dataset.js";
+import type { DriveClient, DriveWrites } from "./drive.js";
 import type { CodeMapView, Studies } from "./code/study.js";
 import type { ReachNode } from "./reach.js";
 import type { Result } from "./result.js";
@@ -101,6 +108,8 @@ export type AskRequest = {
   readonly stickyContext?: ContextId;
   /** Which brain answers (#88); Claude when not given. */
   readonly brain?: Brain;
+  /** #290: who's talking (a user id); the main user when not given. */
+  readonly user?: string;
 };
 
 export type Classification =
@@ -153,7 +162,7 @@ export type PathStep =
        * card with "Add it" / "Don't add", and POSTs `id` to /calendar/confirm.
        * Page only: the path is never logged.
        */
-      readonly confirm?: { readonly id: string; readonly label: string; /** #269: small and undoable: the page does it at once, no card. */ readonly auto?: boolean; /** #278: the next step of his request, carried out by itself after the yes. */ readonly then?: string; readonly kind?: "calendar" | "skill" | "email" | "draft-delete" | "fix" | "pr-close" | "task-start" | "task-publish" | "task-merge" | "task-close" | "house" | "lights" | "house-change" | "gap-issue" | "gmail-tidy" | "calendar-change" | "drive" };
+      readonly confirm?: { readonly id: string; readonly label: string; /** #269: small and undoable: the page does it at once, no card. */ readonly auto?: boolean; /** #278: the next step of his request, carried out by itself after the yes. */ readonly then?: string; readonly kind?: "calendar" | "skill" | "email" | "draft-delete" | "fix" | "pr-close" | "task-start" | "task-publish" | "task-merge" | "task-close" | "house" | "lights" | "house-change" | "gap-issue" | "gmail-tidy" | "calendar-change" | "drive" | "db-change" };
     }
   | {
       readonly kind: "guard";
@@ -291,6 +300,23 @@ export type AnswerInput = {
   readonly onReach?: (tool: string) => void;
   /** The tools offered to the brain this turn (#141), once, before it answers. */
   readonly onOffered?: (tools: readonly string[]) => void;
+  /** #290: who's talking; the main user when undefined. */
+  readonly user?: AnswerUser;
+};
+
+/** #290: the person talking to Atlas, as an answer sees them. */
+export type AnswerUser = {
+  readonly id: string;
+  readonly name: string;
+  readonly main: boolean;
+  /** Their profile's text (someone who isn't him; his comes from PROFILE as before). */
+  readonly profile?: string;
+  /** Google accounts read by default for them. */
+  readonly accounts: readonly GoogleAccount[];
+  /** The tool groups they get. */
+  readonly groups: readonly ToolGroup[];
+  /** Lines for this turn's prompt: who this is, and what the household did lately. */
+  readonly lines?: readonly string[];
 };
 
 /**
@@ -345,6 +371,8 @@ export type Deps = {
    * invented calendar contents) is off for Claude. The rest of the guard stays.
    */
   readonly nativeTools?: boolean;
+  /** #312: Local mode: the local brain calls tools itself too. */
+  readonly localNativeTools?: boolean;
   /**
    * Reach 2: Renato's answer to a proposed event (POST /calendar/confirm).
    * "yes" creates it through Google and returns a sentence built from
@@ -362,11 +390,17 @@ export type Deps = {
   /** #162: fixes as pull requests: his OK to prepare one (POST /code/fix), its progress and diff (GET /code/fixes/:id), his OK to publish (POST /code/fixes/publish). */
   readonly codeFixes?: Pick<Fixes, "decide" | "view" | "publish">;
   /** #191: coding tasks: his answers to their cards (POST /code/task), the list (GET /code/tasks), stop (POST /code/tasks/stop). */
-  readonly codeTasks?: Pick<Tasks, "decide" | "list" | "stop">;
+  readonly codeTasks?: Pick<Tasks, "decide" | "list" | "stop" | "recover">;
   /** #214: his answer to tidying the inbox (POST /gmail/tidy). Only "yes" archives or labels. */
   readonly gmailTidy?: Pick<InboxTidy, "decide">;
   /** #270: his answer to a Drive change (POST /drive/confirm). Only "yes" creates the folder or saves the file. */
   readonly driveWrites?: Pick<DriveWrites, "decide">;
+  /** #292: database changes waiting for an OK (POST /gcloud/db/confirm). */
+  readonly dbWrites?: Pick<DbWrites, "decide">;
+  /** #304: Gemini Live for WhatsApp calls (only with GEMINI_LIVE=on). The key stays on the Mac. */
+  readonly liveCall?: { readonly apiKey: string; readonly model: string; readonly voice?: string };
+  /** #295: Drive, for the dataset's nightly copy (main.ts). */
+  readonly driveClient?: DriveClient;
   /** #219: his answer to moving or cancelling an event (POST /calendar/change). Only "yes" changes it. */
   readonly calendarChange?: Pick<CalendarChanges, "decide">;
   /** #218: his reminders, for the page (GET /reminders, POST /reminders/done). */
@@ -376,7 +410,7 @@ export type Deps = {
   /** #250: Gemini Live sessions, one per page, when ✦ Google may talk by voice. */
   readonly live?: LiveSessions;
   /** #247: what Atlas costs, per service: GET /costs. */
-  readonly costs?: { readonly summary: () => Promise<CostSummary> };
+  readonly costs?: { readonly summary: () => Promise<CostSummary>; /** #299 */ readonly detail?: () => Promise<CostDetail>; readonly answer?: (a: AnswerEvent) => void };
   /** #138: his answer to opening an issue for a gap (POST /gaps/issue). Only "yes" opens it. */
   readonly gapIssue?: Pick<Gaps, "decide">;
   /** #166: his answer to moving the blinds (POST /house/blinds). Only "yes" moves them. */
@@ -397,8 +431,18 @@ export type Deps = {
   readonly reach?: () => Promise<readonly ReachNode[]>;
   /** #108: reviews short-term memory (drop, promote, merge; skill and tool drafts). With MEMORY=on. */
   readonly introspect?: () => Promise<IntrospectionReport>;
+  /** #296: the learning loop for one day of the dataset, with the answer model; skills it proposes wait for his OK. */
+  /** #297: SKILL.md files from a GitHub link, as skill drafts. */
+  readonly importSkills?: (link: string) => Promise<{ readonly ok: boolean; readonly text: string; readonly added: number }>;
+  readonly learn?: (dataset: Dataset, day: string) => Promise<unknown>;
   /** #177: the morning brief, prepared at BRIEF_AT and shown on the page (GET /brief/today). */
   readonly morningBrief?: MorningBriefs;
+  /** #288: the conversation, kept across restarts. */
+  readonly conversation?: ConversationStore;
+  /** #290: who Atlas talks to (the main user first), and where their profiles are. */
+  readonly users?: { readonly list: readonly User[]; readonly readProfile: (user: User) => Promise<string | undefined>; readonly timeZone: string };
+  /** #290: what each person had Atlas do, shared between them when the household's sharing is on. */
+  readonly household?: Household;
   /** #271 PROACTIVE=on: Atlas speaks up on his own. main.ts starts the watchers; the page asks GET /notices. */
   readonly proactive?: {
     readonly notices: Notices;

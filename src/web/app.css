@@ -3234,3 +3234,1058 @@ button.trace-head:hover:not(:disabled) {
     scrollbar-width: none;
   }
 }
+
+/* #288: the turns picked up after a restart, a little quieter, then a line. */
+#transcript .message.earlier {
+  opacity: 0.72;
+}
+
+#transcript .earlier-line {
+  list-style: none;
+  margin: 0.6rem 0 0.9rem;
+  text-align: center;
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  color: #4c5570;
+}
+
+/* #298: while you scroll up to read, one tap back to the latest; it lights up when something new came in. */
+.jump-latest {
+  align-self: center;
+  position: relative;
+  z-index: 3;
+  margin: -2.6rem 0 0.6rem;
+  padding: 0.3rem 0.9rem;
+  border: 1px solid #2a3350;
+  border-radius: 999px;
+  background: rgb(10 14 26 / 0.92);
+  color: #9fb4e8;
+  font: inherit;
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  box-shadow: 0 4px 14px rgb(0 0 0 / 0.35);
+}
+
+.jump-latest[hidden] {
+  display: none;
+}
+
+.jump-latest.fresh {
+  border-color: var(--accent);
+  color: #e6ecff;
+  box-shadow: 0 0 10px rgb(74 123 255 / 0.55);
+}
+
+/* Narrow screens scroll the whole page, so the button floats above the question box. */
+@media (max-width: 68rem) {
+  .jump-latest {
+    position: fixed;
+    right: 1rem;
+    bottom: 9rem;
+    margin: 0;
+  }
+}
+
+/* #300: the panel on the right, like OpenJarvis's: settings, tools, skills, memory and costs, in tabs.
+   It docks beside the chat on wide screens (the page makes room) and covers it on narrow ones. */
+:root {
+  --side-w: min(27rem, 100vw);
+}
+
+.side {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 30;
+  width: var(--side-w);
+  display: flex;
+  flex-direction: column;
+  border-left: 1px solid #161c2c;
+  background: rgb(5 7 14 / 0.96);
+  box-shadow: -20px 0 60px rgb(0 0 0 / 0.45);
+  animation: side-in 0.2s ease-out;
+}
+
+.side[hidden] {
+  display: none;
+}
+
+@keyframes side-in {
+  from {
+    opacity: 0;
+    transform: translateX(12px);
+  }
+}
+
+.side-head {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.7rem 0.8rem 0.6rem;
+  border-bottom: 1px solid #161c2c;
+}
+
+.side-tabs {
+  display: flex;
+  flex: 1;
+  flex-wrap: wrap;
+  gap: 0.2rem;
+}
+
+.side-tabs [role="tab"] {
+  padding: 0.3rem 0.6rem;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: none;
+  color: #8a93ad;
+  font-size: 12px;
+  letter-spacing: 0.04em;
+}
+
+.side-tabs [role="tab"][aria-selected="true"] {
+  border-color: #2a3350;
+  background: rgb(74 123 255 / 0.12);
+  color: #e6ecff;
+}
+
+.side-tabs [role="tab"][hidden] {
+  display: none;
+}
+
+#side-close {
+  border: 0;
+  background: none;
+  color: #8a93ad;
+}
+
+#side .side-tab {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 0.9rem 1rem 1.2rem;
+  scrollbar-width: thin;
+}
+
+#side .side-tab[hidden] {
+  display: none;
+}
+
+/* Settings: what used to drop down from ⚙, now a column of controls. */
+#side .settings {
+  position: static;
+  width: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.45rem;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+  animation: none;
+}
+
+#side .settings > * {
+  justify-content: flex-start;
+  text-align: left;
+}
+
+#side .settings select {
+  width: 100%;
+  max-width: none;
+}
+
+/* The tabs that were dialogs: no frame of their own in the panel. */
+#side #memories-panel,
+#side #skills-panel,
+#side .costs {
+  position: static;
+  width: auto;
+  max-width: none;
+  max-height: none;
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+}
+
+#side .costs-table {
+  width: 100%;
+}
+
+/* Tools: one row per thing Atlas can reach. */
+.tools-list {
+  margin: 0.4rem 0 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 0.55rem;
+}
+
+.tool-row {
+  padding: 0.6rem 0.7rem;
+  border: 1px solid #161c2c;
+  border-radius: 8px;
+  background: rgb(10 14 26 / 0.6);
+}
+
+.tool-head {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.tool-status {
+  margin-left: auto;
+  padding: 0.05rem 0.5rem;
+  border-radius: 999px;
+  border: 1px solid #2a3350;
+  color: #8a93ad;
+  font-size: 11px;
+}
+
+.tone-on .tool-status {
+  border-color: rgb(74 123 255 / 0.6);
+  color: #cfe0ff;
+  box-shadow: 0 0 8px rgb(74 123 255 / 0.25);
+}
+
+.tone-soon {
+  opacity: 0.75;
+}
+
+.tool-about,
+.tool-accounts,
+.tool-hint {
+  margin: 0.35rem 0 0;
+  color: #8a93ad;
+  font-size: 12px;
+}
+
+.tool-hint {
+  color: #9fb4e8;
+}
+
+.tool-tools summary {
+  margin-top: 0.35rem;
+  color: #5d6680;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.tool-tools ul {
+  margin: 0.3rem 0 0;
+  padding-left: 1rem;
+  font-size: 12px;
+  color: #8a93ad;
+}
+
+/* Wide screens: the page makes room for the panel instead of hiding under it. */
+@media (min-width: 68.01rem) {
+  body[data-side="true"] .layout {
+    width: calc(100% - var(--side-w));
+    margin: 0 var(--side-w) 0 0;
+    flex-wrap: nowrap;
+  }
+
+  /* The galaxy and the chat share what's left, rather than the galaxy dropping below. */
+  body[data-side="true"] .brain {
+    min-width: 0;
+    flex: 1 1 0;
+  }
+
+  body[data-side="true"] .chat {
+    flex: 0 0 min(40rem, calc((100vw - var(--side-w)) * 0.55));
+  }
+}
+
+/* #305: the Logs tab: filters on top, one compact row per entry, repeats folded. */
+.logs-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-bottom: 0.6rem;
+}
+
+.logs-bar select,
+.logs-bar input[type="search"] {
+  flex: 1 1 8rem;
+  min-width: 0;
+  font-size: 12px;
+}
+
+.logs-routine {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  color: #8a93ad;
+  font-size: 12px;
+}
+
+.logs-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.log-row {
+  display: grid;
+  grid-template-columns: auto auto 1fr;
+  gap: 0 0.5rem;
+  padding: 0.25rem 0.3rem;
+  border-bottom: 1px solid #10141f;
+  color: #8a93ad;
+}
+
+.log-time {
+  color: #5d6680;
+}
+
+.log-area {
+  color: #9fb4e8;
+}
+
+.log-message {
+  color: #cfd6ea;
+}
+
+.log-details {
+  grid-column: 1 / -1;
+  overflow-wrap: anywhere;
+  color: #5d6680;
+}
+
+.log-row.sev-warning .log-message {
+  color: #f0c36b;
+}
+
+.log-row.sev-error .log-message {
+  color: #ff7a7a;
+}
+
+/* ── #307: OpenJarvis-style layout ─────────────────────────────────────────
+   The menu on the left, the page in the middle (Chat: the galaxy on top, folding
+   away, then the conversation; or one of the other pages), the System panel on
+   the right (folds to a strip). The universe stays behind everything. */
+.app {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: 14.5rem minmax(0, 1fr) auto;
+  height: 100vh;
+  height: 100dvh;
+}
+
+.rail {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  padding: 1rem 0.75rem;
+  border-right: 1px solid #141a29;
+  background: rgb(5 7 14 / 0.72);
+  backdrop-filter: blur(6px);
+  overflow-y: auto;
+}
+
+.rail-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.rail-head h1 {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0;
+  font-size: 1.1rem;
+  font-weight: 500;
+  letter-spacing: 0.12em;
+  text-transform: lowercase;
+}
+
+.rail-new {
+  width: 1.9rem;
+  height: 1.9rem;
+  padding: 0;
+  border: 1px solid #222a40;
+  border-radius: 6px;
+  background: none;
+  color: #9fb4e8;
+}
+
+.rail-who {
+  margin: 0;
+  padding: 0.35rem 0.55rem;
+  border: 1px solid rgb(74 123 255 / 0.4);
+  border-radius: 6px;
+  color: #cfe0ff;
+  font-size: 12px;
+}
+
+.rail-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  margin-top: auto;
+}
+
+.rail-nav [role="tab"],
+.rail-nav #settings-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  width: 100%;
+  padding: 0.5rem 0.65rem;
+  border: 0;
+  border-left: 2px solid transparent;
+  border-radius: 6px;
+  background: none;
+  color: #8a93ad;
+  font-size: 13px;
+  letter-spacing: normal;
+  text-align: left;
+  box-shadow: none;
+}
+
+.rail-nav [role="tab"]:hover {
+  color: #cfd6ea;
+  background: rgb(255 255 255 / 0.03);
+}
+
+.rail-nav [role="tab"][aria-selected="true"] {
+  border-left-color: #4a7bff;
+  background: rgb(74 123 255 / 0.12);
+  color: #e6ecff;
+}
+
+.rail-nav [role="tab"][hidden] {
+  display: none;
+}
+
+.rail-nav .badge {
+  margin-left: auto;
+}
+
+/* The middle: Chat fills it; another page takes its place. */
+.app .center {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+  overflow: hidden;
+}
+
+.app .center .layout {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  max-width: 52rem;
+  margin: 0 auto;
+  padding: 0 1rem;
+  display: flex;
+  flex-direction: column;
+  flex-wrap: nowrap;
+  gap: 0;
+}
+
+body[data-side="true"] .app .center .layout {
+  display: none;
+}
+
+.app .center .chat {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.app .center .chat main {
+  flex: 1;
+  min-height: 0;
+  max-height: none;
+  overflow-y: auto;
+}
+
+/* The galaxy on top of the chat, folding away. */
+.galaxy-band {
+  flex: 0 0 auto;
+  position: relative;
+  display: flex;
+  justify-content: center;
+}
+
+.galaxy-toggle {
+  position: absolute;
+  top: 0.5rem;
+  right: 0;
+  z-index: 2;
+  padding: 0.15rem 0.6rem;
+  border: 1px solid #222a40;
+  border-radius: 999px;
+  background: rgb(5 7 14 / 0.7);
+  color: #8a93ad;
+  font-size: 11px;
+  letter-spacing: 0.06em;
+}
+
+.app .galaxy-band .brain {
+  position: static;
+  flex: 0 0 auto;
+  width: min(100%, 24rem, 36vh);
+  max-width: none;
+  margin: 0.4rem auto 0;
+}
+
+.galaxy-band[data-open="false"] {
+  min-height: 2.4rem;
+}
+
+.galaxy-band[data-open="false"] .brain {
+  display: none;
+}
+
+/* The other pages, in the middle. */
+.app #side.pages {
+  position: static;
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  max-width: 56rem;
+  margin: 0 auto;
+  border: 0;
+  background: none;
+  box-shadow: none;
+  animation: none;
+}
+
+.app #side.pages .side-tab {
+  padding: 1.4rem 1.2rem 2rem;
+}
+
+/* The System panel on the right. */
+.system {
+  width: 17rem;
+  display: flex;
+  flex-direction: column;
+  border-left: 1px solid #141a29;
+  background: rgb(5 7 14 / 0.72);
+  backdrop-filter: blur(6px);
+  overflow-y: auto;
+}
+
+.system[data-open="false"] {
+  width: 2.4rem;
+}
+
+.system[data-open="false"] .system-body,
+.system[data-open="false"] .system-title {
+  display: none;
+}
+
+.system-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.9rem 0.8rem 0.4rem;
+}
+
+.system-title {
+  margin: 0;
+  color: #8a93ad;
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+#system-toggle {
+  padding: 0 0.3rem;
+  border: 0;
+  background: none;
+  color: #5d6680;
+}
+
+.system-body {
+  padding: 0 0.8rem 1rem;
+}
+
+.sys-section {
+  margin-top: 0.9rem;
+}
+
+.sys-title {
+  margin: 0 0 0.4rem;
+  color: #5d6680;
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.sys-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.4rem;
+}
+
+.sys-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  min-width: 0;
+  padding: 0.5rem 0.6rem;
+  border: 1px solid #161c2c;
+  border-radius: 8px;
+  background: rgb(10 14 26 / 0.7);
+}
+
+.sys-label,
+.sys-hint {
+  color: #5d6680;
+  font-size: 10px;
+}
+
+.sys-value {
+  overflow: hidden;
+  color: #e6ecff;
+  font-size: 14px;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sys-list {
+  display: grid;
+  gap: 0.3rem;
+}
+
+.sys-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.45rem 0.6rem;
+  border: 1px solid #161c2c;
+  border-radius: 8px;
+  color: #8a93ad;
+  font-size: 12px;
+}
+
+.sys-row.local {
+  border-color: rgb(74 123 255 / 0.45);
+}
+
+.sys-row-value {
+  color: #cfe0ff;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+/* Narrow screens: the menu becomes a strip on top; the System panel stays folded away. */
+@media (max-width: 60rem) {
+  .app {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+
+  .rail {
+    flex-direction: row;
+    align-items: center;
+    padding: 0.5rem 0.75rem;
+    border-right: 0;
+    border-bottom: 1px solid #141a29;
+    overflow-x: auto;
+  }
+
+  .rail-nav {
+    flex-direction: row;
+    margin-top: 0;
+  }
+
+  .rail-nav [role="tab"] {
+    width: auto;
+    white-space: nowrap;
+    border-left: 0;
+    border-bottom: 2px solid transparent;
+  }
+
+  .rail-nav [role="tab"][aria-selected="true"] {
+    border-bottom-color: #4a7bff;
+  }
+
+  .rail-who {
+    display: none;
+  }
+
+  .system {
+    display: none;
+  }
+}
+
+/* #307: Settings is a page in the menu now, not the spinning gear. */
+.rail-nav #settings-toggle {
+  line-height: normal;
+  transform: none;
+}
+
+.rail-nav #settings-toggle:hover {
+  transform: none;
+  color: #cfd6ea;
+  background: rgb(255 255 255 / 0.03);
+}
+
+.rail-nav #settings-toggle[aria-selected="true"] {
+  color: #e6ecff;
+  background: rgb(74 123 255 / 0.12);
+  transform: none;
+}
+
+/* #309: line icons in the menu, like the galaxy's nodes. */
+.rail-icon {
+  flex: 0 0 auto;
+  width: 1.05rem;
+  height: 1.05rem;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.rail-new .rail-icon {
+  width: 1rem;
+  height: 1rem;
+}
+
+.rail-new {
+  display: grid;
+  place-items: center;
+}
+
+/* #309: the conversations so far, under ＋. */
+.chat-search {
+  width: 100%;
+  padding: 0.4rem 0.55rem;
+  border: 1px solid #1d2438;
+  border-radius: 6px;
+  background: rgb(10 14 26 / 0.7);
+  color: #cfd6ea;
+  font-size: 12px;
+}
+
+.chat-list {
+  flex: 1 1 auto;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+  scrollbar-width: thin;
+}
+
+.chat-item {
+  position: relative;
+  display: flex;
+  border-radius: 6px;
+}
+
+.chat-item:hover,
+.chat-item[aria-current="true"] {
+  background: rgb(255 255 255 / 0.04);
+}
+
+.chat-item[aria-current="true"] {
+  box-shadow: inset 2px 0 0 #4a7bff;
+}
+
+.chat-open {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  padding: 0.45rem 0.55rem;
+  border: 0;
+  background: none;
+  text-align: left;
+  letter-spacing: normal;
+  box-shadow: none;
+}
+
+.chat-title {
+  overflow: hidden;
+  color: #cfd6ea;
+  font-size: 12.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chat-when {
+  color: #5d6680;
+  font-size: 10.5px;
+}
+
+.chat-forget {
+  align-self: center;
+  padding: 0 0.45rem;
+  border: 0;
+  background: none;
+  color: #5d6680;
+  opacity: 0;
+  box-shadow: none;
+}
+
+.chat-item:hover .chat-forget,
+.chat-forget:focus-visible {
+  opacity: 1;
+}
+
+/* With the list, the pages sit at the bottom of the menu. */
+.rail .rail-nav {
+  margin-top: 0.4rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid #141a29;
+}
+
+/* #309: bigger letters in the chat. */
+.app #transcript {
+  font-size: 15px;
+  line-height: 1.6;
+}
+
+.app #question {
+  font-size: 15px;
+}
+
+/* #309: "How he got there" in the System panel (the trace view makes its slot the .trace box). */
+.system #trace-slot.trace {
+  margin: 0.6rem 0.8rem 1rem;
+  max-width: none;
+}
+
+.system #trace-slot .trace-scroll {
+  max-height: none;
+  overflow-x: auto;
+}
+
+.system[data-open="false"] #trace-slot {
+  display: none;
+}
+
+@media (max-width: 60rem) {
+  .chat-search,
+  .chat-list {
+    display: none;
+  }
+}
+
+
+/* The brain card in the System panel is a button: tap to switch brains. */
+.sys-card-button {
+  align-items: flex-start;
+  font: inherit;
+  text-align: left;
+  letter-spacing: normal;
+  cursor: pointer;
+  box-shadow: none;
+}
+
+.sys-card-button:hover {
+  border-color: rgb(74 123 255 / 0.5);
+}
+
+/* #310: Tools: a card per source, its switches and fields, Save and Restart on top. */
+.page-title {
+  margin: 0 0 0.3rem;
+  font-size: 1.05rem;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+}
+
+.sources-bar {
+  position: sticky;
+  top: -1.4rem;
+  border-bottom: 1px solid #141a29;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  margin: 0.6rem 0 0.9rem;
+  padding: 0.55rem 0;
+  background: rgb(3 5 10);
+}
+
+.sources-status {
+  margin-right: auto;
+  color: #8a93ad;
+  font-size: 12px;
+}
+
+.sources-save,
+.sources-restart {
+  padding: 0.35rem 0.8rem;
+  font-size: 12px;
+}
+
+.sources-restart {
+  border-color: #4a7bff;
+  color: #e6ecff;
+}
+
+.src-card {
+  margin-bottom: 0.8rem;
+  padding: 0.9rem 1rem;
+  border: 1px solid #161c2c;
+  border-radius: 10px;
+  background: rgb(8 11 20 / 0.75);
+}
+
+.src-head {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.src-head h3 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.src-status {
+  margin-left: auto;
+  padding: 0.05rem 0.55rem;
+  border: 1px solid #2a3350;
+  border-radius: 999px;
+  color: #8a93ad;
+  font-size: 11px;
+}
+
+.src-status.tone-on {
+  border-color: rgb(74 123 255 / 0.6);
+  color: #cfe0ff;
+}
+
+.src-about {
+  margin: 0.3rem 0 0.7rem;
+  color: #8a93ad;
+  font-size: 12px;
+}
+
+.src-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(16rem, 1fr));
+  gap: 0.5rem 1rem;
+  margin-bottom: 0.5rem;
+}
+
+.src-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  min-width: 0;
+}
+
+.src-field.kind-toggle {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 0.2rem 0.55rem;
+}
+
+.src-field.kind-toggle .src-hint {
+  grid-column: 2;
+}
+
+.src-label {
+  color: #cfd6ea;
+  font-size: 12px;
+}
+
+.src-field input:not([type="checkbox"]),
+.src-field select,
+.src-connect select {
+  width: 100%;
+  padding: 0.35rem 0.5rem;
+  border: 1px solid #1d2438;
+  border-radius: 6px;
+  background: rgb(10 14 26 / 0.8);
+  color: #e6ecff;
+  font: inherit;
+  font-size: 12px;
+}
+
+.src-switch {
+  width: 2rem;
+  height: 1.1rem;
+  accent-color: #4a7bff;
+}
+
+.src-hint {
+  flex-basis: 100%;
+  color: #5d6680;
+  font-size: 11px;
+}
+
+.src-connect {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.4rem;
+  padding-top: 0.6rem;
+  border-top: 1px solid #141a29;
+}
+
+.src-connect select {
+  width: auto;
+}
+
+.src-connect-go {
+  padding: 0.3rem 0.7rem;
+  font-size: 12px;
+}
+
+.src-connect-out {
+  flex-basis: 100%;
+  max-height: 12rem;
+  margin: 0.3rem 0 0;
+  padding: 0.5rem;
+  overflow: auto;
+  border-radius: 6px;
+  background: rgb(0 0 0 / 0.35);
+  color: #8a93ad;
+  font-size: 11px;
+  white-space: pre-wrap;
+}
+
+/* #297: importing a skill from GitHub. */
+.skills-import { display: grid; gap: 6px; margin: 8px 0 14px; }
+.skills-import label { font-size: 13px; color: var(--muted, #9aa3b2); }
+.skills-import-row { display: flex; gap: 8px; }
+.skills-import-row input { flex: 1; min-width: 0; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--line, rgba(255,255,255,0.14)); background: transparent; color: inherit; font: inherit; font-size: 14px; }
+.skills-import .note { margin: 0; }
+
+/* #299: the dashboard's detail. */
+.costs-section { margin-top: 22px; }
+.costs-section h3 { font-size: 14px; margin: 0 0 8px; font-weight: 600; }
+.costs-chart { position: relative; }
+.costs-chart svg { width: 100%; height: auto; display: block; }
+.costs-bar { fill: var(--accent); }
+.costs-hit { fill: transparent; cursor: default; outline: none; }
+.costs-hit:hover, .costs-hit:focus { fill: color-mix(in srgb, var(--accent) 10%, transparent); }
+.costs-axis { stroke: var(--muted); stroke-opacity: 0.4; stroke-width: 1; }
+.costs-tick { fill: var(--muted); font-size: 11px; }
+.costs-tip { position: absolute; top: -4px; transform: translateX(-50%); white-space: nowrap; font-size: 12px; padding: 4px 8px; border-radius: 6px; background: var(--surface, #fff); color: inherit; border: 1px solid color-mix(in srgb, var(--muted) 35%, transparent); pointer-events: none; }
+.costs-chart details { margin-top: 6px; font-size: 13px; }
+
+/* #310: connections set up from the Tools page. */
+.src-form { margin-top: 10px; }
+.src-form summary { cursor: pointer; font-weight: 600; font-size: 14px; }
+.src-form[open] { display: grid; gap: 8px; }

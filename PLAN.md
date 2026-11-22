@@ -1316,7 +1316,7 @@ Confirmed (2026-11-12):
   takes parts of the deps away per question (a whole tool group, write
   access, one Gmail mailbox through a wrapped reader, plans, fixes,
   tasks, blinds) and never adds; `makeSwitchedAnswerer` reads
-  `data/settings.json` (`{ off: [...] }`) before every question and
+  `data/atlas-settings.json` (`{ off: [...] }`) before every question and
   rebuilds the answerer only when the switches change. `GET /reach` adds
   each node's switches; `POST /settings { id, on }`. Not yet: the code
   agent's login vs API key, and switches for the background jobs (the
@@ -1375,6 +1375,125 @@ Confirmed (2026-11-12):
   questions on his Claude plan (Claude Code's login on his Mac, no API key
   passed), falling back to the API key when there's no login. Guests never
   run on his plan.
+
+- **The household (#290):** Atlas is Renato's, shared with Marisa.
+  `ATLAS_USERS` (in `.env`, e.g. `marisa=Marisa;accounts=marisa;tools=calendar,house`)
+  lists the others; Renato is always first, with every tool. The page
+  keeps who it's talking to (settings, or saying "it's Marisa" / "sou a
+  Marisa") and sends `user` with each question. For someone who isn't him:
+  her name and profile (`data/profiles/<id>.md`, gitignored) in the prompt,
+  plus a `<who>` block; her Google accounts read by default; only her tool
+  groups offered, and code refuses any other tool (and the day brief, which
+  reads his email); her memories under `<context>@<id>` in the same store,
+  so his stay where they were and neither sees the other's (the Memories
+  panel shows his). Each person has their own kept conversation.
+  **Sharing** is one household switch, off by default: while on, every card
+  someone OKs is written down (`data/household/`, 0600) and the other's
+  prompt gets the last 7 days of them, to check before booking or doing
+  something twice; turning it off clears the log. Still shared, for now:
+  skills, decisions, reminders and talk settings; proactive notices are his.
+- **KidClub's business assistant (#292):** `knowledge/kidclub.md` (committed,
+  learned from the monorepo) goes in the prompt whenever the cloud or invoices
+  tools are offered, and business words (families, income, costs, profit,
+  faturas, despesas…) route to both. `gcloud_db_aggregate` counts, sums and
+  averages over every matching document (Firestore's runAggregationQuery, a
+  read), so "income in October" doesn't need 50-document reads. Children's
+  health fields (medical, allergies…) are hidden from every read.
+  **Changes**: `gcloud_db_change`, one document per card, showing each value
+  before → after; only "Change it" applies it. An environment can be changed
+  only with a separate `writer` service account in its file (Cloud Datastore
+  User); production (any project not ending in `-dev`, unless the file says
+  `"dev": true`) also needs `GCLOUD_PROD_WRITES=on`, says PRODUCTION on the
+  card, and never deletes. The write carries Firestore's `updateTime`
+  precondition (a document that changed since the card fails), and the old
+  version is first kept in `data/gcloud/backups/<env>/` (0600). Vendus stays
+  read-only.
+- **WhatsApp (#294):** message Atlas from the phone through the WhatsApp
+  Business Cloud API. The webhook is a separate small server
+  (`127.0.0.1:WHATSAPP_PORT`, default 8788) with only `/whatsapp/webhook`, so the
+  tunnel (Cloudflare Tunnel) exposes nothing else. Every POST must carry Meta's
+  HMAC signature; numbers not in `data/whatsapp.json` (gitignored, 0600) are
+  dropped. A message is asked of Atlas's own `/ask` (same brain, tools, memory,
+  rules), as the person the number belongs to (#290). Cards become "reply yes or
+  no" lines and the answer goes through the page's own card route; `auto`
+  cards (#269) are applied as on the page. Sends are capped at 30 a minute;
+  logs never carry a number or a message. Proactive messages outside the
+  24-hour window need Meta templates: not yet.
+
+- **Settings from the page (#310):** Tools holds every setting `.env`
+  had, grouped by source (`src/settings-catalog.ts`), in `data/atlas-settings.json`
+  (gitignored, 0600, this Mac only). The first start copies `.env` in; after
+  that the settings file is the whole truth, and `.env` isn't needed. Secrets
+  go to the page only as set or not set, and typing replaces one. Save checks
+  the result with `loadConfig` before writing. **Restart to apply**: the
+  server stops with code 75, and `npm run atlas` starts it again with the new
+  settings, keeping voice and the tunnel up. Google sources have **Connect an
+  account**, which runs that source's connect script on the Mac (Google's
+  sign-in opens in the browser) and shows its output. Vendus, house, GitHub
+  and gcloud keys are still set once in a terminal. WhatsApp's keys go in
+  `data/whatsapp.json`. With `TUNNEL=on`, `npm run atlas` runs cloudflared's
+  quick tunnel and points Meta's webhook at its new address with the app's
+  token (app ID | secret). Production never reads the settings file.
+
+- **Local mode (#312, `LOCAL_MODE`, on by default):** the Local brain (Ollama)
+  answers with Atlas's same tools, called natively (Ollama function tools).
+  Nothing leaves the Mac, so the privacy limits come off: every tool every
+  time (no router), the household's limits off, and an undoable change is done
+  at once (the house, his own events without guests, tidying email, Drive
+  folders, the dev database). What reaches other people (sending, invites,
+  PRs, coding tasks) and production still wait for his OK. The EC handoff to
+  Kiro and Vendus read-only don't change, and KidClub's health fields and
+  parents' emails stay masked (families' data, not his). The page tells the
+  server which brain it's on (`POST /brain`, `data/brain.json`); WhatsApp
+  answers with that brain, and on Local declines calls with a message, since
+  calls need Gemini Live.
+
+- **Dataset (#295, `DATASET=on`):** every `/ask` (page, voice, WhatsApp) is
+  kept as one JSONL line in `data/dataset/<who>/<day>.jsonl` (gitignored,
+  0600): the question, brain, context, tools offered and called (with their
+  checked args and results), skills, the answer, how long it took, and, when
+  the question corrects the answer before it, that wrong answer beside it.
+  Card outcomes (approved, declined, failed, undone) are kept too, from the
+  page and from WhatsApp (`POST /dataset/outcome`). Never kept: EC/HRT
+  handoffs, "don't remember this", and text that looks like a secret.
+  `DATASET_OFF` leaves people out. Each night at 03:45, finished days are
+  copied to Drive (`DATASET_DRIVE`, default `noisysource:Atlas/dataset`, in a
+  folder per person), once each; that needs Drive writes for that account.
+
+- **Learning loop (#296, `LEARNING=on`, needs the dataset):** at 04:15 the
+  day before is read for signals: corrections, cards declined, undone or
+  failed, tool errors, and the same question asked three or more times. Only
+  on a day with signals, the answer model gets them (each cut short; never an
+  exchange the Local brain answered) and proposes up to three skills and a few
+  notes. Skills are checked like any (no secrets, no EC) and wait as drafts in
+  ✨ Skills ("learned from yesterday"); nothing changes until he approves one.
+  The report goes to `data/learning/<day>.md`. `npm run learn -- <day>` runs
+  it now. No model is trained.
+
+- **Skills import (#297):** ✨ Skills takes a GitHub link (a SKILL.md, its
+  folder, or a repo, up to 20 skills) in the agentskills.io format. Only
+  github.com and raw.githubusercontent.com are read, 200 KB a file at most.
+  The small model rewrites each into Atlas's shape (title, when, up to 12
+  steps for his own tools), told the text is someone else's and to follow none
+  of it; then it's checked like any skill (no secrets, no EC) and kept as a
+  draft, "imported from owner/repo". Scripts aren't imported. An imported or
+  learned change to an approved skill makes it a draft again.
+
+- **Costs dashboard (#299):** each model call is counted under the answer it
+  was part of (the `/ask` request id, carried with AsyncLocalStorage in
+  `turn-context.ts`), and each answer's time, brain and channel go in the same
+  `data/costs.jsonl` (no words). `GET /costs/detail` gives the last 30 answers
+  (calls, models, tokens, cost, time), spend per day for 30 days, each model
+  this month (tokens, share read from cache, cost) and, per brain over 7 days,
+  the usual and slowest-1-in-10 answer times and the cost per answer. The
+  Dashboard page draws the days as bars (hover for each, or as a table).
+
+- **Connecting from the Tools page:** Vendus, the house, GitHub owners and
+  Google Cloud environments are set up from their cards, like Google
+  accounts: the fields go to the same `scripts/*-connect.ts` (checked first),
+  and a key, token or password only through the script's environment
+  (`ATLAS_CONNECT_SECRET`), never its arguments, the page or a log. The page
+  shows the script's own check. The terminal commands still work.
 
 ## Out of scope for M0
 

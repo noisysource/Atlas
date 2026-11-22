@@ -116,4 +116,4 @@ const read = makeGoogleCalendarReader({
 const today = localDate(new Date(), config.timeZone);
 const events = await read({ from: today, to: today });
 console.log(events.ok ? `✓ Read today's ${account} calendar: ${events.value.length} event(s).` : `✗ Reading it failed: ${events.error.message}`);
-console.log(`\nNow put CALENDAR=on${write ? " and CALENDAR_WRITE=on" : ""} in .env (with BARE_MODE=on) and restart Atlas: a running Atlas keeps using the old connection until it restarts.`);
+console.log(`\nNow put CALENDAR=on${write ? " and CALENDAR_WRITE=on" : ""} in Tools (with BARE_MODE=on) and restart Atlas: a running Atlas keeps using the old connection until it restarts.`);

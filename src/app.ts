@@ -27,6 +27,7 @@ import { makeVendusGet, type VendusGet } from "./vendus/vendus.js";
 import { makeCodeRefresh } from "./code/freshness.js";
 import { briefSources } from "./brief.js";
 import { makeMorningBriefs, type BriefStore, type MorningBrief } from "./morning.js";
+import { makeConversationStore, type ConversationStore } from "./conversation.js";
 import { makeDriveTimes, makeNotices, startProactive, type Notice, type ProactiveSources } from "./proactive.js";
 import { makeBareAnswerer } from "./answer/bare.js";
 import { makePersonalAnswerer } from "./answer/personal.js";
@@ -42,6 +43,7 @@ import { makeNoteStore, makeStudies, mapViews, type NoteFiles } from "./code/stu
 import { makeGithubReader, makeGithubTokens, type GithubReader } from "./github/github.js";
 import { cachedToken, makeGcloudCliToken, makeGcloudEnvs, makeGcloudReader, type GcloudReader } from "./gcloud/gcloud.js";
 import { makeDbReader, type DbReader } from "./gcloud/firestore.js";
+import { makeDbWrites, type DbWrites } from "./gcloud/db-write.js";
 import { makeDriveClient, makeDriveWrites } from "./drive.js";
 import { GMAIL_ACCOUNTS, isEcEmail, makeGmailReader, type GmailAccount, type GmailReader } from "./gmail/gmail.js";
 import { makeDraftBook, makeGmailWriter, makePendingDrafts, type GmailWriter } from "./gmail/send.js";
@@ -50,7 +52,7 @@ import { makeClassifier } from "./classify.js";
 import type { Config, Env } from "./config.js";
 import { loadContexts } from "./contexts.js";
 import type { ModelRef } from "./llm/model-ref.js";
-import { eventOf, makeCostLog, meteredCodeAgent, meteredLlm, meteredTaskRunner, summarize, type CostLog } from "./costs.js";
+import { costDetail, eventOf, makeCostLog, meteredCodeAgent, meteredLlm, meteredTaskRunner, summarize, type CostLog } from "./costs.js";
 import { liveInstruction, makeLiveSession } from "./live/live.js";
 import { makeLiveSessions, type LiveSessions } from "./live/routes.js";
 
@@ -66,6 +68,9 @@ import { makeMemoryHooks, makeSafeMemoryHooks } from "./memory.js";
 import { makeModelExtract } from "./memory-extract.js";
 import { makeEcMatchers, parseNeverRemember } from "./memory-rules.js";
 import { runIntrospection } from "./introspection.js";
+import { runLearning } from "./learning.js";
+import { makeGitHubGet, parseSkillLink, skillFiles, skillFromMd } from "./skill-import.js";
+import type { Dataset } from "./dataset.js";
 import { makeSkillStore, type SkillStore } from "./skills.js";
 import { access, chmod, mkdir, readdir, readFile as readFileFs, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
@@ -76,6 +81,9 @@ import { makeProfileSource, type ProfileFileSystem } from "./profile.js";
 import { err, ok, type Result } from "./result.js";
 import { makeGcpSecretAccess, makeSecretGetter, resolveAnthropicKey, resolveGeminiKey } from "./secrets.js";
 import type { Context, Deps, Logger } from "./types.js";
+import { parseUsers, profilePathOf, type User } from "./users.js";
+import { makeHousehold, type Household } from "./household.js";
+import { scopedMemoryStore } from "./memory-scope.js";
 
 export type AppInputs = {
   readonly config: Config;
@@ -104,10 +112,18 @@ export type AppInputs = {
   readonly githubReader?: GithubReader;
   readonly gcloudReader?: GcloudReader;
   readonly gcloudDb?: DbReader;
+  /** #292 tests: database changes that don't reach Google. */
+  readonly dbWrites?: DbWrites;
+  /** #292 tests: the business knowledge without the file. */
+  readonly readKnowledge?: () => Promise<string>;
   /** #9: tests give their own Vendus. */
   readonly vendusGet?: VendusGet;
   /** #191: tests give their own tasks. */
   readonly codeTasks?: Tasks;
+  /** Tests: a conversation store that isn't on disk. */
+  readonly conversation?: ConversationStore;
+  /** #290 tests: a household that isn't on disk. */
+  readonly household?: Household;
   /** #162: tests give their own fixes. */
   readonly codeFixes?: Fixes;
   /** Tests: a code agent and repo copies instead of Claude Code and git (#126). */
@@ -210,7 +226,23 @@ export const buildDeps = async (inputs: AppInputs): Promise<Result<Deps, string>
   }
 
   const now = inputs.now ?? (() => new Date());
-  const memoryStore = inputs.memoryStore ?? makeMemoryStoreInMemory({ now });
+  // #290: one store for the household; the answers scope it to whoever is talking, everything else sees his.
+  const sharedMemory = inputs.memoryStore ?? makeMemoryStoreInMemory({ now });
+  const memoryStore = scopedMemoryStore(sharedMemory, undefined);
+  const users = parseUsers(config.users, config.userName);
+  if (!users.ok) return err(users.error);
+  const guestProfiles = new Map<string, ReturnType<typeof makeProfileSource>>();
+  const readProfile = async (user: User): Promise<string | undefined> => {
+    if (user.main) return undefined;
+    let source = guestProfiles.get(user.id);
+    if (!source) {
+      source = makeProfileSource({ kind: "file", path: profilePathOf(user, "data/profile.md") }, { ...(inputs.profileFs ? { fs: inputs.profileFs } : {}) });
+      guestProfiles.set(user.id, source);
+    }
+    // Missing is fine: she just has no profile yet. The content is never logged.
+    const read = await source();
+    return read.ok ? read.value.text : undefined;
+  };
 
   const personalWith = (llm: LlmCall): Record<string, Deps["answer"]> => ({
     personal: makePersonalAnswerer({
@@ -389,8 +421,18 @@ export const buildDeps = async (inputs: AppInputs): Promise<Result<Deps, string>
     });
   const gcloudToken = cachedToken(makeGcloudCliToken(gcloudRun));
   // #167: the environment's database (Firestore), read-only, with the same account.
+  // #292: changing a database needs a separate writer account per environment, and an OK per change.
+  const dbWrites = config.gcloud.enabled
+    ? (inputs.dbWrites ?? makeDbWrites({ envs: gcloudEnvs, token: gcloudToken, prodWrites: config.gcloud.prodWrites, backupsPath: path.join(config.gcloud.keysPath, "backups"), log }))
+    : undefined;
+  // #292: what Atlas knows about KidClub, the business (committed; read when first needed).
+  let knowledgeText: Promise<string | undefined> | undefined;
+  const businessKnowledge = (): Promise<string | undefined> =>
+    (knowledgeText ??= (inputs.readKnowledge ?? (() => readFileFs("knowledge/kidclub.md", "utf8")))()
+      .then((t) => `<business name="KidClub">\n${t.trim()}\n</business>`)
+      .catch(() => undefined));
   const gcloud = config.gcloud.enabled
-    ? { reader: inputs.gcloudReader ?? makeGcloudReader({ envs: gcloudEnvs, token: gcloudToken }), db: inputs.gcloudDb ?? makeDbReader({ envs: gcloudEnvs, token: gcloudToken }) }
+    ? { reader: inputs.gcloudReader ?? makeGcloudReader({ envs: gcloudEnvs, token: gcloudToken }), db: inputs.gcloudDb ?? makeDbReader({ envs: gcloudEnvs, token: gcloudToken }), ...(dbWrites ? { writes: dbWrites } : {}) }
     : undefined;
   // #127: what he's learned from studying repos: one note per repo or app, local, readable only by him.
   const noteStore = makeNoteStore(
@@ -744,10 +786,64 @@ export const buildDeps = async (inputs: AppInputs): Promise<Result<Deps, string>
         }
       : {}),
     ...(skillStore ? { skills: skillStore } : {}),
+    // #297: skills from GitHub (SKILL.md), rewritten by the small model, as drafts for his OK.
+    ...(skillStore
+      ? {
+          importSkills: async (link: string) => {
+            const src = parseSkillLink(link);
+            if (!src.ok) return { ok: false, text: `Can't import that: ${src.error}.`, added: 0 };
+            const get = makeGitHubGet();
+            const files = await skillFiles(src.value, get);
+            if (!files.ok) return { ok: false, text: `Can't import that: ${files.error}.`, added: 0 };
+            const added: string[] = [];
+            const skipped: string[] = [];
+            for (const url of files.value) {
+              const text = await get(url);
+              const skill = text.ok ? await skillFromMd(text.value, url, { ec: memoryEc, llm: classifierLlm.value }) : text;
+              if (!skill.ok) {
+                skipped.push(`${url.split("/").slice(-2, -1)[0] ?? "skill"} (${skill.error})`);
+                continue;
+              }
+              await skillStore.propose({ title: skill.value.title, when: skill.value.when, steps: skill.value.steps, source: "imported", from: url });
+              added.push(skill.value.title);
+            }
+            const text =
+              added.length > 0
+                ? `Imported ${added.length} as draft${added.length === 1 ? "" : "s"}: ${added.join(", ")}. Read each and approve it to turn it on.${skipped.length > 0 ? ` Left out: ${skipped.slice(0, 5).join("; ")}.` : ""}`
+                : `Nothing imported. ${skipped.slice(0, 5).join("; ")}.`;
+            return { ok: added.length > 0, text, added: added.length };
+          },
+        }
+      : {}),
+    // #296: the learning loop: the day's dataset into skill drafts, with the answer model (once a night).
+    ...(skillStore && config.learning
+      ? {
+          learn: (dataset: Dataset, day: string) =>
+            runLearning({
+              dataset,
+              llm: answerLlm.value,
+              skills: skillStore,
+              ec: memoryEc,
+              day,
+              log,
+              writeReport: async (d, markdown) => {
+                await mkdir("data/learning", { recursive: true, mode: 0o700 });
+                const file = `data/learning/${d}.md`;
+                await writeFile(file, markdown, { mode: 0o600 });
+                await chmod(file, 0o600);
+              },
+            }),
+        }
+      : {}),
     nativeTools: (calendar !== undefined || gmail !== undefined || drive !== undefined || config.bareMemory) && config.toolCalling,
+    localNativeTools: config.localMode && config.toolCalling,
     ...(calendarConfirm ? { calendarConfirm } : {}),
     ...(calendarUndo ? { calendarUndo } : {}),
     ...(proactive ? { proactive } : {}),
+    // #288: the conversation, kept across restarts (one file per person, data/conversations/).
+    conversation: inputs.conversation ?? makeConversationStore({ dir: "data/conversations" }),
+    users: { list: users.value, readProfile, timeZone: config.timeZone },
+    household: inputs.household ?? makeHousehold({ dir: "data/household" }),
     reach: async () =>
       withSwitchesView(await reachView({
         config,
@@ -774,7 +870,12 @@ export const buildDeps = async (inputs: AppInputs): Promise<Result<Deps, string>
     ...(calendarChanges ? { calendarChange: calendarChanges } : {}),
     ...(reminders ? { reminders } : {}),
     talk,
-    costs: { summary: async () => summarize(await costLog.all(), { now: new Date(), timeZone: config.timeZone, subscriptions: config.costs.subscriptions }) },
+    costs: {
+      summary: async () => summarize(await costLog.all(), { now: new Date(), timeZone: config.timeZone, subscriptions: config.costs.subscriptions }),
+      // #299: per answer, day, model and brain.
+      detail: async () => costDetail(await costLog.all(), (await costLog.answers?.()) ?? [], { now: new Date(), timeZone: config.timeZone }),
+      ...(costLog.answer ? { answer: costLog.answer } : {}),
+    },
     // #250: Gemini Live for the microphone, with the Google brain; its audio and text counted as voice.
     ...(geminiKey && config.gemini.live.enabled
       ? {
@@ -791,8 +892,14 @@ export const buildDeps = async (inputs: AppInputs): Promise<Result<Deps, string>
           })),
         }
       : {}),
+    // #304: WhatsApp calls are answered by Gemini Live too (main.ts), with the same model and voice.
+    ...(geminiKey && config.gemini.live.enabled
+      ? { liveCall: { apiKey: geminiKey.value.key, model: config.gemini.live.model, ...(config.gemini.live.voice ? { voice: config.gemini.live.voice } : {}) } }
+      : {}),
     ...(inboxTidy ? { gmailTidy: inboxTidy } : {}),
+    ...(driveClient ? { driveClient } : {}),
     ...(driveWrites ? { driveWrites } : {}),
+    ...(dbWrites ? { dbWrites } : {}),
     classify: makeClassifier({ contexts: contexts.value, llm: classifierLlm.value, log, thinking: config.turn.classifierThinking }),
     stickyContext: config.turn.stickyContext,
     speculativeAnswer: config.turn.speculativeAnswer,
@@ -817,7 +924,7 @@ export const buildDeps = async (inputs: AppInputs): Promise<Result<Deps, string>
               ...(drive && config.toolCalling ? { drive } : {}),
               // #107: memory across conversations, with tools (Claude); every rule enforced in code.
               ...(config.bareMemory && config.toolCalling
-                ? { memory: { store: memoryStore, contexts: contexts.value, ec: memoryEc, timeZone: config.timeZone, log } }
+                ? { memory: { store: sharedMemory, contexts: contexts.value, ec: memoryEc, timeZone: config.timeZone, log } }
                 : {}),
               ...(skillStore && config.toolCalling ? { skills: { store: skillStore, ec: memoryEc } } : {}),
               // #125: his GitHub repos, read-only, with tools (Claude).
@@ -830,6 +937,8 @@ export const buildDeps = async (inputs: AppInputs): Promise<Result<Deps, string>
               ...(code && config.toolCalling ? { code } : {}),
               // #161: errors and logs in his Google Cloud environments, read-only, with tools (Claude).
               ...(gcloud && config.toolCalling ? { gcloud } : {}),
+              // #292: KidClub, the business, for questions the database and Vendus answer.
+              ...((gcloud || vendusGet) && config.toolCalling ? { knowledge: businessKnowledge } : {}),
               // #9: KidClub's invoices in Vendus, GET only, with tools (Claude).
               ...(vendusGet && config.toolCalling ? { vendus: { get: vendusGet, timeZone: config.timeZone } } : {}),
               // #166: the house now, read-only, from the domotics bridge's state document.
@@ -861,25 +970,30 @@ export const buildDeps = async (inputs: AppInputs): Promise<Result<Deps, string>
                   ),
                 }
               : {}),
-            local: makeBareAnswerer({
-              llm: localLlm.value,
-              // What only Claude reaches, so the local model says to switch instead of guessing.
-              elsewhere: [
-                ...(gmail ? ["his email"] : []),
-                ...(github ? ["GitHub and the plans he follows"] : []),
-                ...(config.gcloud.enabled ? ["Google Cloud"] : []),
-                ...(config.house.enabled ? ["the house"] : []),
-                ...(vendusGet ? ["the invoices"] : []),
-                ...(decisions ? ["his decisions log"] : []),
-              ],
-              ...(config.userName ? { userName: config.userName } : {}),
-              spokenSentences: config.turn.spokenSentences,
-              pauses: config.turn.punctuationStyle,
-              ...(config.bareProfile ? { profile } : {}),
-              ...(calendar ? { calendar } : {}),
-              talk,
-              log,
-            }),
+            // #312: Local mode: the local model with Atlas's same tools, all of them every time,
+            // the household's limits off and undoable changes done at once. Off: no tools, as before.
+            local:
+              config.localMode && claudeDeps && config.toolCalling
+                ? makeSwitchedAnswerer(makeBareAnswerer, { ...omit(claudeDeps, "webSearch"), llm: localLlm.value, route: { mode: "all" }, local: true }, settings)
+                : makeBareAnswerer({
+                    llm: localLlm.value,
+                    // What only Claude reaches, so the local model says to switch instead of guessing.
+                    elsewhere: [
+                      ...(gmail ? ["his email"] : []),
+                      ...(github ? ["GitHub and the plans he follows"] : []),
+                      ...(config.gcloud.enabled ? ["Google Cloud"] : []),
+                      ...(config.house.enabled ? ["the house"] : []),
+                      ...(vendusGet ? ["the invoices"] : []),
+                      ...(decisions ? ["his decisions log"] : []),
+                    ],
+                    ...(config.userName ? { userName: config.userName } : {}),
+                    spokenSentences: config.turn.spokenSentences,
+                    pauses: config.turn.punctuationStyle,
+                    ...(config.bareProfile ? { profile } : {}),
+                    ...(calendar ? { calendar } : {}),
+                    talk,
+                    log,
+                  }),
           }),
         }
       : {}),

@@ -32,6 +32,11 @@ data/fixes/
 data/brief/
 # #151: the page's switches (what's off)
 data/settings.json
+# #310: the settings set in Data sources (API keys among them)
+data/atlas-settings.json
+data/brain.json
+data/dataset/
+data/learning/
 # #218: his reminders
 data/reminders.json
 # #68: how Atlas talks (his settings)
@@ -47,6 +52,8 @@ data/plans.json
 data/house/
 # #8: the Vendus key of Atlas's Vendus user
 data/vendus.json
+# #294: WhatsApp's keys (token, app secret) and the numbers allowed to talk to Atlas
+data/whatsapp.json
 # #191: coding tasks: their list and their copies of repos
 data/tasks/
 # Google Cloud (#161): which project each environment is, local only
@@ -59,3 +66,10 @@ data/code/
 data/introspection/
 # Skills (#116): your routines, local only, never commit
 data/skills.json
+# #270: Google Drive tokens, local only, never commit
+data/google-drive-*.json
+# #288: the conversation, kept across restarts (personal), local only
+data/conversations/
+# #290: the household: other people's profiles, and what each had Atlas do (personal data)
+data/profiles/
+data/household/

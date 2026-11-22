@@ -48,7 +48,7 @@ export const appendTurn = (history, role, text, tools) => {
 /**
  * Actions waiting for Renato's OK (Reach 2): each one gets a card with
  * "Add it" / "Don't add".
- * @param {readonly PathStep[]} path @returns {{ id: string, label: string, kind?: "calendar" | "skill" | "email" | "draft-delete" | "fix" | "pr-close" | "task-start" | "task-publish" | "task-merge" | "task-close" | "house" | "lights" | "house-change" | "gap-issue" | "gmail-tidy" | "calendar-change" | "drive" }[]}
+ * @param {readonly PathStep[]} path @returns {{ id: string, label: string, kind?: "calendar" | "skill" | "email" | "draft-delete" | "fix" | "pr-close" | "task-start" | "task-publish" | "task-merge" | "task-close" | "house" | "lights" | "house-change" | "gap-issue" | "gmail-tidy" | "calendar-change" | "drive" | "db-change" }[]}
  */
 export const confirmsOf = (path) =>
   path.flatMap((step) =>
@@ -69,9 +69,10 @@ export const toolsRan = (path) =>
  * `spoken`: a spoken turn (answered for speed, #76); `stickyContext`: the
  * context the spoken conversation was last answered in (used only when the
  * server has STICKY_CONTEXT=on); `brain`: "claude" or "local" (#88).
- * @param {{ question: string, context?: string, history: readonly Turn[], conversationId?: string, remember?: boolean, spoken?: boolean, stickyContext?: string, brain?: "claude" | "local" | "google" }} input
+ * @param {{ question: string, context?: string, history: readonly Turn[], conversationId?: string, remember?: boolean, spoken?: boolean, stickyContext?: string, brain?: "claude" | "local" | "google", user?: string }} input
+ * `user` (#290): who's talking, sent only when it isn't the main user.
  */
-export const buildAskBody = ({ question, context, history, conversationId, remember, spoken, stickyContext, brain }) => ({
+export const buildAskBody = ({ question, context, history, conversationId, remember, spoken, stickyContext, brain, user }) => ({
   question: question.trim().slice(0, LIMITS.questionChars),
   ...(context ? { context } : {}),
   ...(history.length > 0 ? { history: [...history] } : {}),
@@ -80,12 +81,14 @@ export const buildAskBody = ({ question, context, history, conversationId, remem
   ...(spoken ? { spoken: true } : {}),
   ...(spoken && stickyContext && !context ? { stickyContext } : {}),
   ...(brain ? { brain } : {}),
+  ...(user ? { user } : {}),
 });
 
 /** @typedef {"claude" | "local" | "google"} Brain */
 
 /** The page's brain choice (#88; #248: Google): Local unless another was picked. @param {string | null} saved @returns {Brain} */
-export const parseBrain = (saved) => (saved === "claude" || saved === "google" ? saved : "local");
+// #307: with nothing saved, Claude: the brain with his tools (the local one has none but the calendar).
+export const parseBrain = (saved) => (saved === "local" || saved === "google" ? saved : "claude");
 
 /** Each brain's mark and short name. @type {Record<Brain, { icon: string, name: string }>} */
 export const BRAINS = { local: { icon: "🧠", name: "Local" }, claude: { icon: "☁️", name: "Claude" }, google: { icon: "✦", name: "Google" } };
@@ -378,7 +381,7 @@ export const voiceNoteVisible = ({ note, voiceInUse }) => note !== "" && voiceIn
  * @typedef {{ kind: "precheck", result: "none" | "handoff" | "route" }
  *   | { kind: "brain", brain: Brain }
  *   | { kind: "tools", offered: readonly string[] }
- *   | { kind: "tool" | "skill", name: string, args: string, by: "code" | "model", ok: boolean, result?: string, error?: string, confirm?: { id: string, label: string, auto?: boolean, then?: string, kind?: "calendar" | "skill" | "email" | "draft-delete" | "fix" | "pr-close" | "task-start" | "task-publish" | "task-merge" | "task-close" | "house" | "lights" | "house-change" | "gap-issue" | "gmail-tidy" | "calendar-change" | "drive" } }
+ *   | { kind: "tool" | "skill", name: string, args: string, by: "code" | "model", ok: boolean, result?: string, error?: string, confirm?: { id: string, label: string, auto?: boolean, then?: string, kind?: "calendar" | "skill" | "email" | "draft-delete" | "fix" | "pr-close" | "task-start" | "task-publish" | "task-merge" | "task-close" | "house" | "lights" | "house-change" | "gap-issue" | "gmail-tidy" | "calendar-change" | "drive" | "db-change" } }
  *   | { kind: "guard", claimedAction: number, promise: number, perception: number, toolResult?: number, replaced: boolean }} PathStep
  */
 

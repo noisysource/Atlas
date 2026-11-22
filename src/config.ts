@@ -152,13 +152,16 @@ export type Config = {
    * (npm run gcloud:connect -- <env> <project-id>); no key is stored.
    * Local only for now.
    */
-  readonly gcloud: { readonly enabled: boolean; readonly keysPath: string };
+  /** #292 GCLOUD_PROD_WRITES=on: production databases may be changed too (each change after an OK). */
+  readonly gcloud: { readonly enabled: boolean; readonly keysPath: string; readonly prodWrites: boolean };
   /**
    * VENDUS=on (#8): Claude can read KidClub's invoices in Vendus, GET only, two
    * paths. The key of Atlas's own Vendus user is in a file under data/
    * (npm run vendus:connect). Local only for now.
    */
   readonly vendus: { readonly enabled: boolean; readonly keyPath: string };
+  /** #294 WHATSAPP=on: messages from WhatsApp, on a webhook of its own (WHATSAPP_PORT); keys in data/whatsapp.json. */
+  readonly whatsapp: { readonly enabled: boolean; readonly port: number; readonly keyPath: string };
   /**
    * HOUSE=on (#166): Claude can read the house's live state. With
    * HOUSE_CONTROL=on everything goes through Atlas's own domotics user (the
@@ -249,6 +252,12 @@ export type Config = {
   readonly proactive?: { readonly enabled: boolean; readonly from: string; readonly quiet: string };
   /** TOOL_CALLING (#104, default on): Claude decides itself when to use a tool; code validates each call. Off: code decides, as for the local brain. */
   readonly toolCalling: boolean;
+  /** DATASET (#295, default off): every exchange kept as JSONL per person per day; DATASET_OFF leaves people out; DATASET_DRIVE: where the nightly copy goes. */
+  readonly dataset: { readonly enabled: boolean; readonly off: string; readonly drive: string };
+  /** LEARNING (#296, default off; needs DATASET): each night, the day's corrections, undone cards and errors become skill drafts for his OK. */
+  readonly learning: boolean;
+  /** LOCAL_MODE (#312, default on): the Local brain gets every tool, the household's limits off, and undoable changes done at once. Off: Local has no tools, as before. */
+  readonly localMode: boolean;
   /**
    * TOOL_ROUTER (#175, default model): which tools Claude gets per question.
    * "model": the question's words, the last answers' tools and a one-word
@@ -258,6 +267,8 @@ export type Config = {
   readonly toolRouter: "model" | "rules" | "all";
   /** Your name for the persona (ATLAS_USER_NAME, in the gitignored .env); none: "the person you're talking to". */
   readonly userName: string | undefined;
+  /** #290 ATLAS_USERS: the rest of the household (users.ts says how it's written); empty: only him. */
+  readonly users: string | undefined;
   /** Names and phrases memories must never contain (colleagues and the like). Gitignored; missing is fine. */
   readonly neverRememberPath: string;
   readonly secrets: {
@@ -366,6 +377,8 @@ const EnvSchema = z.object({
       .regex(/^[A-Za-z0-9._:/-]{1,100}$/, { error: "must be an Ollama model name, e.g. qwen3:8b" })
       .optional(),
   ),
+  // #290: the rest of the household, e.g. "marisa=Marisa;accounts=marisa;tools=calendar,house" (parsed in users.ts).
+  ATLAS_USERS: z.string().max(1000).optional(),
   ATLAS_USER_NAME: z.preprocess(
     (v) => (typeof v === "string" && v.trim() === "" ? undefined : v),
     z
@@ -396,7 +409,12 @@ const EnvSchema = z.object({
   GMAIL: onOff,
   GITHUB: onOff,
   GCLOUD: onOff,
+  // #292: production databases may be changed too, each change after an OK (dev only needs the OK). Off by default.
+  GCLOUD_PROD_WRITES: onOff,
   VENDUS: onOff,
+  // #294: Atlas on WhatsApp. Its webhook listens on its own port (127.0.0.1), for the tunnel to reach.
+  WHATSAPP: onOff,
+  WHATSAPP_PORT: z.coerce.number().int().min(1024).max(65535).default(8788),
   HOUSE: onOff,
   HOUSE_CONTROL: onOff,
   HOUSE_ENV: z.preprocess((v) => (typeof v === "string" && v.trim() === "" ? undefined : v), z.string().regex(/^[a-z][a-z0-9-]{0,19}$/, { error: "must be an environment name like dev" }).default("dev")),
@@ -538,6 +556,11 @@ const EnvSchema = z.object({
   GEMINI_ROUTER_MODEL: z.string().regex(/^[a-z0-9][a-z0-9.-]{1,60}$/, { error: "must be a Gemini model id, like gemini-3.5-flash-lite" }).default("gemini-3.5-flash-lite"),
   GEMINI_SECRET_NAME: z.string().regex(/^[A-Za-z0-9_-]{1,255}$/).default("gemini-api-key"),
   GEMINI_LIVE: z.enum(["on", "off"]).default("on"),
+  LOCAL_MODE: z.enum(["on", "off"]).default("on"),
+  DATASET: z.enum(["on", "off"]).default("off"),
+  LEARNING: z.enum(["on", "off"]).default("off"),
+  DATASET_OFF: z.string().regex(/^[a-z0-9, -]{0,200}$/, { error: "must be ids like marisa, ines" }).optional(),
+  DATASET_DRIVE: z.string().regex(/^[a-z]{2,20}:[^:<>\\]{1,200}$/, { error: "must be account:folder/path, like noisysource:Atlas/dataset" }).optional(),
   GEMINI_LIVE_MODEL: z.string().regex(/^[a-z0-9][a-z0-9.-]{1,60}$/, { error: "must be a Gemini Live model id, like gemini-3.8-live" }).default("gemini-3.8-live"),
   GEMINI_LIVE_VOICE: z.string().regex(/^[A-Za-z]{2,30}$/, { error: "must be a Gemini voice name, like Charon" }).optional(),
   VENDUS_SECRET_NAME: optionalString,
@@ -630,6 +653,10 @@ export const loadConfig = (given: Env): Result<Config, string> => {
     if (production) errors.push("VENDUS: local only for now (its key is a file on this Mac, not in Secret Manager)");
     if (raw("BARE_MODE") !== "on") errors.push("VENDUS: needs BARE_MODE=on");
   }
+  if (raw("WHATSAPP") === "on") {
+    if (production) errors.push("WHATSAPP: local only for now (its keys are a file on this Mac, not in Secret Manager)");
+    if (raw("BARE_MODE") !== "on") errors.push("WHATSAPP: needs BARE_MODE=on");
+  }
   if (raw("GCLOUD") === "on") {
     if (production) errors.push("GCLOUD: local only for now (it signs in through gcloud on this Mac)");
     if (raw("BARE_MODE") !== "on") errors.push("GCLOUD: needs BARE_MODE=on");
@@ -669,6 +696,9 @@ export const loadConfig = (given: Env): Result<Config, string> => {
       tokensPath: e.GOOGLE_TOKENS_PATH ?? DEFAULTS.googleTokensPath,
     },
     toolCalling: e.TOOL_CALLING !== "off",
+    localMode: e.LOCAL_MODE === "on",
+    learning: e.LEARNING === "on" && e.DATASET === "on",
+    dataset: { enabled: e.DATASET === "on", off: e.DATASET_OFF ?? "", drive: e.DATASET_DRIVE ?? "noisysource:Atlas/dataset" },
     toolRouter: e.TOOL_ROUTER ?? "model",
     bareMemory: e.MEMORY === "on",
     introspection: e.MEMORY === "on" && e.INTROSPECTION === "on",
@@ -687,8 +717,9 @@ export const loadConfig = (given: Env): Result<Config, string> => {
       tokensPath: (account: string) => `data/google-gmail-${account}.json` },
     drive: { enabled: e.DRIVE === "on", write: e.DRIVE === "on" && e.DRIVE_WRITE === "on", tokensPath: (account: string) => `data/google-drive-${account}.json` },
     github: { enabled: e.GITHUB === "on", tokensPath: "data/github-tokens.json" },
-    gcloud: { enabled: e.GCLOUD === "on", keysPath: "data/gcloud" },
+    gcloud: { enabled: e.GCLOUD === "on", keysPath: "data/gcloud", prodWrites: e.GCLOUD_PROD_WRITES === "on" },
     vendus: { enabled: e.VENDUS === "on", keyPath: "data/vendus.json" },
+    whatsapp: { enabled: e.WHATSAPP === "on", port: e.WHATSAPP_PORT, keyPath: "data/whatsapp.json" },
     house: {
       enabled: e.HOUSE === "on" && (e.GCLOUD === "on" || e.HOUSE_CONTROL === "on"),
       env: e.HOUSE_ENV,
@@ -697,6 +728,7 @@ export const loadConfig = (given: Env): Result<Config, string> => {
     codeAgent: { enabled: e.GITHUB === "on" && e.CODE_AGENT === "on", maxUsd: e.CODE_AGENT_MAX_USD, maxTurns: e.CODE_AGENT_MAX_TURNS, reposPath: "data/repos", auth: e.CODE_AGENT_AUTH, model: e.CODE_AGENT_MODEL, study: { maxUsd: e.CODE_STUDY_MAX_USD, maxTurns: e.CODE_STUDY_MAX_TURNS, notesPath: "data/code" }, refresh: { mode: e.CODE_REFRESH, maxStudies: e.CODE_REFRESH_MAX }, tasks: { enabled: e.GITHUB === "on" && e.CODE_AGENT === "on" && e.CODE_TASKS === "on", maxUsd: e.CODE_TASK_MAX_USD, maxTurns: e.CODE_TASK_MAX_TURNS, path: "data/tasks" }, fix: { enabled: e.GITHUB === "on" && e.CODE_AGENT === "on" && e.CODE_FIX === "on", maxUsd: e.CODE_FIX_MAX_USD, maxTurns: e.CODE_FIX_MAX_TURNS, writeTokensPath: "data/github-write-tokens.json", fixesPath: "data/fixes" } },
     ollamaThink: e.OLLAMA_THINK === "on",
     userName: e.ATLAS_USER_NAME,
+    users: e.ATLAS_USERS,
     tts: { provider: e.TTS_PROVIDER ?? DEFAULTS.ttsProvider, voice: e.TTS_VOICE ?? "", kokoroUrl, piperUrl },
     stt: { provider: e.STT_PROVIDER ?? DEFAULTS.sttProvider, whisperUrl, hintsPath: e.WHISPER_HINTS_PATH ?? DEFAULTS.whisperHintsPath },
     turn: {

@@ -25,7 +25,7 @@ export const GROUP_ABOUT: Record<ToolGroup, string> = {
   gmail: "his email: search, read (and PDF attachments), draft, delete drafts",
   github: "his GitHub repos: files, issues, pull requests, CI checks",
   code: "understanding his code: notes on studied repos and apps, studying, asking the code agent",
-  cloud: "his Google Cloud environments: errors, logs and the database",
+  cloud: "his Google Cloud environments: errors, logs and the database, which holds KidClub's business data (families, bills, income, costs)",
   invoices: "KidClub's invoices in Vendus: totals, VAT, one invoice",
   drive: "his Google Drive: list and read folders and files, create folders, save email attachments (like invoices) into a folder",
   house: "the house: heating and its settings, heat pump, thermostats, temperatures, climate history, solar, battery, energy and the electricity bill, the tariff, faults, blinds and lights",
@@ -114,7 +114,16 @@ const RULES: readonly { readonly pattern: RegExp; readonly groups: readonly Tool
     pattern: words(`
       invoic*, billed, billing, revenue, sales, turnover, vat, receipt*, credit note*, vendus, earned, income,
       fatura*, faturacao, faturamos, faturado*, faturei, recibo*, receita*, vendas, iva, nota de credito, notas de credito, ganhamos, quanto ganh*`),
-    groups: ["invoices"],
+    groups: ["invoices", "cloud"],
+  },
+  {
+    // #292: KidClub, the business: its data is in the cloud's database, its invoices in Vendus.
+    pattern: words(`
+      kidclub, kid club, arco iris, arco-iris, business, company, families, family's, clients, customers, students, children enrolled, enrol*,
+      expense*, costs, profit*, margin*, owed, unpaid, overdue, debt*, payments, paid, subscriptions, study room, transport, camp*, parties,
+      negocio*, empresa, familias, clientes, alunos, criancas, inscri*, despesa*, custos, lucro*, margem, divida*, em atraso, pagamento*,
+      pagos, pago, mensalidade*, sala de estudo, transporte*, campo de ferias, festas, decisao, decidir`),
+    groups: ["cloud", "invoices"],
   },
   {
     // #270: Drive, and saving an invoice or attachment there (so the email tools come along).

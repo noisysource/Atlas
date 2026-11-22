@@ -8,6 +8,10 @@ import { showMorningBrief } from "./morning.js";
 import { startTasksPanel, taskGlance } from "./tasks.js";
 import { startRemindersPanel } from "./reminders.js";
 import { makeCostsView } from "./costs.js";
+import { makeSourcesPage } from "./sources-page.js";
+import { makeLogsTab } from "./logs-tab.js";
+import { makeSystemPanel } from "./system-panel.js";
+import { ago } from "./chats-lib.js";
 import { makeLivePlayer, runLiveTurn } from "./live.js";
 import { makeBrainView } from "./brain.js";
 import { startUniverse } from "./universe.js";
@@ -15,9 +19,10 @@ import { voiceLevel } from "./voice-level.js";
 import { makeCodeMapView } from "./codemap.js";
 import { makeStudiesView } from "./studies.js";
 import { makeTraceView } from "./trace.js";
-import { atEnd, clock, conversationText, inlineMarks } from "./terminal-lib.js";
+import { clock, conversationText, inlineMarks, keepsFollowing } from "./terminal-lib.js";
 import { CARD_DONE } from "./turn-lib.js";
 import { cardAnswer } from "./card-lib.js";
+import { currentPerson, placeholderFor, switchPhrase } from "./users-lib.js";
 import {
   CONVERSATION,
   LANGUAGES,
@@ -87,22 +92,56 @@ const transcript = byId("transcript");
 const chatMain = /** @type {HTMLElement} */ (transcript.closest("main") ?? transcript);
 /** The chat scrolls inside its own pane on wide screens, with the page on narrow ones. */
 const scroller = () => (chatMain.scrollHeight > chatMain.clientHeight + 1 && getComputedStyle(chatMain).overflowY !== "visible" ? chatMain : /** @type {HTMLElement} */ (document.scrollingElement ?? document.documentElement));
+// #298: like OpenJarvis: scrolling up stops the following at once; back at the end, it follows again;
+// and while you're up reading, a button takes you to the latest (marked when something new came in).
 let following = true;
+let lastTop = 0;
+const latest = document.createElement("button");
+latest.type = "button";
+latest.className = "jump-latest";
+latest.hidden = true;
+latest.setAttribute("aria-label", "Jump to the latest message");
+latest.textContent = "↓ Latest";
+chatMain.after(latest);
+const showLatest = (/** @type {boolean} */ fresh) => {
+  latest.hidden = following;
+  if (following) latest.classList.remove("fresh");
+  else if (fresh) latest.classList.add("fresh");
+};
 const noteScroll = () => {
   const el = scroller();
-  following = atEnd(el.scrollTop, el.clientHeight, el.scrollHeight);
+  following = keepsFollowing({ following, lastTop, top: el.scrollTop, height: el.clientHeight, total: el.scrollHeight });
+  lastTop = el.scrollTop;
+  showLatest(false);
 };
 chatMain.addEventListener("scroll", noteScroll, { passive: true });
 window.addEventListener("scroll", noteScroll, { passive: true });
-/** Back to the end of the conversation; `force` when you've just asked something. */
+/** Back to the end of the conversation; `force` when you've just asked something (or pressed ↓ Latest). */
 const toEnd = (force = false) => {
   if (force) following = true;
-  if (!following) return;
+  if (!following) {
+    showLatest(true);
+    return;
+  }
   const el = scroller();
   el.scrollTop = el.scrollHeight;
+  lastTop = el.scrollTop;
+  showLatest(false);
 };
-// Streaming text, cards and paths all grow the transcript: follow every change.
-new MutationObserver(() => toEnd()).observe(transcript, { childList: true, subtree: true, characterData: true });
+latest.addEventListener("click", () => {
+  toEnd(true);
+  input.focus({ preventScroll: true });
+});
+// Streaming text, cards and paths all grow the transcript: follow every change (once per frame).
+let endQueued = false;
+new MutationObserver(() => {
+  if (endQueued) return;
+  endQueued = true;
+  requestAnimationFrame(() => {
+    endQueued = false;
+    toEnd();
+  });
+}).observe(transcript, { childList: true, subtree: true, characterData: true });
 window.addEventListener("resize", () => toEnd());
 // #177: the morning brief, as a card above the conversation, once per day.
 void showMorningBrief(transcript);
@@ -142,7 +181,6 @@ const autoNote = byId("auto-note");
 const rememberButton = /** @type {HTMLButtonElement} */ (byId("remember"));
 const memoriesButton = /** @type {HTMLButtonElement} */ (byId("memories"));
 const memoriesBadge = byId("memories-badge");
-const memoriesPanel = /** @type {HTMLDialogElement} */ (byId("memories-panel"));
 const memoriesClose = /** @type {HTMLButtonElement} */ (byId("memories-close"));
 const memoriesList = byId("memories-list");
 const memoriesStatus = byId("memories-status");
@@ -288,11 +326,12 @@ const codeMapView = makeCodeMapView(/** @type {HTMLDialogElement} */ (byId("code
 byId("codemaps").addEventListener("click", () => void codeMapView.open());
 
 // #247: what each service costs, per use or fixed.
-const costsView = makeCostsView(/** @type {HTMLDialogElement} */ (byId("costs-panel")));
-byId("costs").addEventListener("click", () => costsView.open());
+// #300: the costs live in the panel's Costs tab.
+const costsView = makeCostsView(byId("costs-panel"), { show: () => side.open("costs"), close: () => side.close() });
 
 // #143: how he got there, for the current answer, as a tree that grows while he works.
-const traceView = makeTraceView(brainView.traceSlot);
+// #309: in the System panel, under the session and cost cards.
+const traceView = makeTraceView(byId("trace-slot"));
 
 // The universe behind the page: its photons follow what Atlas is doing, and stream in and out of the star while he thinks.
 startUniverse(/** @type {HTMLCanvasElement} */ (byId("universe")), {
@@ -321,22 +360,105 @@ startUniverse(/** @type {HTMLCanvasElement} */ (byId("universe")), {
   requestAnimationFrame(pulse);
 }
 
-// Settings: the controls live in a panel behind the gear, out of the way.
-const settingsToggle = /** @type {HTMLButtonElement} */ (byId("settings-toggle"));
-const settingsPanel = byId("settings");
-/** @param {boolean} open */
-const showSettings = (open) => {
-  settingsPanel.hidden = !open;
-  settingsToggle.setAttribute("aria-expanded", String(open));
-};
-settingsToggle.addEventListener("click", () => showSettings(settingsPanel.hidden === true));
+// #307: OpenJarvis-style pages. The menu on the left picks one: Chat (the galaxy and the conversation), or
+// Dashboard, Tools, Memory, Skills, Logs, Settings, shown in the middle in its place. (#300's
+// panel became these pages: `side` keeps its name, open(tab) shows a page, close() goes back to Chat.)
+const sidePanel = byId("side");
+const toolsTab = byId("tools-tab");
+const logsTab = makeLogsTab(byId("logs-tab"));
+const sourcesPage = makeSourcesPage(toolsTab, { nodes: () => reachNodes });
+/** @type {import("./brain.js").ReachNode[]} */
+let reachNodes = [];
+const side = (() => {
+  const tabs = /** @type {HTMLButtonElement[]} */ ([...document.querySelectorAll('.rail [role="tab"]')]);
+  const panes = /** @type {HTMLElement[]} */ ([...sidePanel.querySelectorAll(".side-tab")]);
+  /** @type {string} */
+  let current = "chat";
+  const mark = () => {
+    const shown = sidePanel.hidden ? "chat" : current;
+    for (const t of tabs) t.setAttribute("aria-selected", String(t.dataset.tab === shown));
+  };
+  const select = (/** @type {string} */ tab) => {
+    const usable = panes.some((p) => p.dataset.tab === tab) ? tab : "settings";
+    current = usable;
+    for (const p of panes) p.hidden = p.dataset.tab !== usable;
+    // #310: Tools: every setting, by source, set here instead of .env.
+    if (usable === "tools") void sourcesPage.load();
+  };
+  const show = (/** @type {boolean} */ open) => {
+    sidePanel.hidden = !open;
+    // #305: the log is read only while its page shows.
+    if (open && current === "logs") logsTab.start();
+    else logsTab.stop();
+    document.body.dataset.side = String(open);
+    document.body.dataset.page = open ? current : "chat";
+    mark();
+    try {
+      localStorage.setItem("atlas.page", open ? current : "chat");
+    } catch {
+      // Not kept: fine.
+    }
+    // The chat keeps its place: following the end (#298) or not.
+    window.dispatchEvent(new Event("resize"));
+  };
+  for (const t of tabs)
+    t.addEventListener("click", () => {
+      const tab = t.dataset.tab ?? "chat";
+      // The pages with their own loading do it through their open (memories, skills, costs).
+      if (tab === "chat") api.close();
+      else if (tab === "memory") void openMemories();
+      else if (tab === "skills") void openSkills();
+      else if (tab === "costs") costsView.open();
+      else api.open(tab);
+    });
+  const api = {
+    /** Shows a page. @param {string} [tab] */
+    open: (/** @type {string | undefined} */ tab) => {
+      select(tab ?? current);
+      show(true);
+    },
+    /** Back to Chat. */
+    close: () => {
+      show(false);
+      input.focus({ preventScroll: true });
+    },
+    get isOpen() {
+      return !sidePanel.hidden;
+    },
+    get tab() {
+      return current;
+    },
+  };
+  return api;
+})();
 document.addEventListener("keydown", (e) => {
-  if (e.key === "Escape" && !settingsPanel.hidden && !document.querySelector("dialog[open]")) showSettings(false);
+  if (e.key === "Escape" && side.isOpen && !document.querySelector("dialog[open]")) side.close();
 });
-document.addEventListener("pointerdown", (e) => {
-  const t = /** @type {Node} */ (e.target);
-  if (!settingsPanel.hidden && !settingsPanel.contains(t) && !settingsToggle.contains(t) && !document.querySelector("dialog[open]")?.contains(t)) showSettings(false);
-});
+
+// #307: the galaxy sits on top of the chat and folds away; it stays as you left it.
+{
+  const band = /** @type {HTMLElement} */ (document.querySelector(".galaxy-band"));
+  const toggle = /** @type {HTMLButtonElement} */ (byId("galaxy-toggle"));
+  const set = (/** @type {boolean} */ open) => {
+    band.dataset.open = String(open);
+    toggle.setAttribute("aria-expanded", String(open));
+    toggle.textContent = open ? "▾ Galaxy" : "▸ Galaxy";
+    try {
+      localStorage.setItem("atlas.galaxy", open ? "open" : "folded");
+    } catch {
+      // Not kept: fine.
+    }
+    window.dispatchEvent(new Event("resize"));
+  };
+  let saved = "open";
+  try {
+    saved = localStorage.getItem("atlas.galaxy") ?? "open";
+  } catch {
+    // Open by default.
+  }
+  set(saved !== "folded");
+  toggle.addEventListener("click", () => set(band.dataset.open !== "true"));
+}
 
 // #156: what the code agent is studying in the background, live, with Stop.
 const studiesView = makeStudiesView(brainView.studiesSlot, {
@@ -353,14 +475,19 @@ const refreshReach = async () => {
     const res = await fetch("/reach", { cache: "no-store" });
     if (!res.ok) return;
     const body = /** @type {{ nodes?: unknown }} */ (await res.json());
-    if (Array.isArray(body.nodes)) brainView.setReach(/** @type {import("./brain.js").ReachNode[]} */ (body.nodes));
+    if (Array.isArray(body.nodes)) {
+      reachNodes = /** @type {import("./brain.js").ReachNode[]} */ (body.nodes);
+      brainView.setReach(reachNodes);
+      if (side.isOpen && side.tab === "tools") sourcesPage.render();
+      systemPanel?.render();
+    }
   } catch {
     // The panels say they couldn't load; nothing else depends on it.
   }
 };
 
 /** Cards still waiting for an OK, counted per node for the badges (#133). */
-const NODE_OF_CARD = { calendar: "calendar", email: "gmail", "draft-delete": "gmail", skill: "skills", fix: "code", "pr-close": "github", "task-start": "code", "task-publish": "code", "task-merge": "code", "task-close": "code", house: "house", lights: "house", "house-change": "house", "gap-issue": "github", "gmail-tidy": "gmail", "calendar-change": "calendar", drive: "drive" };
+const NODE_OF_CARD = { calendar: "calendar", email: "gmail", "draft-delete": "gmail", skill: "skills", fix: "code", "pr-close": "github", "task-start": "code", "task-publish": "code", "task-merge": "code", "task-close": "code", house: "house", lights: "house", "house-change": "house", "gap-issue": "github", "gmail-tidy": "gmail", "calendar-change": "calendar", drive: "drive", "db-change": "cloud" };
 const refreshPending = () => {
   /** @type {Record<string, number>} */
   const counts = {};
@@ -464,6 +591,8 @@ const CARDS = {
   "calendar-change": { ask: (/** @type {string} */ l) => `${l}?`, yes: "Do it", no: "Leave it", endpoint: "/calendar/change", failed: "nothing changed" },
   "gmail-tidy": { ask: (/** @type {string} */ l) => `Tidy the inbox? ${l}. Archived email stays in All Mail; nothing is deleted.`, yes: "Tidy it", no: "Leave it", endpoint: "/gmail/tidy", failed: "nothing changed" },
   drive: { ask: (/** @type {string} */ l) => `Change Drive? ${l}. Nothing is deleted, moved or shared.`, yes: "Do it", no: "Leave it", endpoint: "/drive/confirm", failed: "nothing changed in Drive" },
+  // #292: a change to one document of a database; the label says when it's production.
+  "db-change": { ask: (/** @type {string} */ l) => `Change the database? ${l}. The old version is kept first.`, yes: "Change it", no: "Leave it", endpoint: "/gcloud/db/confirm", failed: "nothing changed in the database" },
   "gap-issue": { ask: (/** @type {string} */ l) => `Open an issue ${l}? It says what I couldn't do, with no personal details.`, yes: "Open it", no: "Not now", endpoint: "/gaps/issue", failed: "no issue was opened" },
   house: { ask: (/** @type {string} */ l) => `Move the blinds? ${l}.`, yes: "Move them", no: "Leave them", endpoint: "/house/blinds", failed: "nothing moved" },
   lights: { ask: (/** @type {string} */ l) => `Change the lights? ${l}.`, yes: "Do it", no: "Leave them", endpoint: "/house/lights", failed: "nothing changed" },
@@ -482,7 +611,7 @@ const CARDS = {
  * is worded by code and goes into the history with what really ran.
  * #269: a small, undoable change (`auto`) is done at once, with no question:
  * the card becomes one line saying what happened, with Undo for a calendar event.
- * @param {{ id: string, label: string, auto?: boolean, then?: string, kind?: "calendar" | "skill" | "email" | "draft-delete" | "fix" | "pr-close" | "task-start" | "task-publish" | "task-merge" | "task-close" | "house" | "lights" | "house-change" | "gap-issue" | "gmail-tidy" | "calendar-change" | "drive" }} proposal
+ * @param {{ id: string, label: string, auto?: boolean, then?: string, kind?: "calendar" | "skill" | "email" | "draft-delete" | "fix" | "pr-close" | "task-start" | "task-publish" | "task-merge" | "task-close" | "house" | "lights" | "house-change" | "gap-issue" | "gmail-tidy" | "calendar-change" | "drive" | "db-change" }} proposal
  */
 const confirmCard = (proposal) => {
   const auto = proposal.auto === true;
@@ -534,6 +663,9 @@ const confirmCard = (proposal) => {
       const stillWaiting = [...document.querySelectorAll('.confirm[data-pending="true"]')].some((c) => NODE_OF_CARD[/** @type {keyof typeof NODE_OF_CARD} */ (/** @type {HTMLElement} */ (c).dataset.kind ?? "")] === node);
       if (node && !stillWaiting) brainView.decided(/** @type {import("./brain-lib.js").NodeId} */ (node), outcome);
       markDecided(card, outcome);
+      keepOutcome({ card: kind, label: proposal.label, decision: outcome === "done" ? "approved" : outcome === "declined" ? "declined" : "failed", auto });
+      // #290: written down for the household (kept only while sharing is on).
+      if (decision === "yes" && result.ok) people.record(kind, proposal.label);
       if (auto) {
         // #269: no new message and nothing said aloud: the line itself says what happened.
         what.textContent = text;
@@ -619,6 +751,20 @@ const carryOn = (then) => {
 /** @type {Map<string, number>} */
 const carriedOn = new Map();
 
+/**
+ * #295: what happened to a card, for Atlas's dataset (kept only when DATASET=on).
+ * @param {{ card: string, label: string, decision: "approved" | "declined" | "failed" | "undone", auto?: boolean }} o
+ */
+const keepOutcome = (o) => {
+  let who = "renato";
+  try {
+    who = people.who();
+  } catch {
+    // Not ready yet: his.
+  }
+  void fetch("/dataset/outcome", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ ...o, who, conversationId: state.conversationId }) }).catch(() => undefined);
+};
+
 /** #269: Undo for an event added without a card. @param {string} token @param {HTMLElement} line */
 const undoButton = (token, line) => {
   const b = document.createElement("button");
@@ -636,6 +782,7 @@ const undoButton = (token, line) => {
       r = { ok: false, text: "I can't reach Atlas, so it's still on your calendar." };
     }
     line.textContent = typeof r.text === "string" ? r.text : "Something went wrong, so it's still on your calendar.";
+    if (r.ok) keepOutcome({ card: "calendar", label: line.textContent.slice(0, 200), decision: "undone", auto: true });
     if (r.ok) b.remove();
     else b.disabled = false;
     state.history = appendTurn(state.history, "assistant", line.textContent, typeof r.tool === "string" ? [`${r.tool} ${CARD_DONE}`] : []);
@@ -731,6 +878,8 @@ const renderControls = () => {
   brainButton.setAttribute("aria-pressed", String(state.brain !== "local"));
   brainButton.textContent = `${brainIcon(state.brain)} ${brainName(state.brain)}`;
   brainButton.title = `Answering: ${brainLabels[state.brain] ?? state.brain}. Tap to switch: ${brainsAvailable.map(brainName).join(", ")}.`;
+  // #307: the System panel shows the brain too.
+  systemPanel?.render();
   conversationButton.setAttribute("aria-pressed", String(state.conversation));
   conversationButton.textContent = state.conversation ? "💬 Conversation on" : "💬 Conversation off";
   autoNote.hidden = !(state.conversation && state.autoBlocked);
@@ -1291,6 +1440,7 @@ const ask = async (question, context, hidden = false) => {
           spoken: timing.spoken,
           stickyContext: state.lastContext,
           brain: state.brain,
+          ...(people.asking() ? { user: people.asking() } : {}),
         }),
       ),
       signal: controller.signal,
@@ -1467,6 +1617,12 @@ const submit = (raw, how = {}) => {
     return;
   }
   input.value = "";
+  // #290: "it's Marisa" / "sou a Marisa": her conversation, then the question goes on as hers.
+  const someone = people.saysWho(text);
+  if (someone) {
+    void people.switchTo(someone.id, how.spoken === true).then(() => submit(text, how));
+    return;
+  }
   // #224: "yes" / "no" (spoken or typed) answers the card waiting for an OK, as if its button was pressed.
   const card = latestPendingCard();
   const said = card ? cardAnswer(text, { yes: card.dataset.yes, no: card.dataset.no }) : undefined;
@@ -1996,7 +2152,14 @@ let memoryContexts = [];
 
 /** @param {string} path @param {RequestInit} [init] */
 const memoryRequest = async (path, init) => {
-  const res = await fetch(path, init);
+  // Each person sees only their own memories (#290). Early on, before the household is read, it's his.
+  let who = "renato";
+  try {
+    who = people.who();
+  } catch {
+    // Not ready yet.
+  }
+  const res = await fetch(`${path}${path.includes("?") ? "&" : "?"}who=${encodeURIComponent(who)}`, init);
   const body = await res.json().catch(() => null);
   if (!res.ok) throw new Error(body && typeof body.message === "string" ? body.message : `status ${res.status}`);
   return body;
@@ -2118,7 +2281,7 @@ const wipeContext = async (contextId, name, count) => {
 const openMemories = async () => {
   setMemoriesStatus("Loading…");
   memoriesList.replaceChildren();
-  memoriesPanel.showModal();
+  side.open("memory");
   try {
     await loadMemories();
     setMemoriesStatus("");
@@ -2141,11 +2304,16 @@ const openMemories = async () => {
 // ---- skills panel (#116) ----
 
 const skillsButton = /** @type {HTMLButtonElement} */ (byId("skills"));
-const skillsPanel = /** @type {HTMLDialogElement} */ (byId("skills-panel"));
 const skillsList = byId("skills-list");
 const skillsStatus = byId("skills-status");
 
-/** @typedef {{ id: string, title: string, when: string, steps: string[], status: "draft" | "active", source: string }} SkillView */
+/** @typedef {{ id: string, title: string, when: string, steps: string[], status: "draft" | "active", source: string, from?: string }} SkillView */
+
+/** "imported from owner/repo", from a raw GitHub link. Exported for tests via the page only. @param {string | undefined} from */
+const importedFrom = (from) => {
+  const m = typeof from === "string" ? /^https:\/\/raw\.githubusercontent\.com\/([^/]+)\/([^/]+)\//.exec(from) : null;
+  return m ? `imported from ${m[1]}/${m[2]}` : "imported";
+};
 
 /** @param {"approve" | "delete"} decision @param {string} id */
 const decideSkill = async (decision, id) => {
@@ -2175,7 +2343,7 @@ const renderSkills = async () => {
       head.textContent = `${s.status === "draft" ? "Draft · " : "✨ "}${s.title}`;
       const when = document.createElement("p");
       when.className = "memory-meta";
-      when.textContent = `When: ${s.when} · ${s.source === "introspection" ? "drafted overnight" : "taught in chat"}`;
+      when.textContent = `When: ${s.when} · ${s.source === "introspection" ? "drafted overnight" : s.source === "learning" ? "learned from yesterday" : s.source === "imported" ? importedFrom(s.from) : "taught in chat"}`;
       const steps = document.createElement("ol");
       for (const step of s.steps) steps.append(Object.assign(document.createElement("li"), { textContent: step }));
       const actions = document.createElement("div");
@@ -2197,7 +2365,7 @@ const renderSkills = async () => {
 const openSkills = async () => {
   skillsStatus.textContent = "Loading…";
   skillsList.replaceChildren();
-  skillsPanel.showModal();
+  side.open("skills");
   try {
     await renderSkills();
     skillsStatus.textContent = "";
@@ -2206,9 +2374,30 @@ const openSkills = async () => {
   }
 };
 
-skillsButton.addEventListener("click", () => void openSkills());
-byId("skills-close").addEventListener("click", () => skillsPanel.close());
-skillsPanel.addEventListener("close", () => input.focus());
+byId("skills-close").addEventListener("click", () => side.close());
+
+// #297: skills from GitHub, as drafts.
+const skillsImport = /** @type {HTMLFormElement} */ (byId("skills-import"));
+skillsImport.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const input = /** @type {HTMLInputElement} */ (byId("skills-import-link"));
+  const go = /** @type {HTMLButtonElement} */ (skillsImport.querySelector("button"));
+  go.disabled = true;
+  skillsStatus.textContent = "Reading it from GitHub…";
+  try {
+    const res = await fetch("/skills/import", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ link: /^https:\/\//.test(input.value.trim()) ? input.value.trim() : `https://${input.value.trim().replace(/^\/+/, "")}` }) });
+    const body = await res.json().catch(() => ({}));
+    skillsStatus.textContent = typeof body.text === "string" ? body.text : typeof body.message === "string" ? body.message : "Couldn't import it.";
+    if (res.ok) {
+      input.value = "";
+      await renderSkills();
+    }
+  } catch {
+    skillsStatus.textContent = "Couldn't reach Atlas.";
+  } finally {
+    go.disabled = false;
+  }
+});
 // The button shows only when the server has skills (MEMORY=on).
 fetch("/skills")
   .then((res) => {
@@ -2216,9 +2405,7 @@ fetch("/skills")
   })
   .catch(() => undefined);
 
-memoriesButton.addEventListener("click", () => void openMemories());
-memoriesClose.addEventListener("click", () => memoriesPanel.close());
-memoriesPanel.addEventListener("close", () => input.focus());
+memoriesClose.addEventListener("click", () => side.close());
 
 rememberButton.addEventListener("click", () => {
   state.remember = !state.remember;
@@ -2283,6 +2470,8 @@ copyAllButton.addEventListener("click", () => {
 });
 
 newButton.addEventListener("click", () => {
+  // #309: the one just finished goes in the list first.
+  void keeper.keep();
   endVoice("reset");
   stopSpeaking("new-conversation");
   retirePending();
@@ -2293,6 +2482,7 @@ newButton.addEventListener("click", () => {
   transcript.replaceChildren();
   setStatus("New conversation.");
   renderControls();
+  chats.render();
   input.focus();
 });
 
@@ -2331,9 +2521,14 @@ const showCalendarNote = () => {
   save(CALENDAR_NOTE_SEEN, "1");
 };
 
+/** #312: tells Atlas which brain the page is on, so WhatsApp answers with the same one. */
+const shareBrain = () =>
+  void fetch("/brain", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ brain: state.brain }) }).catch(() => undefined);
+
 brainButton.addEventListener("click", () => {
   state.brain = nextBrain(state.brain, brainsAvailable);
   save("atlas.brain", state.brain);
+  shareBrain();
   renderControls();
   showCalendarNote();
 });
@@ -2350,6 +2545,7 @@ void fetch("/brains")
     if (brainsAvailable.length === 0) brainsAvailable = ["local", "claude"];
     // A saved Google choice with Google switched off falls back to Claude.
     if (!brainsAvailable.includes(state.brain)) state.brain = "claude";
+    shareBrain();
     calendarOn = body?.calendar === true;
     renderControls();
     showCalendarNote();
@@ -2419,3 +2615,261 @@ void fetch("/brains")
   void loop();
   setInterval(sayQueued, 2_000);
 }
+
+// #288: the conversation, kept across restarts. When the page opens it asks
+// for the last one back (a restart, a deploy or a reload carries on where he
+// left off); after each turn it sends the last turns to be kept.
+// #290: one per person; the page asks for whoever is talking.
+const keeper = (() => {
+  const who = () => people.who();
+  /** @type {import("./chat.js").Turn[] | undefined} */
+  let saved;
+  let restoring = true;
+  /** Puts a kept conversation on the (empty) page, dimmed, with a line saying when it's from. @param {any} c @param {string} said */
+  const show = (c, said) => {
+    state.history = c.history;
+    state.conversationId = typeof c.conversationId === "string" ? c.conversationId : state.conversationId;
+    saved = state.history;
+    for (const t of c.history) {
+      const item = addMessage(t.role === "user" ? "user" : "answer", String(t.text ?? ""));
+      item.classList.add("earlier");
+    }
+    const line = document.createElement("li");
+    line.className = "earlier-line";
+    const at = typeof c.savedAt === "string" ? new Date(c.savedAt) : undefined;
+    line.textContent = `— ${said}${at && !Number.isNaN(at.getTime()) ? `, ${at.toLocaleString("en-GB", { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", hourCycle: "h23" })}` : ""} —`;
+    transcript.append(line);
+    line.scrollIntoView({ block: "end" });
+  };
+  const restore = async () => {
+    restoring = true;
+    saved = undefined;
+    try {
+      const res = await fetch(`/conversation?who=${encodeURIComponent(who())}`, { cache: "no-store" });
+      if (!res.ok) return;
+      const body = await res.json();
+      const c = body?.conversation;
+      // Only into an empty page: never over a conversation already going.
+      if (!c || !Array.isArray(c.history) || c.history.length === 0 || state.history.length > 0 || transcript.children.length > 0) return;
+      show(c, "picked up where we left off");
+    } catch {
+      // Nothing kept, or Atlas is still starting: a fresh conversation.
+    } finally {
+      restoring = false;
+      chats.refresh();
+    }
+  };
+  /** Saves the conversation now, if it changed. */
+  const keep = async () => {
+    if (restoring || state.history === saved || state.history.length === 0) return;
+    saved = state.history;
+    try {
+      await fetch(`/conversation?who=${encodeURIComponent(who())}`, {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ conversationId: state.conversationId, history: state.history }),
+      });
+      chats.refresh();
+    } catch {
+      // Kept on the next try.
+    }
+  };
+  /** #309: back to an earlier conversation, from the list. This one is kept first. @param {string} id */
+  const open = async (id) => {
+    if (id === state.conversationId) return;
+    await keep();
+    restoring = true;
+    try {
+      const res = await fetch(`/conversation?who=${encodeURIComponent(who())}&id=${encodeURIComponent(id)}`, { cache: "no-store" });
+      const c = res.ok ? (await res.json())?.conversation : undefined;
+      if (!c || !Array.isArray(c.history)) return;
+      endVoice("reset");
+      stopSpeaking("new-conversation");
+      retirePending();
+      transcript.replaceChildren();
+      state.lastContext = undefined;
+      show(c, "an earlier conversation");
+      side.close();
+    } catch {
+      setStatus("Couldn't open that conversation.");
+    } finally {
+      restoring = false;
+      chats.refresh();
+    }
+  };
+  setInterval(() => void keep(), 2_000);
+  window.addEventListener("pagehide", () => void keep());
+  return { keep, restore, open };
+})();
+
+// #309: the conversations so far, under ＋ in the menu: newest first, the open one marked, a search, and × to forget one.
+const chats = (() => {
+  const list = byId("chat-list");
+  const search = /** @type {HTMLInputElement} */ (byId("chat-search"));
+  /** @type {{ conversationId: string, title: string, savedAt: string, turns: number }[]} */
+  let all = [];
+  /** @type {ReturnType<typeof setTimeout> | undefined} */
+  let timer;
+  const render = () => {
+    const q = search.value.trim().toLowerCase();
+    const shown = all.filter((c) => q === "" || c.title.toLowerCase().includes(q));
+    list.replaceChildren(
+      ...shown.map((c) => {
+        const li = document.createElement("li");
+        li.className = "chat-item";
+        if (c.conversationId === state.conversationId) li.setAttribute("aria-current", "true");
+        const openIt = document.createElement("button");
+        openIt.type = "button";
+        openIt.className = "chat-open";
+        const title = document.createElement("span");
+        title.className = "chat-title";
+        title.textContent = c.title;
+        const when = document.createElement("span");
+        when.className = "chat-when";
+        when.textContent = ago(c.savedAt);
+        openIt.append(title, when);
+        openIt.addEventListener("click", () => void keeper.open(c.conversationId));
+        const forget = document.createElement("button");
+        forget.type = "button";
+        forget.className = "chat-forget";
+        forget.textContent = "×";
+        forget.setAttribute("aria-label", `Forget "${c.title}"`);
+        forget.addEventListener("click", async () => {
+          await fetch(`/conversation?who=${encodeURIComponent(people.who())}&id=${encodeURIComponent(c.conversationId)}`, { method: "DELETE" }).catch(() => undefined);
+          refresh();
+        });
+        li.append(openIt, forget);
+        return li;
+      }),
+    );
+  };
+  const load = async () => {
+    try {
+      const res = await fetch(`/conversations?who=${encodeURIComponent(people.who())}`, { cache: "no-store" });
+      const body = res.ok ? await res.json() : undefined;
+      all = Array.isArray(body?.conversations) ? body.conversations : [];
+    } catch {
+      all = [];
+    }
+    render();
+  };
+  /** Reads the list again, soon (several saves in a row make one read). */
+  const refresh = () => {
+    if (timer) clearTimeout(timer);
+    timer = setTimeout(() => void load(), 300);
+  };
+  search.addEventListener("input", render);
+  return { refresh, render };
+})();
+
+// #290: who's talking. Atlas is shared with the household: each person has
+// their own conversation (and, on Atlas's side, memories, profile and tools).
+// The settings pick who; saying "it's Marisa" switches too. One switch shares
+// what each of them has Atlas do, so he doesn't book or do it twice.
+const people = (() => {
+  /** @type {import("./users-lib.js").Person[]} */
+  let list = [];
+  /** @type {import("./users-lib.js").Person | undefined} */
+  let current;
+  const pick = /** @type {HTMLSelectElement} */ (byId("user"));
+  const sharingButton = /** @type {HTMLButtonElement} */ (byId("sharing"));
+  const renderSharing = (/** @type {boolean} */ on) => {
+    sharingButton.setAttribute("aria-pressed", String(on));
+    sharingButton.textContent = `🤝 Sharing: ${on ? "on" : "off"}`;
+  };
+  const show = () => {
+    input.placeholder = placeholderFor(current, list);
+    // #307: the menu says whose Atlas this is, when it isn't the main user's.
+    const railWho = byId("rail-who");
+    railWho.hidden = !(current && list[0] && current.id !== list[0].id);
+    railWho.textContent = current ? `Talking as ${current.name}` : "";
+    systemPanel?.render();
+    document.body.dataset.user = current?.id ?? "";
+    pick.value = current?.id ?? "";
+  };
+  /**
+   * Moves the page to someone else's conversation: his is kept, hers comes back.
+   * `spoken`: she said who she is aloud, so the voice conversation goes on.
+   * @param {string} id @param {boolean} [spoken]
+   */
+  const switchTo = async (id, spoken = false) => {
+    const next = list.find((p) => p.id === id);
+    if (!next || next.id === current?.id) return;
+    keeper.keep();
+    if (!spoken) endVoice("reset");
+    stopSpeaking("new-conversation");
+    retirePending();
+    current = next;
+    save("atlas.user", next.id);
+    state.history = [];
+    state.conversationId = newConversationId(randomBytes);
+    state.lastContext = undefined;
+    state.remember = true;
+    transcript.replaceChildren();
+    show();
+    renderControls();
+    await keeper.restore();
+    void refreshBadge();
+    setStatus(`Talking to ${next.name}.`);
+  };
+  pick.addEventListener("change", () => void switchTo(pick.value));
+  sharingButton.addEventListener("click", async () => {
+    const on = sharingButton.getAttribute("aria-pressed") !== "true";
+    try {
+      const res = await fetch("/household/sharing", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ on }) });
+      if (!res.ok) throw new Error("refused");
+      renderSharing(on);
+      setStatus(on ? "Sharing on: what each of you has Atlas do is shared from now." : "Sharing off: nothing is shared, and what was kept is cleared.");
+    } catch {
+      setStatus("Couldn't change sharing.");
+    }
+  });
+  const ready = (async () => {
+    try {
+      const res = await fetch("/users", { cache: "no-store" });
+      if (!res.ok) return;
+      const body = await res.json();
+      list = Array.isArray(body?.users) ? body.users.filter((/** @type {any} */ p) => typeof p?.id === "string" && typeof p?.name === "string") : [];
+      current = currentPerson(load("atlas.user"), list);
+      pick.replaceChildren(...list.map((p) => Object.assign(document.createElement("option"), { value: p.id, textContent: p.name })));
+      byId("user-pick").hidden = list.length < 2;
+      sharingButton.hidden = list.length < 2 || typeof body?.sharing !== "boolean";
+      renderSharing(body?.sharing === true);
+      show();
+    } catch {
+      // Atlas is still starting, or has no household: just him.
+    }
+  })();
+  return {
+    ready,
+    /** The id for the conversation file: whoever is talking. */
+    who: () => current?.id ?? "renato",
+    /** #307: who's talking, by name, when the household has more than one person. */
+    name: () => (list.length > 1 ? current?.name : undefined),
+    /** The id sent with a question, when it isn't the main user (so his requests are as before). */
+    asking: () => (current && list[0] && current.id !== list[0].id ? current.id : undefined),
+    /** Someone else of the household saying who they are. @param {string} text */
+    saysWho: (text) => {
+      const p = list.length > 1 ? switchPhrase(text, list) : undefined;
+      return p && p.id !== current?.id ? p : undefined;
+    },
+    switchTo,
+    /** @param {string} kind @param {string} label */
+    record: (kind, label) => {
+      if (list.length < 2 || sharingButton.getAttribute("aria-pressed") !== "true") return;
+      void fetch("/household/record", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ who: current?.id, kind, label: label.slice(0, 200) }) }).catch(() => undefined);
+    },
+  };
+})();
+
+// Once it knows who's talking, the page asks for their conversation back.
+void people.ready.then(() => keeper.restore());
+
+// #307: the System panel on the right: this session, the brain, what's connected, what it costs.
+/** @type {ReturnType<typeof makeSystemPanel> | undefined} */
+var systemPanel = makeSystemPanel(byId("system"), {
+  brain: () => brainName(state.brain),
+  switchBrain: () => brainButton.click(),
+  who: () => people.name(),
+  sources: () => ({ on: reachNodes.filter((n) => n.status === "on" || n.status === "ready").length, all: reachNodes.filter((n) => n.status !== "kiro").length }),
+});
