@@ -49,6 +49,7 @@ describe("loadConfig", () => {
       localMode: true,
       dataset: { enabled: false, off: "", drive: "noisysource:Atlas/dataset" },
       learning: false,
+      country: "PT",
       ollamaThink: false,
       userName: undefined,
       contextsPath: "contexts.md",

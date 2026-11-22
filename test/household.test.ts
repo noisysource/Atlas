@@ -2,6 +2,7 @@
 // person's memories, profile, accounts and tools apart, and, when the
 // household's sharing is on, tells each what the other had it do.
 
+import { vendusConnector } from "../src/connectors/vendus.js";
 import { mkdtemp, readFile, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -158,7 +159,7 @@ describe("an answer for Marisa (#290)", () => {
       userName: "Renato",
       tools: true,
       calendar: { read: async () => ok([]), timeZone: "Europe/Lisbon", now: () => NOW },
-      vendus: { get: async () => ok({}), timeZone: "Europe/Lisbon" },
+      connectors: [vendusConnector({ get: async () => ok({}), timeZone: "Europe/Lisbon" })],
     });
     await answer({ context: personal, question: "Olá", history: [], memories: [], now: NOW, user: marisaOf(users) });
     const r = requests[0] as LlmRequest;
@@ -188,7 +189,7 @@ describe("an answer for Marisa (#290)", () => {
       userName: "Renato",
       tools: true,
       calendar: { read: reader("personal"), accounts: { personal: reader("personal"), noisysource: reader("noisysource"), marisa: reader("marisa") }, timeZone: "Europe/Lisbon", now: () => NOW },
-      vendus: { get: async () => ok({}), timeZone: "Europe/Lisbon" },
+      connectors: [vendusConnector({ get: async () => ok({}), timeZone: "Europe/Lisbon" })],
     });
     const steps: { name: string; ok: boolean; error?: string }[] = [];
     await answer({ context: personal, question: "What's on today?", history: [], memories: [], now: NOW, user: marisaOf(users), onStep: (s) => void (s.kind === "tool" && steps.push(s)) });

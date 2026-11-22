@@ -58,7 +58,7 @@ import { blindsForBrain, HOUSE_BLINDS_TOOL, type Blinds } from "../house/blinds.
 import { HOUSE_LIGHTS_TOOL, lightsForBrain, type Lights } from "../house/lights.js";
 import { checkRange, HOUSE_CLIMATE_TOOL, HOUSE_ENERGY_TOOL, HOUSE_INCIDENTS_TOOL, HOUSE_READ_TOOLS, HOUSE_SETTINGS_TOOL, type readHouse } from "../house/house-data.js";
 import { HOUSE_CHANGE_TOOLS, type HouseChanges } from "../house/house-changes.js";
-import { checkInvoicesRequest, invoiceForBrain, invoicesForBrain, listInvoices, VENDUS_INVOICES_TOOL, VENDUS_TOOLS, type VendusGet } from "../vendus/vendus.js";
+import { connectorOf, type Connector } from "../connectors/types.js";
 import { staleNote, staleSuffix, type CodeRefresh } from "../code/freshness.js";
 import { checkStart, TASK_LIST_TOOL, TASK_MERGE_TOOL, TASK_PUBLISH_TOOL, TASK_START_TOOL, TASK_TELL_TOOL, TASK_TOOLS, taskForBrain, type Tasks } from "../code/tasks.js";
 import { checkFixRequest, CODE_FIX_TOOL, type Fixes } from "../code/fix.js";
@@ -341,7 +341,8 @@ export const barePrompt = (
     /** It can read errors and logs in his Google Cloud environments (#161). With tools only. */
     readonly gcloud?: boolean;
     /** It can read KidClub's invoices in Vendus (#9). With tools only. */
-    readonly vendus?: boolean;
+    /** #168: the plugged-in connectors' lines, when their tools can be offered. */
+    readonly connectors?: readonly string[];
     /** It can read the house's state (#166). With tools only. */
     readonly house?: boolean;
     /** #166: the whole house as Atlas's domotics user: history, settings and changes after an OK. */
@@ -415,12 +416,7 @@ export const barePrompt = (
           "Not every tool is offered on every question: Atlas offers the groups the question seems to need. If you need a group that isn't offered, call tools_more with it first, then use its tools. Never say you can't do something because its tool isn't offered right now.",
         ]
       : [];
-  const vendusLines =
-    options.vendus === true && options.tools === true
-      ? [
-          "You can read KidClub's invoices in Vendus, read-only: vendus_invoices gives a period's count and totals (with VAT, without, by month and type) and the latest few; vendus_invoice reads one by its id. Use them for invoicing, revenue and VAT questions about KidClub, and give amounts with VAT first, then without. You can't issue, change or cancel invoices. Numbers only from what the tools returned. KidClub's invoices are Noisy Phocus's business; EC invoicing isn't in Vendus and stays with Kiro.",
-        ]
-      : [];
+  const vendusLines = options.tools === true ? (options.connectors ?? []) : [];
   const houseLines =
     options.house === true && options.tools === true
       ? [
@@ -805,7 +801,8 @@ export const makeBareAnswerer = (deps: {
   /** #292: what Atlas knows about the business (knowledge/kidclub.md), with the cloud and invoices tools. */
   readonly knowledge?: () => Promise<string | undefined>;
   /** #9: KidClub's invoices in Vendus, GET only. With tools only. */
-  readonly vendus?: { readonly get: VendusGet; readonly timeZone: string };
+  /** #168: tools as plug-ins: each provides a group (Vendus gives "invoices"). */
+  readonly connectors?: readonly Connector[];
   /** #166: the house now, read-only, from the domotics bridge's state in an environment's database. */
   readonly house?: {
     readonly db: Pick<DbReader, "get">;
@@ -853,7 +850,7 @@ export const makeBareAnswerer = (deps: {
   const prompts = (profile?: string, who?: string) => {
     // #290: someone else talking goes by their name; for him ATLAS_USER_NAME wins, then the profile's "Name:" line.
     const name = who ?? deps.userName ?? (profile ? profileName(profile) : undefined);
-    const extra = { ...(deps.elsewhere && deps.tools !== true ? { elsewhere: deps.elsewhere } : {}), ...(deps.decisions && deps.tools === true ? { decisions: true, tools: true } : {}), ...(deps.gaps && deps.tools === true ? { gaps: true, tools: true } : {}), ...(deps.reminders && deps.tools === true ? { reminders: true, tools: true } : {}), ...(deps.talk && deps.tools === true ? { talk: true, tools: true } : {}), ...(deps.webSearch && deps.tools === true ? { web: true, tools: true } : {}), ...(profile ? { profile } : {}), ...(deps.calendar ? { calendar: true } : {}), ...(deps.calendar && deps.tools === true ? { tools: true } : {}), ...(deps.calendar?.create && deps.tools === true ? { create: true } : {}), ...(deps.calendar?.change && deps.tools === true ? { calendarChange: true } : {}), ...(deps.gmail && deps.tools === true ? { email: true, tools: true } : {}), ...(deps.gmail?.writer && deps.tools === true ? { emailDrafts: true } : {}), ...(deps.gmail?.tidy && deps.tools === true ? { emailTidy: true } : {}), ...(deps.gmail?.reader.unanswered && deps.tools === true ? { emailFollowups: true } : {}), ...(deps.memory && deps.tools === true ? { memory: true, tools: true } : {}), ...(deps.memory && deps.skills && deps.tools === true ? { skills: true } : {}), ...(deps.github && deps.tools === true ? { github: true, tools: true } : {}), ...(deps.github?.plans && deps.tools === true ? { plans: true } : {}), ...(deps.github && deps.code && deps.tools === true ? { code: true } : {}), ...(deps.github && deps.code?.study && deps.tools === true ? { study: true } : {}), ...(deps.gcloud && deps.tools === true ? { gcloud: true, tools: true } : {}), ...(deps.vendus && deps.tools === true ? { vendus: true, tools: true } : {}), ...(deps.house && deps.tools === true ? { house: true, tools: true } : {}), ...((deps.house?.blinds || deps.house?.changes) && deps.tools === true ? { houseControl: true } : {}), ...(deps.house?.changes && deps.tools === true ? { houseAll: true } : {}), ...(deps.gcloud?.db && deps.tools === true ? { gcloudDb: true } : {}), ...(deps.gcloud?.db && deps.gcloud.writes && deps.tools === true ? { gcloudWrites: true } : {}), ...(deps.route && deps.route.mode !== "all" && deps.tools === true ? { routed: true } : {}), ...(deps.brief === true && deps.calendar && deps.tools === true ? { brief: true } : {}), ...(deps.github && deps.code?.fix && deps.tools === true ? { fix: true } : {}), ...(deps.github && deps.code?.tasks && deps.tools === true ? { tasks: true } : {}) };
+    const extra = { ...(deps.elsewhere && deps.tools !== true ? { elsewhere: deps.elsewhere } : {}), ...(deps.decisions && deps.tools === true ? { decisions: true, tools: true } : {}), ...(deps.gaps && deps.tools === true ? { gaps: true, tools: true } : {}), ...(deps.reminders && deps.tools === true ? { reminders: true, tools: true } : {}), ...(deps.talk && deps.tools === true ? { talk: true, tools: true } : {}), ...(deps.webSearch && deps.tools === true ? { web: true, tools: true } : {}), ...(profile ? { profile } : {}), ...(deps.calendar ? { calendar: true } : {}), ...(deps.calendar && deps.tools === true ? { tools: true } : {}), ...(deps.calendar?.create && deps.tools === true ? { create: true } : {}), ...(deps.calendar?.change && deps.tools === true ? { calendarChange: true } : {}), ...(deps.gmail && deps.tools === true ? { email: true, tools: true } : {}), ...(deps.gmail?.writer && deps.tools === true ? { emailDrafts: true } : {}), ...(deps.gmail?.tidy && deps.tools === true ? { emailTidy: true } : {}), ...(deps.gmail?.reader.unanswered && deps.tools === true ? { emailFollowups: true } : {}), ...(deps.memory && deps.tools === true ? { memory: true, tools: true } : {}), ...(deps.memory && deps.skills && deps.tools === true ? { skills: true } : {}), ...(deps.github && deps.tools === true ? { github: true, tools: true } : {}), ...(deps.github?.plans && deps.tools === true ? { plans: true } : {}), ...(deps.github && deps.code && deps.tools === true ? { code: true } : {}), ...(deps.github && deps.code?.study && deps.tools === true ? { study: true } : {}), ...(deps.gcloud && deps.tools === true ? { gcloud: true, tools: true } : {}), ...(deps.connectors && deps.connectors.length > 0 && deps.tools === true ? { connectors: deps.connectors.flatMap((c) => c.prompt), tools: true } : {}), ...(deps.house && deps.tools === true ? { house: true, tools: true } : {}), ...((deps.house?.blinds || deps.house?.changes) && deps.tools === true ? { houseControl: true } : {}), ...(deps.house?.changes && deps.tools === true ? { houseAll: true } : {}), ...(deps.gcloud?.db && deps.tools === true ? { gcloudDb: true } : {}), ...(deps.gcloud?.db && deps.gcloud.writes && deps.tools === true ? { gcloudWrites: true } : {}), ...(deps.route && deps.route.mode !== "all" && deps.tools === true ? { routed: true } : {}), ...(deps.brief === true && deps.calendar && deps.tools === true ? { brief: true } : {}), ...(deps.github && deps.code?.fix && deps.tools === true ? { fix: true } : {}), ...(deps.github && deps.code?.tasks && deps.tools === true ? { tasks: true } : {}) };
     return { typed: barePrompt(name, extra), spoken: barePrompt(name, { spoken: true, maxSentences: max, pauses, ...extra }) };
   };
   const withoutProfile = prompts();
@@ -966,11 +963,16 @@ export const makeBareAnswerer = (deps: {
     };
   };
   /** #175: the groups that are connected, and each group's tools, in the order they're offered. */
-  const connectedGroups: readonly ToolGroup[] = TOOL_GROUPS.filter((g) =>
-    g === "calendar" ? deps.calendar !== undefined : g === "gmail" ? deps.gmail !== undefined : g === "github" ? deps.github !== undefined : g === "code" ? deps.github !== undefined && deps.code !== undefined : g === "cloud" ? deps.gcloud !== undefined : g === "invoices" ? deps.vendus !== undefined : g === "drive" ? deps.drive !== undefined : deps.house !== undefined,
-  );
-  const toolsOf = (g: ToolGroup): readonly LlmTool[] =>
-    g === "calendar"
+  const connectors = deps.connectors ?? [];
+  // #168: a group is connected when a connector provides it, or (for those not moved yet) its built-in tools are there.
+  const builtIn = (g: ToolGroup): boolean =>
+    g === "calendar" ? deps.calendar !== undefined : g === "gmail" ? deps.gmail !== undefined : g === "github" ? deps.github !== undefined : g === "code" ? deps.github !== undefined && deps.code !== undefined : g === "cloud" ? deps.gcloud !== undefined : g === "drive" ? deps.drive !== undefined : g === "house" ? deps.house !== undefined : false;
+  const connectedGroups: readonly ToolGroup[] = TOOL_GROUPS.filter((g) => builtIn(g) || connectors.some((c) => c.group === g));
+  const toolsOf = (g: ToolGroup): readonly LlmTool[] => [...connectors.filter((c) => c.group === g).flatMap((c) => c.tools), ...builtInTools(g)];
+  const builtInTools = (g: ToolGroup): readonly LlmTool[] =>
+    !builtIn(g)
+      ? []
+      : g === "calendar"
       ? [CALENDAR_READ_TOOL, ...(deps.brief === true ? [DAY_BRIEF_TOOL] : []), ...(deps.calendar?.create ? [CALENDAR_CREATE_TOOL] : []), ...(deps.calendar?.change ? [CALENDAR_CHANGE_TOOL] : [])]
       : g === "gmail"
         ? [GMAIL_SEARCH_TOOL, GMAIL_READ_TOOL, ...(deps.gmail?.reader.attachment ? [GMAIL_ATTACHMENT_TOOL] : []), ...(deps.gmail?.reader.unanswered ? [GMAIL_FOLLOWUPS_TOOL] : []), ...(deps.gmail?.writer ? [GMAIL_DRAFT_TOOL] : []), ...(deps.gmail?.writer?.book && deps.gmail.writer.deletions ? [GMAIL_DRAFT_DELETE_TOOL] : []), ...(deps.gmail?.tidy ? [GMAIL_TIDY_TOOL] : [])]
@@ -980,9 +982,7 @@ export const makeBareAnswerer = (deps: {
             ? [CODE_ASK_TOOL, ...(deps.code?.study ? [CODE_NOTES_TOOL, CODE_STUDY_TOOL] : []), ...(deps.code?.fix ? [CODE_FIX_TOOL] : []), ...(deps.code?.tasks ? TASK_TOOLS : [])]
             : g === "cloud"
               ? [...GCLOUD_TOOLS, ...(deps.gcloud?.db ? DB_TOOLS : []), ...(deps.gcloud?.db && deps.gcloud.writes ? [DB_CHANGE_TOOL] : [])]
-              : g === "invoices"
-                ? VENDUS_TOOLS
-                : g === "drive"
+              : g === "drive"
                   ? [...DRIVE_READ_TOOLS, ...(deps.drive?.writes ? DRIVE_WRITE_TOOLS : [])]
                   : [HOUSE_NOW_TOOL, ...(deps.house?.blinds ? [HOUSE_BLINDS_TOOL] : []), ...(deps.house?.lights ? [HOUSE_LIGHTS_TOOL] : []), ...(deps.house?.read ? HOUSE_READ_TOOLS : []), ...(deps.house?.changes ? HOUSE_CHANGE_TOOLS : [])];
   const routing = deps.tools === true && deps.route !== undefined && deps.route.mode !== "all";
@@ -1026,7 +1026,7 @@ export const makeBareAnswerer = (deps: {
     // Native tool calling (#104): the brain reads the calendar itself, and answers "did you
     // check?" from the record of what really ran (toolsSoFar). Code only checks each call.
     // Without tools (the local brain), code decides and words the date sentence, as before.
-    const tools = deps.tools === true && (deps.calendar !== undefined || deps.gmail !== undefined || deps.memory !== undefined || deps.github !== undefined || deps.gcloud !== undefined || deps.vendus !== undefined || deps.house !== undefined || deps.drive !== undefined || deps.decisions !== undefined || deps.gaps !== undefined || deps.reminders !== undefined || deps.webSearch !== undefined || deps.talk !== undefined);
+    const tools = deps.tools === true && (deps.calendar !== undefined || deps.gmail !== undefined || deps.memory !== undefined || deps.github !== undefined || deps.gcloud !== undefined || (deps.connectors ?? []).length > 0 || deps.house !== undefined || deps.drive !== undefined || deps.decisions !== undefined || deps.gaps !== undefined || deps.reminders !== undefined || deps.webSearch !== undefined || deps.talk !== undefined);
     // #107: this turn's memory: recent short-term notes go in the prompt; the rest is recalled on demand.
     // #290: each person sees only their own memories (his stay where they always were).
     const memoryDeps = deps.memory ? { ...deps.memory, store: scopedMemoryStore(deps.memory.store, guest?.id) } : undefined;
@@ -1438,7 +1438,9 @@ export const makeBareAnswerer = (deps: {
       }
       if (deps.github && GITHUB_TOOLS.some((t) => t.name === call.name)) return runGithub(deps.github, call);
       if (deps.gcloud && GCLOUD_TOOLS.some((t) => t.name === call.name)) return runGcloud(deps.gcloud, call);
-      if (deps.vendus && VENDUS_TOOLS.some((t) => t.name === call.name)) return runVendus(deps.vendus, call);
+      // #168: a plugged-in connector runs its own tools.
+      const connector = connectorOf(connectors, call.name);
+      if (connector) return connector.run({ call, now, ...(signal ? { signal } : {}), ...(onStep ? { onStep } : {}), ...(deps.log ? { log: deps.log } : {}) });
       if (deps.house && call.name === HOUSE_NOW_TOOL.name) {
         const got = await deps.house.db.get({ env: deps.house.env, path: [...HOUSE_STATE_PATH] }, signal);
         if (!got.ok) {
@@ -1720,40 +1722,6 @@ export const makeBareAnswerer = (deps: {
       const got = await db.get(r, signal);
       if (!got.ok) return failed(args, got.error);
       return done(args, got.value ? "1 document" : "not found", docForBrain(r, got.value), got.value ? 1 : 0);
-    };
-
-    /** #9: KidClub's invoices, read-only. Code checks the period and builds every request. */
-    const runVendus = async (vendus: NonNullable<typeof deps.vendus>, call: LlmToolCall): Promise<LlmToolResult> => {
-      const started = performance.now();
-      const failed = (args: string, e: { readonly code: string; readonly message: string }): LlmToolResult => {
-        deps.log?.warn("vendus failed", { tool: call.name, code: e.code });
-        onStep?.({ kind: "tool", name: call.name, args, by: "model", ok: false, error: e.code });
-        return { callId: call.id, content: `Vendus: ${e.message}. Say so plainly; don't guess numbers.`, isError: true };
-      };
-      if (call.name === VENDUS_INVOICES_TOOL.name) {
-        const checked = checkInvoicesRequest(call.input, localDate(now, vendus.timeZone));
-        if (!checked.ok) {
-          onStep?.({ kind: "tool", name: call.name, args: "", by: "model", ok: false, error: `refused: ${checked.error}` });
-          return { callId: call.id, content: `Refused: ${checked.error}.`, isError: true };
-        }
-        const r = checked.value;
-        const args = `${r.since} → ${r.until}${r.type === "FR" ? "" : ` · ${r.type}`}`;
-        const got = await listInvoices(vendus.get, r, signal);
-        if (!got.ok) return failed(args, got.error);
-        deps.log?.info("vendus read", { tool: call.name, docs: got.value.docs.length, ms: Math.round(performance.now() - started) });
-        onStep?.({ kind: "tool", name: call.name, args, by: "model", ok: true, result: `${got.value.docs.length}${got.value.capped ? "+" : ""} ${got.value.docs.length === 1 ? "document" : "documents"}` });
-        return { callId: call.id, content: invoicesForBrain(r, got.value.docs, got.value.capped) };
-      }
-      const id = (call.input as Record<string, unknown> | undefined)?.id;
-      if (typeof id !== "number" || !Number.isInteger(id) || id < 1 || id > 999_999_999_999_999) {
-        onStep?.({ kind: "tool", name: call.name, args: "", by: "model", ok: false, error: "refused: not a document id" });
-        return { callId: call.id, content: "Refused: not a document id; use an id from vendus_invoices.", isError: true };
-      }
-      const got = await vendus.get(`/documents/${id}/`, {}, signal);
-      if (!got.ok) return failed(`id ${id}`, got.error);
-      deps.log?.info("vendus read", { tool: call.name, ms: Math.round(performance.now() - started) });
-      onStep?.({ kind: "tool", name: call.name, args: `id ${id}`, by: "model", ok: true, result: "1 document" });
-      return { callId: call.id, content: invoiceForBrain(got.value) };
     };
 
     /** #191: coding tasks. Starting, pushing and closing show a card; following up passes his words on. */

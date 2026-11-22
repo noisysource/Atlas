@@ -24,6 +24,8 @@ import { makeHouseChanges } from "./house/house-changes.js";
 import { houseLook, readHouse } from "./house/house-data.js";
 import { makeLights } from "./house/lights.js";
 import { makeVendusGet, type VendusGet } from "./vendus/vendus.js";
+import { forCountry } from "./connectors/types.js";
+import { vendusConnector } from "./connectors/vendus.js";
 import { makeCodeRefresh } from "./code/freshness.js";
 import { briefSources } from "./brief.js";
 import { makeMorningBriefs, type BriefStore, type MorningBrief } from "./morning.js";
@@ -940,7 +942,8 @@ export const buildDeps = async (inputs: AppInputs): Promise<Result<Deps, string>
               // #292: KidClub, the business, for questions the database and Vendus answer.
               ...((gcloud || vendusGet) && config.toolCalling ? { knowledge: businessKnowledge } : {}),
               // #9: KidClub's invoices in Vendus, GET only, with tools (Claude).
-              ...(vendusGet && config.toolCalling ? { vendus: { get: vendusGet, timeZone: config.timeZone } } : {}),
+              // #168: the plugged-in connectors (Vendus first; the others follow).
+              ...(config.toolCalling ? { connectors: forCountry([...(vendusGet ? [vendusConnector({ get: vendusGet, timeZone: config.timeZone })] : [])], config.country) } : {}),
               // #166: the house now, read-only, from the domotics bridge's state document.
               ...(houseDb && config.house.enabled && config.toolCalling
                 ? { house: { db: houseDb, env: domotics ? "domotics" : config.house.env, timeZone: config.timeZone, ...(blinds ? { blinds } : {}), ...(lights ? { lights } : {}), ...(domotics ? { read: readHouse(domotics) } : {}), ...(houseChanges ? { changes: houseChanges } : {}) } }
