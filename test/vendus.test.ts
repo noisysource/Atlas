@@ -1,5 +1,6 @@
 // #8, #9: KidClub's invoices in Vendus, read-only.
 
+import { vendusConnector } from "../src/connectors/vendus.js";
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { makeBareAnswerer } from "../src/answer/bare.js";
@@ -149,7 +150,7 @@ describe("asking Atlas", () => {
       return ok([{ id: 7, number: "FR 2026/7", date: "2026-11-02", amount_gross: "61.50", amount_net: "50.00" }]);
     };
     const steps: PathStep[] = [];
-    await makeBareAnswerer({ llm, tools: true, vendus: { get, timeZone: "Europe/Lisbon" }, route: { mode: "rules" } })({
+    await makeBareAnswerer({ llm, tools: true, connectors: [vendusConnector({ get, timeZone: "Europe/Lisbon" })], route: { mode: "rules" } })({
       context: { id: "kidclub", name: "KidClub" } as unknown as Context,
       question: "How much did we invoice this month?",
       history: [],

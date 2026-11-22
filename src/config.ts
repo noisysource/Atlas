@@ -256,6 +256,8 @@ export type Config = {
   readonly dataset: { readonly enabled: boolean; readonly off: string; readonly drive: string };
   /** LEARNING (#296, default off; needs DATASET): each night, the day's corrections, undone cards and errors become skill drafts for his OK. */
   readonly learning: boolean;
+  /** ATLAS_COUNTRY (#168, default PT): connectors made for another country aren't plugged in. */
+  readonly country: string;
   /** LOCAL_MODE (#312, default on): the Local brain gets every tool, the household's limits off, and undoable changes done at once. Off: Local has no tools, as before. */
   readonly localMode: boolean;
   /**
@@ -559,6 +561,7 @@ const EnvSchema = z.object({
   LOCAL_MODE: z.enum(["on", "off"]).default("on"),
   DATASET: z.enum(["on", "off"]).default("off"),
   LEARNING: z.enum(["on", "off"]).default("off"),
+  ATLAS_COUNTRY: z.string().regex(/^[A-Za-z]{2}$/, { error: "must be a two-letter country code, like PT" }).default("PT"),
   DATASET_OFF: z.string().regex(/^[a-z0-9, -]{0,200}$/, { error: "must be ids like marisa, ines" }).optional(),
   DATASET_DRIVE: z.string().regex(/^[a-z]{2,20}:[^:<>\\]{1,200}$/, { error: "must be account:folder/path, like noisysource:Atlas/dataset" }).optional(),
   GEMINI_LIVE_MODEL: z.string().regex(/^[a-z0-9][a-z0-9.-]{1,60}$/, { error: "must be a Gemini Live model id, like gemini-3.8-live" }).default("gemini-3.8-live"),
@@ -698,6 +701,7 @@ export const loadConfig = (given: Env): Result<Config, string> => {
     toolCalling: e.TOOL_CALLING !== "off",
     localMode: e.LOCAL_MODE === "on",
     learning: e.LEARNING === "on" && e.DATASET === "on",
+    country: e.ATLAS_COUNTRY.toUpperCase(),
     dataset: { enabled: e.DATASET === "on", off: e.DATASET_OFF ?? "", drive: e.DATASET_DRIVE ?? "noisysource:Atlas/dataset" },
     toolRouter: e.TOOL_ROUTER ?? "model",
     bareMemory: e.MEMORY === "on",

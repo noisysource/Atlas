@@ -115,6 +115,13 @@ export const SECTIONS: readonly Section[] = [
     fields: [
       { key: "ATLAS_USER_NAME", label: "Your name", kind: "text" },
       {
+        key: "ATLAS_COUNTRY",
+        label: "Country",
+        kind: "text",
+        placeholder: "PT",
+        hint: "Connectors made for one country (Vendus is Portugal's) are only plugged in there.",
+      },
+      {
         key: "ATLAS_USERS",
         label: "The rest of the household",
         kind: "text",

@@ -1500,3 +1500,12 @@ Confirmed (2026-11-12):
 Vendus, Cloud Run deployment or the Pi (#53), real memory (#24, #56),
 personal data tools (Gmail, Drive, calendar), phone access (#19), local speech
 (#54) and local models (#55).
+
+- **Tools as plug-ins (#168):** a connector is a provider for a capability
+  (a tool group): `src/connectors/types.ts` says what every one has (id,
+  group, countries, tools, prompt lines, `run`, galaxy node). The core offers,
+  routes, switches and runs connectors without knowing them; a new provider
+  is one file in `src/connectors/` and one line in `app.ts`. `ATLAS_COUNTRY`
+  (Tools → You, default PT) plugs in only the connectors for that country.
+  Vendus is the first one moved; calendar, Gmail, Drive, GitHub, Google Cloud
+  and the house follow, one PR each, with their cards and household checks.

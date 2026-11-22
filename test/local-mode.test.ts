@@ -2,6 +2,7 @@
 // are off, and undoable changes are done at once; what reaches other people
 // still asks. WhatsApp follows the page's brain, and declines calls on Local.
 
+import { vendusConnector } from "../src/connectors/vendus.js";
 import { createHmac } from "node:crypto";
 import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -42,7 +43,7 @@ const run = async (local: boolean, input: Record<string, unknown>, user?: Answer
     userName: "Renato",
     ...(local ? { local: true } : {}),
     calendar: { read: async () => ok([]), timeZone: TZ, now: () => NOW, create: { pending: makePendingProposals({ newId: () => "p1" }), isEc: () => false } },
-    vendus: { get: async () => ok({}), timeZone: TZ },
+    connectors: [vendusConnector({ get: async () => ok({}), timeZone: TZ })],
   });
   const steps: PathStep[] = [];
   await answer({ context: personal, question: "Add it", history: [], memories: [], now: NOW, ...(user ? { user } : {}), onStep: (s) => void steps.push(s) });
