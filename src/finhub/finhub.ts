@@ -33,10 +33,14 @@ export type FileKind = "payslip" | "statement" | "invoice" | "other";
 
 /** What a file is, by its name (Portuguese and English). The brain can say otherwise. */
 export const kindOfFile = (name: string): FileKind => {
-  const n = name.toLowerCase();
-  if (/vencimento|payslip|pay slip|salari|^rc[_ -]|recibo de venc/.test(n)) return "payslip";
+  const n = name.toLowerCase().replace(/^\.+/, "");
+  // The accountant's payslips: "517010585_RC_2026_M01P1_F.pdf" (NIPC, RC, year, month).
+  if (/vencimento|payslip|pay slip|salari|(^|[_ .-])rc[_ -]20\d\d|recibo de venc/.test(n)) return "payslip";
+  // Via Verde's monthly "extracto" is a toll bill, not a bank statement.
+  if (/^vv[_ -]|via ?verde/.test(n)) return "invoice";
   if (/extrato|statement|movimentos|conta[_ -]?corrente|extract/.test(n)) return "statement";
-  if (/fatura|factura|invoice|recibo|^f[tr][ _-]|^fs[ _-]|nota de cr|receipt/.test(n)) return "invoice";
+  // "FT …", "FR …", "FS …" (fatura, fatura-recibo, simplificada), also after a date: "31.01_FR 8,31.pdf".
+  if (/fatura|factura|invoice|recibo|(^|[_ .-])f[trs][ _-]|nota de cr|receipt/.test(n)) return "invoice";
   return "other";
 };
 

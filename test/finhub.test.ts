@@ -114,6 +114,13 @@ describe("reading the Drive's year folder", () => {
     expect(kindOfFile("Recibo vencimento scan.pdf")).toBe("payslip");
     expect(kindOfFile("Fatura MEO 03.pdf")).toBe("invoice");
     expect(kindOfFile("notas.txt")).toBe("other");
+    // Names from the real January folder (2026-11-23).
+    expect(kindOfFile("517010585_RC_2026_M01P1_F.pdf")).toBe("payslip");
+    expect(kindOfFile(".Extrato_Conta_2026-01-30.pdf")).toBe("statement");
+    expect(kindOfFile(".VV_Extracto_000667194_01_2026.pdf")).toBe("invoice");
+    expect(kindOfFile(".VV_Detalhe_Extracto_000667194_01_2026.pdf")).toBe("invoice");
+    expect(kindOfFile("28.01_Aviso_690,58.pdf")).toBe("other");
+    expect(kindOfFile("31.01_FR 8,31.pdf")).toBe("invoice");
   });
 
   it("lists the months, what each has and what's missing", async () => {
