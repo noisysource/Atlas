@@ -61,6 +61,9 @@ import { checkPrClose, GITHUB_PR_CLOSE_TOOL, type PrCloser } from "../github/pr-
 import { attachmentForBrain } from "../gmail/attachments.js";
 import { BRIEF_EMAIL_QUERY, briefForBrain, briefSources, briefSummary, DAY_BRIEF_TOOL, gatherBrief } from "../brief.js";
 import { GROUP_ABOUT, groupOfTool, groupsByWords, groupsUsedLately, pickGroups, TOOL_GROUPS, TOOLS_MORE, toolsMoreTool, type RouterMode, type ToolGroup, type ToolRouter } from "./tool-groups.js";
+
+/** The groups the tool list names one by one (#175); the rest follow in TOOL_GROUPS order. */
+const LISTED_ABOVE: readonly ToolGroup[] = ["calendar", "gmail", "github", "code", "cloud", "invoices", "house", "drive"];
 import { DB_CHANGE_TOOL, type DbWrites } from "../gcloud/db-write.js";
 import { aggregateForBrain, checkDbAggregate, checkDbCollections, checkDbGet, checkDbQuery, collectionsForBrain, DB_AGGREGATE_TOOL, DB_COLLECTIONS_TOOL, DB_QUERY_TOOL, DB_TOOLS, docForBrain, docsForBrain, type DbReader } from "../gcloud/firestore.js";
 import { checkLogsRequest, errorsForBrain, errorsSummary, GCLOUD_ERRORS_TOOL, GCLOUD_LIMITS, GCLOUD_TOOLS, logsForBrain, type GcloudReader } from "../gcloud/gcloud.js";
@@ -1068,6 +1071,9 @@ export const makeBareAnswerer = (deps: {
         ...(on.includes("invoices") ? toolsOf("invoices") : []),
         ...(on.includes("house") ? toolsOf("house") : []),
         ...(on.includes("drive") ? toolsOf("drive") : []),
+        // Every other group (kanban, FinHub, and any added later), in TOOL_GROUPS order,
+        // so a new connector's group can't be routed to and then left out of the list.
+        ...TOOL_GROUPS.filter((g) => !LISTED_ABOVE.includes(g) && on.includes(g)).flatMap(toolsOf),
         ...(routing && missing.length > 0 ? [toolsMoreTool(missing)] : []),
       ];
       // #290: the brief reads his email, so it isn't hers.

@@ -597,6 +597,17 @@ export const buildDeps = async (inputs: AppInputs): Promise<Result<Deps, string>
           return { drive, imports: makeFinhubImports({ drive, llm: finhubLlm.value, db, log }) };
         })()
       : undefined;
+  // FINHUB=on but no tools: say why at start-up, rather than a FinHub question quietly getting none.
+  if (config.finhub.enabled && !finhubImports) {
+    const why = !config.toolCalling
+      ? "TOOL_CALLING is off"
+      : !driveClient
+        ? "Drive isn't connected"
+        : finhubLlm && !finhubLlm.ok
+          ? finhubLlm.error
+          : `FINHUB_DRIVE_ACCOUNT ${config.finhub.account} isn't a Google account Atlas reads`;
+    log.warn("finhub tools not loaded", { why });
+  }
   // The live state through the same user; without it, read-only from HOUSE_ENV's database (GCLOUD).
   const houseDb = domotics ? domoticsDb(domotics) : gcloud?.db;
   // #183: closing pull requests after his OK, with the same write token (on with CODE_FIX).
