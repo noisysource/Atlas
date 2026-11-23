@@ -154,7 +154,9 @@ const RULES: readonly { readonly pattern: RegExp; readonly groups: readonly Tool
       finhub, fin hub, books, bookkeeping, ledger, payslip*, salary, salaries, statement*, bank statement*, balance*,
       import*, opening balance, loan, loans, bpi, social security, irs, cash flow, forecast,
       contabilidade, recibo*, vencimento*, salario*, extrato*, saldo*, importa*, emprestimo*, seguranca social, tesouraria, previsao`),
-    groups: ["finhub", "drive"],
+    // FinHub's tools read the Drive folder themselves; with drive_list beside them,
+    // the model browsed the folders and miscounted what was there.
+    groups: ["finhub"],
   },
   {
     // The dev kanban: "what's open?", cards, boards, the roadmap.
