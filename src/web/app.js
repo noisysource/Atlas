@@ -1512,6 +1512,9 @@ const ask = async (question, context, hidden = false) => {
   const brain = final && typeof final === "object" && "brain" in final ? String(final.brain) : "";
   // The answer's path (#102): one line under the reply that opens to each step. It includes the brain.
   const path = pathOf(final);
+  // #323: say it when Local wasn't there and another brain answered.
+  const fellBack = path.find((s) => s.kind === "brain" && s.instead);
+  if (fellBack && fellBack.kind === "brain" && fellBack.instead) setStatus(`Local wasn't available (${fellBack.instead.why}), so ${brainName(fellBack.brain)} answered.`);
   brainView.finish(path);
   traceView.finish(path);
   void refreshReach();

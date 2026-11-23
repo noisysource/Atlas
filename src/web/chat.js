@@ -379,7 +379,7 @@ export const voiceNoteVisible = ({ note, voiceInUse }) => note !== "" && voiceIn
 
 /**
  * @typedef {{ kind: "precheck", result: "none" | "handoff" | "route" }
- *   | { kind: "brain", brain: Brain }
+ *   | { kind: "brain", brain: Brain, instead?: { asked: Brain, why: string } }
  *   | { kind: "tools", offered: readonly string[] }
  *   | { kind: "tool" | "skill", name: string, args: string, by: "code" | "model", ok: boolean, result?: string, error?: string, confirm?: { id: string, label: string, auto?: boolean, then?: string, kind?: "calendar" | "skill" | "email" | "draft-delete" | "fix" | "pr-close" | "task-start" | "task-publish" | "task-merge" | "task-close" | "house" | "lights" | "house-change" | "gap-issue" | "gmail-tidy" | "calendar-change" | "drive" | "db-change" } }
  *   | { kind: "guard", claimedAction: number, promise: number, perception: number, toolResult?: number, replaced: boolean }} PathStep
@@ -412,7 +412,8 @@ export const pathSummary = (path) =>
         case "precheck":
           return step.result === "handoff" ? ["🚦 EC precheck → Kiro"] : [];
         case "brain":
-          return [`${brainIcon(step.brain)} ${brainName(step.brain)}`];
+          // #323: Local wasn't there, so another brain answered: shown on the line itself.
+          return [`${brainIcon(step.brain)} ${brainName(step.brain)}${step.instead ? ` (${brainName(step.instead.asked)} not available: ${step.instead.why})` : ""}`];
         case "tools":
           // #141: say so when it had no tools, or had them and used none.
           return step.offered.length === 0 ? ["🧰 no tools"] : path.some((s) => s.kind === "tool" || s.kind === "skill") ? [] : [`🧰 ${count(step.offered.length, "tool")}, none used`];
@@ -441,7 +442,9 @@ export const pathLines = (path, brainLabels = {}) =>
             ? "🚦 EC precheck: mentions the EC, but it's yours to answer (invoicing)."
             : "🚦 EC precheck: not EC work.";
       case "brain":
-        return `${brainIcon(step.brain)} Brain: ${brainLabels[step.brain] ?? brainName(step.brain)}`;
+        return step.instead
+          ? `${brainIcon(step.brain)} Brain: ${brainLabels[step.brain] ?? brainName(step.brain)}, because ${brainName(step.instead.asked)} wasn't available (${step.instead.why}). Local mode's limits didn't apply.`
+          : `${brainIcon(step.brain)} Brain: ${brainLabels[step.brain] ?? brainName(step.brain)}`;
       case "tools":
         return step.offered.length === 0 ? "🧰 No tools offered this turn." : `🧰 Tools offered: ${step.offered.join(", ")}`;
       case "tool":

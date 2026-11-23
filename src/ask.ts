@@ -20,7 +20,7 @@ import { makeHonestyGuard } from "./answer/honesty.js";
 import { calendarIntent, cameFromRead } from "./calendar/intent.js";
 import { resolveDatePhrase } from "./calendar/dates.js";
 import { clarifyOptions, handoffMessage } from "./contexts.js";
-import type { AnswerUser, AskRequest, AskResponse, Context, ContextOption, Deps, PathStep, Turn } from "./types.js";
+import type { AnswerUser, AskRequest, Brain, AskResponse, Context, ContextOption, Deps, PathStep, Turn } from "./types.js";
 import { userOf, whoLines } from "./users.js";
 import { householdLines } from "./household.js";
 
@@ -179,6 +179,8 @@ const handleBare = async (deps: Deps, bare: Deps["answer"], request: AskRequest,
   const personal = deps.contexts.find((c) => c.id === "personal");
   if (!personal) return { type: "error", message: GENERIC_ERROR };
   const user = await answerUser(deps, request.user);
+  // #323: Local wasn't there, so another brain answered.
+  let fallback: { readonly to: "claude" | "google"; readonly why: string } | undefined;
   const answer = await bare({
     context: personal,
     ...(user ? { user } : {}),
@@ -189,6 +191,10 @@ const handleBare = async (deps: Deps, bare: Deps["answer"], request: AskRequest,
     ...(meta.onText ? { onText: meta.onText } : {}),
     ...(meta.signal ? { signal: meta.signal } : {}),
     ...(request.brain ? { brain: request.brain } : {}),
+    onFallback: (f) => {
+      fallback = { to: f.to, why: f.why };
+      deps.log.info("brain fallback", { from: f.from, to: f.to, why: f.why });
+    },
     ...(request.spoken === true ? { spoken: true } : {}),
     ...(request.remember === false ? { remember: false } : {}),
     onToolSucceeded: guard.toolSucceeded,
@@ -208,16 +214,17 @@ const handleBare = async (deps: Deps, bare: Deps["answer"], request: AskRequest,
       if (step.kind === "tool" && step.name === "calendar_read") (step.ok ? guard.resultsKnown : guard.readFailed)();
     },
   });
-  path.splice(1, 0, { kind: "brain", brain: request.brain ?? "claude" });
+  const answered: Brain = fallback?.to ?? request.brain ?? "claude";
+  path.splice(1, 0, { kind: "brain", brain: answered, ...(fallback ? { instead: { asked: request.brain ?? "local", why: fallback.why } } : {}) });
   if (!answer.ok) {
-    deps.log.info("ask", { outcome: answer.error.code === "cancelled" ? "cancelled" : "error", bare: true, brain: request.brain ?? "claude" });
+    deps.log.info("ask", { outcome: answer.error.code === "cancelled" ? "cancelled" : "error", bare: true, brain: answered });
     return { type: "error", message: answer.error.message };
   }
   if (answer.value.kind !== "answer") return { type: "unavailable", context: personal.id, message: answer.value.message };
   const checked = guard.finish(answer.value.text);
   path.push(guardStep(checked));
-  deps.log.info("ask", { outcome: "answer", bare: true, brain: request.brain ?? "claude" });
-  return { type: "answer", context: personal.id, answer: checked.text, ...(request.brain ? { brain: request.brain } : {}), path };
+  deps.log.info("ask", { outcome: "answer", bare: true, brain: answered });
+  return { type: "answer", context: personal.id, answer: checked.text, ...(request.brain || fallback ? { brain: answered } : {}), path };
 };
 
 type HonestyGuard = ReturnType<typeof makeHonestyGuard>;
@@ -269,6 +276,8 @@ export const handleAsk = async (deps: Deps, request: AskRequest, outer: AskMeta 
 };
 
 const answerChecked = async (deps: Deps, request: AskRequest, meta: AskMeta, guard: HonestyGuard): Promise<AskResponse> => {
+  // #323: Local wasn't there, so another brain answered.
+  let classicFallback: { readonly to: "claude" | "google"; readonly why: string } | undefined;
   const history = request.history ?? [];
   if (deps.bare) {
     try {
@@ -336,6 +345,9 @@ const answerChecked = async (deps: Deps, request: AskRequest, meta: AskMeta, gua
               ...(meta.signal ? { signal: meta.signal } : {}),
               ...(request.spoken === true ? { spoken: true } : {}),
               ...(request.brain ? { brain: request.brain } : {}),
+              onFallback: (f) => {
+                classicFallback = { to: f.to, why: f.why };
+              },
               onToolSucceeded: guard.toolSucceeded,
             }),
           };
@@ -389,13 +401,14 @@ const answerChecked = async (deps: Deps, request: AskRequest, meta: AskMeta, gua
       }
     }
 
-    deps.log.info("ask", { context: context.id, outcome: "answer", brain: request.brain ?? "claude" });
+    const answeredBy: Brain = classicFallback?.to ?? request.brain ?? "claude";
+    deps.log.info("ask", { context: context.id, outcome: "answer", brain: answeredBy });
     const path: PathStep[] = [
       { kind: "precheck", result: resolved.how === "precheck" ? "route" : "none" },
-      { kind: "brain", brain: request.brain ?? "claude" },
+      { kind: "brain", brain: answeredBy, ...(classicFallback ? { instead: { asked: request.brain ?? "local", why: classicFallback.why } } : {}) },
       guardStep(checked),
     ];
-    return { type: "answer", context: context.id, answer: checked.text, ...(request.brain ? { brain: request.brain } : {}), path };
+    return { type: "answer", context: context.id, answer: checked.text, ...(request.brain || classicFallback ? { brain: answeredBy } : {}), path };
   } catch (e) {
     // Only the error class is logged; messages could quote the question.
     deps.log.error("ask failed", { errorName: e instanceof Error ? e.name : typeof e });
