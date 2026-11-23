@@ -113,7 +113,9 @@ export const makeDomotics = (deps: { readonly user: () => Promise<FirebaseUser |
       return err({ code: "denied", message: `the domotics project doesn't let Atlas ${what}` });
     }
     if (res.status === 404 || status === "NOT_FOUND") return err({ code: "missing", message: `${what}: not found` });
-    if (!res.ok || body.error) return err({ code: "failed", message: `${what} failed (${res.status})` });
+    // A callable's own refusal (HttpsError) says what was wrong: pass it on, short.
+    const said = typeof (body.error as { message?: unknown } | undefined)?.message === "string" ? `: ${String((body.error as { message: string }).message).slice(0, 300)}` : "";
+    if (!res.ok || body.error) return err({ code: "failed", message: `${what} failed (${res.status})${said}` });
     return ok(body);
   };
 
