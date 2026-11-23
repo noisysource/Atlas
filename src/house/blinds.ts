@@ -13,6 +13,7 @@
 //
 // Positions are Netatmo's: 0 is closed, 100 is open. Moves are capped per hour in code.
 
+import { signInRefusal } from "./domotics.js";
 import { randomBytes } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import type { LlmTool } from "../llm/types.js";
@@ -77,8 +78,8 @@ export const makeCallable = (deps: { readonly user: () => Promise<FirebaseUser |
       ...(signal ? { signal } : {}),
     }).catch(() => undefined);
     if (!res) return err({ code: "unreachable", message: "Firebase sign-in couldn't be reached" });
-    const body = (await res.json().catch(() => ({}))) as { idToken?: unknown; expiresIn?: unknown };
-    if (!res.ok || typeof body.idToken !== "string") return err({ code: "auth", message: `Atlas's domotics user couldn't sign in (${res.status}): check it exists and run npm run house:connect again` });
+    const body = (await res.json().catch(() => ({}))) as { idToken?: unknown; expiresIn?: unknown; error?: { message?: unknown } };
+    if (!res.ok || typeof body.idToken !== "string") return err({ code: "auth", message: signInRefusal(res.status, body.error?.message, user.email, user.project) });
     const seconds = Number(body.expiresIn);
     token = { value: body.idToken, until: now() + (Number.isFinite(seconds) ? seconds : 3600) * 1000 - 5 * 60_000 };
     return ok(body.idToken);
