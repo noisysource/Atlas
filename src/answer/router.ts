@@ -33,9 +33,21 @@ export const makeBrainRouter = (routers: {
   readonly google?: Deps["answer"];
   /** Undefined when Local can answer; otherwise why not. */
   readonly localReady?: () => Promise<string | undefined>;
+  /** #171: questions on Claude that Local can answer as well, sent to Local first. */
+  readonly easyToLocal?: (input: Parameters<Deps["answer"]>[0]) => boolean;
 }): Deps["answer"] =>
   async (input) => {
     if (input.brain === "google" && routers.google) return routers.google(input);
+    // #171: an easy question asked of Claude goes to Local when it's there; if Local then fails before any words, Claude answers after all.
+    if ((input.brain ?? "claude") === "claude" && routers.local && routers.easyToLocal?.(input) && (await routers.localReady?.().catch(() => "down")) === undefined) {
+      input.onRouted?.({ to: "local", why: "easy question" });
+      let spoke = false;
+      const onText = input.onText;
+      const got = await routers.local({ ...input, brain: "local", easy: true, ...(onText ? { onText: (t: string) => ((spoke = true), onText(t)) } : {}) });
+      if (got.ok || spoke || got.error.code === "cancelled" || input.signal?.aborted) return got;
+      input.onFallback?.({ from: "local", to: "claude", why: `the local model failed (${got.error.message.slice(0, 80)})` });
+      return routers.claude(input);
+    }
     if (input.brain !== "local" || !routers.local) return routers.claude(input);
     const to = routers.google ? ("google" as const) : ("claude" as const);
     const instead = (why: string) => {

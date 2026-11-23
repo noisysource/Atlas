@@ -42,6 +42,8 @@ export type ExchangeEntry = {
   readonly tools: readonly DatasetTool[];
   readonly skills: readonly string[];
   readonly offered?: readonly string[];
+  /** #171: why another brain answered than the one asked for ("easy question"). */
+  readonly routed?: string;
   readonly ms: number;
   /** The question corrects the answer before it: that answer, kept beside it. */
   readonly correction?: { readonly previousQuestion?: string; readonly wrongAnswer: string };
@@ -100,6 +102,11 @@ const toolsOf = (path: readonly PathStep[] | undefined): { tools: DatasetTool[];
   return { tools, skills, ...(offered ? { offered } : {}) };
 };
 
+const routedOf = (path: readonly PathStep[] | undefined): { routed?: string } => {
+  const step = (path ?? []).find((s) => s.kind === "brain");
+  return step?.kind === "brain" && step.routed ? { routed: step.routed } : {};
+};
+
 /**
  * The entry for one /ask, or undefined when it isn't kept: a handoff (EC/HRT
  * is Kiro's), or "don't remember this". `path` is the live steps when the
@@ -132,6 +139,7 @@ export const exchangeOf = (
     answer: keptText(answer),
     outcome: response.type,
     ...toolsOf(path),
+    ...routedOf(path),
     ms: Math.round(extra.ms),
     ...(correction ? { correction } : {}),
   };

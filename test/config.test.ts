@@ -47,6 +47,7 @@ describe("loadConfig", () => {
       bareMemory: false,
       introspection: false,
       localMode: true,
+      localEasy: true,
       dataset: { enabled: false, off: "", drive: "noisysource:Atlas/dataset" },
       learning: false,
       country: "PT",

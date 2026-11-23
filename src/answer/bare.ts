@@ -957,12 +957,13 @@ export const makeBareAnswerer = (deps: {
                   : [];
   const routing = deps.tools === true && deps.route !== undefined && deps.route.mode !== "all";
 
-  return async ({ question, history, onText, signal, spoken, onStep: onStepAsked, onReach, onOffered, now, remember, onToolSucceeded, user }) => {
+  return async ({ question, history, onText, signal, spoken, onStep: onStepAsked, onReach, onOffered, now, remember, onToolSucceeded, user, easy }) => {
     // #290: someone of his household who isn't him: her name, profile, memories, accounts and tools.
     const guest = user && !user.main ? user : undefined;
     // #312: in Local mode nothing leaves the Mac, and the household's limits are off.
-    const limited = guest && !deps.local ? guest : undefined;
-    const available: readonly ToolGroup[] = limited ? connectedGroups.filter((g) => limited.groups.includes(g)) : connectedGroups;
+    // #171: an easy question sent here from Claude isn't Local mode: no tools, and her limits stay.
+    const limited = guest && (!deps.local || easy === true) ? guest : undefined;
+    const available: readonly ToolGroup[] = easy === true ? [] : limited ? connectedGroups.filter((g) => limited.groups.includes(g)) : connectedGroups;
     /** #278: the current call's next step, put on any card it shows. */
     let thenOfCall: string | undefined;
     const onStep = onStepAsked
@@ -1083,7 +1084,7 @@ export const makeBareAnswerer = (deps: {
           nowLine(now, deps.timeZone ?? deps.calendar?.timeZone ?? DEFAULT_TIME_ZONE),
           // #290: who this is, and what the household did lately, when sharing is on.
           ...(user?.lines ?? []),
-          ...(guest && deps.local ? [`<local>Local mode: you run on this Mac and nothing leaves it, so everything Atlas has is ${guest.name}'s to use too, ${deps.userName ?? "his"} accounts included.</local>`] : []),
+          ...(guest && deps.local && easy !== true ? [`<local>Local mode: you run on this Mac and nothing leaves it, so everything Atlas has is ${guest.name}'s to use too, ${deps.userName ?? "his"} accounts included.</local>`] : []),
           connected,
           studied,
           toolsSoFar(history),

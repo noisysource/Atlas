@@ -3,6 +3,7 @@
 // if contexts.md, the profile or the API key is missing or invalid.
 
 import { makeOllamaReady } from "./llm/ollama.js";
+import { easyQuestion } from "./answer/easy.js";
 import { execFile } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import { makeToolRouter } from "./answer/tool-groups.js";
@@ -220,6 +221,8 @@ export const buildDeps = async (inputs: AppInputs): Promise<Result<Deps, string>
   const localLlm = metered(buildLlm(config.models.local, keys, { ollama: config.ollamaUrl, ollamaThink: config.ollamaThink }), config.models.local, "local");
   // #323: is Ollama there with the model? Checked quickly before a Local answer.
   const localReady = makeOllamaReady({ model: config.models.local.model, baseUrl: config.ollamaUrl });
+  // #171: which questions asked of Claude Local can answer as well (rules, for now).
+  const easyToLocal = config.localEasy ? (input: { readonly question: string; readonly history: readonly { readonly role: string; readonly tools?: readonly string[] }[] }) => easyQuestion(input).easy : undefined;
   if (!localLlm.ok) return err(`OLLAMA_MODEL: ${localLlm.error}`);
   // #248: the Google brain: Gemini answers, Flash-Lite picks the tool groups.
   const googleLlm = config.gemini.enabled ? metered(buildLlm(config.gemini.model, keys, { log }), config.gemini.model, "answer") : undefined;
@@ -1013,6 +1016,8 @@ export const buildDeps = async (inputs: AppInputs): Promise<Result<Deps, string>
                   }),
             // #323: Local not there: Gemini or Claude answers, and the page says so.
             localReady,
+            // #171: easy questions on Claude go to Local, when it's there.
+            ...(easyToLocal ? { easyToLocal } : {}),
           }),
         }
       : {}),
