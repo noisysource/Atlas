@@ -99,7 +99,21 @@ const num = { type: "number" } as const;
 const text = { type: "string" } as const;
 const date = { type: "string", description: "YYYY-MM-DD" } as const;
 
-export const STATEMENT_SCHEMA: JsonObjectSchema = {
+/**
+ * Every object closed (additionalProperties: false), as Anthropic's structured
+ * output requires: without it the extraction call is refused as a bad request.
+ */
+export const closed = (schema: JsonObjectSchema): JsonObjectSchema => {
+  const walk = (v: unknown): unknown => {
+    if (Array.isArray(v)) return v.map(walk);
+    if (v === null || typeof v !== "object") return v;
+    const o = Object.fromEntries(Object.entries(v).map(([k, x]) => [k, k === "description" || k === "enum" || k === "required" ? x : walk(x)]));
+    return o.type === "object" ? { ...o, additionalProperties: false } : o;
+  };
+  return walk(schema) as JsonObjectSchema;
+};
+
+export const STATEMENT_SCHEMA: JsonObjectSchema = closed({
   type: "object",
   properties: {
     statementPeriod: { type: "string", description: "e.g. 2026-03" },
@@ -115,9 +129,9 @@ export const STATEMENT_SCHEMA: JsonObjectSchema = {
     },
   },
   required: ["statementPeriod", "openingBalance", "closingBalance", "lines"],
-};
+});
 
-export const PAYSLIP_SCHEMA: JsonObjectSchema = {
+export const PAYSLIP_SCHEMA: JsonObjectSchema = closed({
   type: "object",
   properties: {
     items: {
@@ -166,9 +180,9 @@ export const PAYSLIP_SCHEMA: JsonObjectSchema = {
     },
   },
   required: ["items", "contracts"],
-};
+});
 
-export const DISCOVERY_SCHEMA: JsonObjectSchema = {
+export const DISCOVERY_SCHEMA: JsonObjectSchema = closed({
   type: "object",
   properties: {
     lines: {
@@ -227,7 +241,7 @@ export const DISCOVERY_SCHEMA: JsonObjectSchema = {
     },
   },
   required: ["lines", "subscriptions", "facilities"],
-};
+});
 
 const RULES = [
   "Numbers only from the document: never invent a figure; leave a value 0 or a text empty when the document doesn't show it, and say so in notes.",
@@ -635,7 +649,10 @@ export const buildImport = async (deps: {
     if (calls >= MAX_CALLS) return err(`the import's limit of ${MAX_CALLS} model calls`);
     calls += 1;
     const got = await llm({ system, messages: [{ role: "user", text: body }], outputSchema: schema, maxTokens });
-    if (!got.ok) return err(`the model failed (${got.error.kind})`);
+    if (!got.ok) {
+      deps.log?.warn("finhub extraction failed", { kind: got.error.kind, reason: got.error.message.slice(0, 300) });
+      return err(`the model failed (${got.error.kind}: ${got.error.message.slice(0, 120)})`);
+    }
     return got.value.kind === "json" ? ok(got.value.value) : err("the model didn't answer in the expected shape");
   };
 
