@@ -28,6 +28,8 @@ import { makeVendusGet, type VendusGet } from "./vendus/vendus.js";
 import { forCountry } from "./connectors/types.js";
 import { vendusConnector } from "./connectors/vendus.js";
 import { houseConnector } from "./connectors/house.js";
+import { kanbanConnector } from "./connectors/kanban.js";
+import { makeKanbanChanges, makeKanbanRead } from "./kanban/kanban.js";
 import { makeCodeRefresh } from "./code/freshness.js";
 import { briefSources } from "./brief.js";
 import { makeMorningBriefs, type BriefStore, type MorningBrief } from "./morning.js";
@@ -571,6 +573,9 @@ export const buildDeps = async (inputs: AppInputs): Promise<Result<Deps, string>
   const blinds = legrand ? makeBlinds({ legrand, log }) : undefined;
   const lights = legrand ? makeLights({ legrand, log }) : undefined;
   const houseChanges = domotics ? makeHouseChanges({ domotics, log }) : undefined;
+  // The dev kanban: its callables live in the same project as the house (noisysource-prod), so the same user reaches them.
+  const kanbanRead = domotics ? makeKanbanRead(domotics.call) : undefined;
+  const kanbanChanges = domotics ? makeKanbanChanges({ call: domotics.call, ...(kanbanRead ? { read: kanbanRead } : {}), log }) : undefined;
   // The live state through the same user; without it, read-only from HOUSE_ENV's database (GCLOUD).
   const houseDb = domotics ? domoticsDb(domotics) : gcloud?.db;
   // #183: closing pull requests after his OK, with the same write token (on with CODE_FIX).
@@ -872,6 +877,7 @@ export const buildDeps = async (inputs: AppInputs): Promise<Result<Deps, string>
     ...(blinds && config.house.enabled ? { houseBlinds: blinds } : {}),
     ...(lights && config.house.enabled ? { houseLights: lights } : {}),
     ...(houseChanges && config.house.enabled ? { houseChanges } : {}),
+    ...(kanbanChanges ? { kanbanChanges } : {}),
     ...(gaps ? { gapIssue: gaps } : {}),
     ...(calendarChanges ? { calendarChange: calendarChanges } : {}),
     ...(reminders ? { reminders } : {}),
@@ -957,6 +963,8 @@ export const buildDeps = async (inputs: AppInputs): Promise<Result<Deps, string>
                         ...(houseDb && config.house.enabled
                           ? [houseConnector({ db: houseDb, env: domotics ? "domotics" : config.house.env, timeZone: config.timeZone, ...(blinds ? { blinds } : {}), ...(lights ? { lights } : {}), ...(domotics ? { read: readHouse(domotics) } : {}), ...(houseChanges ? { changes: houseChanges } : {}) })]
                           : []),
+                        // The dev kanban, through the same user: reads at once, changes after his OK.
+                        ...(kanbanRead ? [kanbanConnector({ read: kanbanRead, ...(kanbanChanges ? { changes: kanbanChanges } : {}) })] : []),
                       ],
                       config.country,
                     ),

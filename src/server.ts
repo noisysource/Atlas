@@ -533,6 +533,18 @@ export const makeServer = (
     });
   }
 
+  // The dev kanban: his answer to a new card, a change or a comment. Only "yes" sends it.
+  const kanbanChanges = deps.kanbanChanges;
+  if (kanbanChanges) {
+    const KanbanBody = z.object({ id: z.string().regex(/^[a-f0-9]{8,64}$/), decision: z.enum(["yes", "no"]) }).strict();
+    app.post("/kanban/change", bodyLimit({ maxSize: 1024, onError: (c) => c.json(errorBody("The request is too large."), 413) }), async (c) => {
+      if (!isJson(c.req.header("content-type"))) return c.json(errorBody("POST /kanban/change needs Content-Type: application/json."), 415);
+      const body = KanbanBody.safeParse(await c.req.json().catch(() => undefined));
+      if (!body.success) return c.json(errorBody('Send { id, decision: "yes" | "no" }.'), 400);
+      return c.json(await kanbanChanges.decide(body.data.id, body.data.decision));
+    });
+  }
+
   // #211: his answer to switching the lights. Only "yes" changes them, and only what the card showed.
   const houseLights = deps.houseLights;
   if (houseLights) {

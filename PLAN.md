@@ -1072,6 +1072,21 @@ Confirmed (2026-11-12):
   `HOUSE_CONTROL=on` alone is enough; `house_now` then reads through the
   same user.
 
+- **The dev kanban, after an OK:** the Tasks app's boards (one per app plus
+  "All systems", in noisysource/noisysource) through its callables in
+  `noisysource-prod`, as the same `atlas@kidclub.pt` user as the house (the
+  callables let in Renato, Atlas and Claude Code; the rules keep `tasks_*`
+  from both agents). `src/kanban/kanban.ts` + `src/connectors/kanban.ts`, the
+  `kanban` tool group (its own galaxy switch, on the GitHub node). Reads run
+  at once: `kanban_open` ("what's open?": his cards and Atlas's, not done),
+  `kanban_list`, `kanban_card`, `kanban_prs` (read-only; he merges from the
+  Tasks app). Writes only propose, on a "kanban" card, never at once, Local
+  mode included (the board is shared): `kanban_create`, `kanban_update`
+  (only the fields that change, labelled from → to), `kanban_comment`; an OK
+  lasts ten minutes, 30 writes an hour; nothing can delete. On whenever the
+  house's user is (`HOUSE_CONTROL=on`). Its contract is the monorepo root
+  CLAUDE.md's "Tasks kanban" entry.
+
 - **Google Cloud (#161):** Atlas (not the code agent) reads errors and
   logs, read-only, from Cloud Logging. Each environment is a project and a
   read-only service account (`jarvis-read`, Logs Viewer only) named in
