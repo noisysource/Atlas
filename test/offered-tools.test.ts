@@ -40,3 +40,20 @@ describe("offered tools (#141)", () => {
     expect(pathOf({ path: [{ kind: "tools", offered: "calendar_read" }] })).toEqual([]);
   });
 });
+
+describe("connector groups reach the tool list", () => {
+  it("a FinHub question is offered the FinHub tools (they were routed, then left out)", async () => {
+    const { finhubConnector } = await import("../src/connectors/finhub.js");
+    const fin = finhubConnector({ drive: {} as never, imports: {} as never, timeZone: "Europe/Lisbon" });
+    const offered: (readonly string[])[] = [];
+    await makeBareAnswerer({ llm: answerOnly, tools: true, connectors: [fin], route: { mode: "rules" } })({
+      context: personal,
+      question: "What does FinHub still need for 2026?",
+      history: [],
+      memories: [],
+      now: NOW,
+      onOffered: (t) => offered.push(t),
+    });
+    expect(offered[0]).toEqual(expect.arrayContaining(["finhub_inventory", "finhub_import"]));
+  });
+});

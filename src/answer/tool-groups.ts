@@ -58,7 +58,9 @@ export const normalise = (text: string): string =>
   text
     .normalize("NFD")
     .replace(/[̀-ͯ]/g, "")
-    .toLowerCase();
+    .toLowerCase()
+    // A tool's name ("finhub_inventory") counts as its words.
+    .replace(/_/g, " ");
 
 /** A word list as one pattern: whole words, "*" at the end of a word for any ending. */
 const words = (list: string): RegExp =>
