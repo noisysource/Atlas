@@ -123,7 +123,8 @@ export const exchangeOf = (
     at: extra.at.toISOString(),
     who,
     ...(request.conversationId ? { conversationId: request.conversationId.slice(0, 80) } : {}),
-    brain: request.brain ?? "claude",
+    // #323: the brain that really answered (another one when Local wasn't there).
+    brain: (response.type === "answer" ? response.brain : undefined) ?? request.brain ?? "claude",
     ...("context" in response ? { context: response.context } : {}),
     spoken: request.spoken === true,
     channel: extra.channel ?? "page",

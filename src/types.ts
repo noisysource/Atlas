@@ -141,7 +141,7 @@ export type ContextOption = {
 export type PathStep =
   /** The local EC precheck: "handoff" went to Kiro with no model. */
   | { readonly kind: "precheck"; readonly result: "none" | "handoff" | "route" }
-  | { readonly kind: "brain"; readonly brain: Brain }
+  | { readonly kind: "brain"; readonly brain: Brain; /** #323: the brain asked for, when it wasn't available. */ readonly instead?: { readonly asked: Brain; readonly why: string } }
   /** The tools the brain was offered this turn (#141), so a missing tool call can be told from a missing tool. */
   | { readonly kind: "tools"; readonly offered: readonly string[] }
   /** A tool call (something done or fetched), or a skill (a way of working), when those exist. */
@@ -290,6 +290,8 @@ export type AnswerInput = {
   readonly spoken?: boolean;
   /** Which brain answers (#88). */
   readonly brain?: Brain;
+  /** #323: Local wasn't available, so another brain answered: which, and why. */
+  readonly onFallback?: (f: { readonly from: "local"; readonly to: "claude" | "google"; readonly why: string }) => void;
   /** false: the page's Remembering is off, so nothing new is saved this turn (#107). */
   readonly remember?: boolean;
   /** A tool ran and succeeded this turn (#96): the honesty guard then lets its claims through. Called by a tool loop. */
