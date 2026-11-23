@@ -94,9 +94,9 @@ export const availableSwitches = (deps: BareDeps, accounts: readonly GmailAccoun
       case "cloud":
         return deps.gcloud !== undefined;
       case "house":
-        return deps.house !== undefined;
+        return (deps.connectors ?? []).some((c) => c.group === "house");
       case "house.control":
-        return deps.house?.blinds !== undefined;
+        return (deps.connectors ?? []).some((c) => c.tools.some((t) => t.name === "house_blinds"));
       case "invoices":
         return (deps.connectors ?? []).some((c) => c.group === "invoices");
       default:
@@ -122,7 +122,7 @@ const omitAll = <T extends object, K extends keyof T>(o: T, keys: readonly K[]):
 /** The deps with what's switched off taken away. Never adds anything. */
 export const withSwitches = (deps: BareDeps, off: ReadonlySet<string>): BareDeps => {
   if (off.size === 0) return deps;
-  const { calendar, gmail, github, code, memory, skills, decisions, gaps, reminders, webSearch, gcloud, house, connectors, ...rest } = deps;
+  const { calendar, gmail, github, code, memory, skills, decisions, gaps, reminders, webSearch, gcloud, connectors, ...rest } = deps;
   const githubOn = github && !off.has("github");
   const codeOn = code && githubOn && !off.has("code");
   const memoryOn = memory && !off.has("memory");
@@ -142,9 +142,8 @@ export const withSwitches = (deps: BareDeps, off: ReadonlySet<string>): BareDeps
     ...(reminders && !off.has("reminders") ? { reminders } : {}),
     ...(webSearch && !off.has("web") ? { webSearch } : {}),
     ...(gcloud && !off.has("cloud") ? { gcloud } : {}),
-    ...(house && !off.has("house") ? { house: off.has("house.control") ? omit(house, "blinds") : house } : {}),
     // #168: a connector goes with its group's switch.
-    ...(connectors ? { connectors: connectors.filter((c) => !off.has(c.group)) } : {}),
+    ...(connectors ? { connectors: connectors.filter((c) => !off.has(c.group)).map((c) => c.narrow?.(off) ?? c) } : {}),
   };
 };
 

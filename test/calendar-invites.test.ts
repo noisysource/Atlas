@@ -1,6 +1,7 @@
 // #265: new events can invite people (Google emails them, only after the OK).
 // #266: the brain is told before its last tool step, so it answers.
 
+import { houseConnector } from "../src/connectors/house.js";
 import { describe, expect, it } from "vitest";
 import { makeBareAnswerer, LAST_STEP_NOTE, MAX_TOOL_ROUNDS } from "../src/answer/bare.js";
 import { checkCreateRequest, checkGuests, createUrl, googleEventBody, makeGoogleEventCreator, addedSentence, proposalLabel, proposalPathLabel } from "../src/calendar/create.js";
@@ -62,7 +63,7 @@ describe("the last tool step", () => {
       if (!r.tools) return ok({ ...common, kind: "text", text: "I couldn't find her address." } as LlmResponse);
       return ok({ ...common, kind: "tool_calls", text: "", calls: [{ id: `c${i}`, name: "house_now", input: {} }] } as LlmResponse);
     };
-    const answer = await makeBareAnswerer({ llm, tools: true, house: { db: { get: async () => ok(undefined) }, env: "dev", timeZone: "Europe/Lisbon" }, route: { mode: "rules" } })({
+    const answer = await makeBareAnswerer({ llm, tools: true, connectors: [houseConnector({ db: { get: async () => ok(undefined) }, env: "dev", timeZone: "Europe/Lisbon" })], route: { mode: "rules" } })({
       context: { id: "personal", name: "Personal" } as unknown as Context,
       question: "is the heating on?",
       history: [],
@@ -88,7 +89,7 @@ describe("a round cut off at the token limit (#268)", () => {
       if (room.length === 1) return { ok: false, error: { kind: "max_tokens", message: "Output was cut off (max_tokens)", retryable: false } } as never;
       return ok({ ...common, kind: "text", text: "Nine concerts, all proposed." } as LlmResponse);
     };
-    const answer = await makeBareAnswerer({ llm, tools: true, house: { db: { get: async () => ok(undefined) }, env: "dev", timeZone: "Europe/Lisbon" }, route: { mode: "rules" } })({
+    const answer = await makeBareAnswerer({ llm, tools: true, connectors: [houseConnector({ db: { get: async () => ok(undefined) }, env: "dev", timeZone: "Europe/Lisbon" })], route: { mode: "rules" } })({
       context: { id: "personal", name: "Personal" } as unknown as Context,
       question: "is the heating on?",
       history: [],

@@ -26,6 +26,7 @@ import { makeLights } from "./house/lights.js";
 import { makeVendusGet, type VendusGet } from "./vendus/vendus.js";
 import { forCountry } from "./connectors/types.js";
 import { vendusConnector } from "./connectors/vendus.js";
+import { houseConnector } from "./connectors/house.js";
 import { makeCodeRefresh } from "./code/freshness.js";
 import { briefSources } from "./brief.js";
 import { makeMorningBriefs, type BriefStore, type MorningBrief } from "./morning.js";
@@ -943,10 +944,20 @@ export const buildDeps = async (inputs: AppInputs): Promise<Result<Deps, string>
               ...((gcloud || vendusGet) && config.toolCalling ? { knowledge: businessKnowledge } : {}),
               // #9: KidClub's invoices in Vendus, GET only, with tools (Claude).
               // #168: the plugged-in connectors (Vendus first; the others follow).
-              ...(config.toolCalling ? { connectors: forCountry([...(vendusGet ? [vendusConnector({ get: vendusGet, timeZone: config.timeZone })] : [])], config.country) } : {}),
-              // #166: the house now, read-only, from the domotics bridge's state document.
-              ...(houseDb && config.house.enabled && config.toolCalling
-                ? { house: { db: houseDb, env: domotics ? "domotics" : config.house.env, timeZone: config.timeZone, ...(blinds ? { blinds } : {}), ...(lights ? { lights } : {}), ...(domotics ? { read: readHouse(domotics) } : {}), ...(houseChanges ? { changes: houseChanges } : {}) } }
+              // #168: the plugged-in connectors, in the order their tools are described: Vendus, the house.
+              ...(config.toolCalling
+                ? {
+                    connectors: forCountry(
+                      [
+                        ...(vendusGet ? [vendusConnector({ get: vendusGet, timeZone: config.timeZone })] : []),
+                        // #166: the house, from the domotics bridge's state and Atlas's own domotics user.
+                        ...(houseDb && config.house.enabled
+                          ? [houseConnector({ db: houseDb, env: domotics ? "domotics" : config.house.env, timeZone: config.timeZone, ...(blinds ? { blinds } : {}), ...(lights ? { lights } : {}), ...(domotics ? { read: readHouse(domotics) } : {}), ...(houseChanges ? { changes: houseChanges } : {}) })]
+                          : []),
+                      ],
+                      config.country,
+                    ),
+                  }
                 : {}),
               // #175: only the tool groups a question needs; the classifier model (Haiku) helps pick.
               // #49: "what's on my plate?" in one read of everything connected.

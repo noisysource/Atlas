@@ -1,5 +1,6 @@
 // #166: the house now, read-only, from the domotics bridge's state.
 
+import { houseConnector } from "../src/connectors/house.js";
 import { describe, expect, it } from "vitest";
 import { makeBareAnswerer } from "../src/answer/bare.js";
 import { groupsByWords } from "../src/answer/tool-groups.js";
@@ -96,7 +97,7 @@ describe("asking Atlas", () => {
       },
     };
     const steps: PathStep[] = [];
-    await makeBareAnswerer({ llm, tools: true, house: { db, env: "dev", timeZone: TZ }, route: { mode: "rules" } })({
+    await makeBareAnswerer({ llm, tools: true, connectors: [houseConnector({ db, env: "dev", timeZone: TZ })], route: { mode: "rules" } })({
       context: { id: "personal", name: "Personal" } as unknown as Context,
       question: "Is the heating on?",
       history: [],
@@ -119,7 +120,7 @@ describe("asking Atlas", () => {
     const llm: LlmCall = async () => ok(script[Math.min(i++, script.length - 1)] as LlmResponse);
     const db: DbReader = { collections: async () => ok([]), query: async () => ok([]), get: async () => err({ code: "forbidden", message: "no role" }) };
     const steps: PathStep[] = [];
-    await makeBareAnswerer({ llm, tools: true, house: { db, env: "dev", timeZone: TZ } })({ context: { id: "personal", name: "Personal" } as unknown as Context, question: "heating?", history: [], memories: [], now: NOW, onStep: (s) => steps.push(s) });
+    await makeBareAnswerer({ llm, tools: true, connectors: [houseConnector({ db, env: "dev", timeZone: TZ })] })({ context: { id: "personal", name: "Personal" } as unknown as Context, question: "heating?", history: [], memories: [], now: NOW, onStep: (s) => steps.push(s) });
     expect(steps[0]).toMatchObject({ ok: false, error: "forbidden" });
   });
 
