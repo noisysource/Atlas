@@ -52,6 +52,27 @@ export const toValue = (v: unknown): Record<string, unknown> => {
 
 export const toFields = (o: Record<string, unknown>): Record<string, unknown> => Object.fromEntries(Object.entries(o).filter(([, v]) => v !== undefined).map(([k, v]) => [k, toValue(v)]));
 
+/**
+ * Why Firebase refused Atlas's sign-in, in words he can act on. Google's own
+ * reason (e.g. INVALID_LOGIN_CREDENTIALS, OPERATION_NOT_ALLOWED) is kept; the
+ * password never is. Shared by the house's and FinHub's users, so it names
+ * the user and the project, not a script.
+ */
+export const signInRefusal = (status: number, reason: unknown, email: string, project: string): string => {
+  const why = typeof reason === "string" ? reason.split(/[\s:]/)[0]?.slice(0, 60) ?? "" : "";
+  const hint =
+    why === "OPERATION_NOT_ALLOWED" || why === "PASSWORD_LOGIN_DISABLED"
+      ? `email/password sign-in is off in ${project}: the monorepo's create-agent-user.sh ${project} turns it on`
+      : why === "INVALID_LOGIN_CREDENTIALS" || why === "INVALID_PASSWORD" || why === "EMAIL_NOT_FOUND"
+        ? `wrong email or password for ${email} in ${project}: set the password again with create-agent-user.sh ${project}, then connect again with the same one`
+        : why === "USER_DISABLED"
+          ? `${email} is disabled in ${project}`
+          : why.startsWith("API_KEY") || why === "INVALID_API_KEY"
+            ? `the web API key isn't ${project}'s`
+            : `check ${email} exists in ${project} and connect again`;
+  return `${email} couldn't sign in to ${project} (${status}${why ? ` ${why}` : ""}): ${hint}`;
+};
+
 const DOCS = "/documents/";
 const docOf = (raw: unknown): DbDoc | undefined => {
   const o = typeof raw === "object" && raw !== null ? (raw as Record<string, unknown>) : undefined;
@@ -84,8 +105,8 @@ export const makeDomotics = (deps: { readonly user: () => Promise<FirebaseUser |
       ...(signal ? { signal } : {}),
     }).catch(() => undefined);
     if (!res) return err({ code: "unreachable", message: "Firebase sign-in couldn't be reached" });
-    const body = (await res.json().catch(() => ({}))) as { idToken?: unknown; expiresIn?: unknown };
-    if (!res.ok || typeof body.idToken !== "string") return err({ code: "auth", message: `Atlas's domotics user couldn't sign in (${res.status}): check it exists and run npm run house:connect again` });
+    const body = (await res.json().catch(() => ({}))) as { idToken?: unknown; expiresIn?: unknown; error?: { message?: unknown } };
+    if (!res.ok || typeof body.idToken !== "string") return err({ code: "auth", message: signInRefusal(res.status, body.error?.message, user.email, user.project) });
     const seconds = Number(body.expiresIn);
     token = { value: body.idToken, until: now() + (Number.isFinite(seconds) ? seconds : 3600) * 1000 - 5 * 60_000, email: user.email };
     return ok({ user, token: body.idToken });
