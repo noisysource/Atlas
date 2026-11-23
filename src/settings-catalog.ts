@@ -232,7 +232,7 @@ export const SECTIONS: readonly Section[] = [
     node: "drive",
     fields: [
       on("FINHUB", "Feed FinHub", "Needs Drive on"),
-      { key: "FINHUB_DRIVE_FOLDER", label: "Year folder in Drive", kind: "text", hint: "The folder id: the part after folders/ in its link", placeholder: "1aFSI1jBNVgaSHpPhZR55BVcxOIbo5bhL" },
+      { key: "FINHUB_DRIVE_FOLDER", label: "FinHub's folder in Drive", kind: "text", hint: "The Atlas folder (bank statements, payslips, invoices) or a year folder with one subfolder per month: the part after folders/ in its link", placeholder: "11WH0PSSVyRp8sTdVgCQ55aMpGfrgTldK" },
       { key: "FINHUB_DRIVE_ACCOUNT", label: "Whose Drive", kind: "select", options: ["noisysource", "personal", "kidclub", "marisa"] },
     ],
     command: "npm run finhub:connect",
