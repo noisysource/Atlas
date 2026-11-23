@@ -19,6 +19,7 @@ import type { Blinds } from "./house/blinds.js";
 import type { Lights } from "./house/lights.js";
 import type { HouseChanges } from "./house/house-changes.js";
 import type { KanbanChanges } from "./kanban/kanban.js";
+import type { FinhubImports } from "./finhub/finhub.js";
 import type { Gaps } from "./gaps/gaps.js";
 import type { Reminders } from "./reminders/reminders.js";
 import type { TalkStore } from "./talk.js";
@@ -163,7 +164,7 @@ export type PathStep =
        * card with "Add it" / "Don't add", and POSTs `id` to /calendar/confirm.
        * Page only: the path is never logged.
        */
-      readonly confirm?: { readonly id: string; readonly label: string; /** #269: small and undoable: the page does it at once, no card. */ readonly auto?: boolean; /** #278: the next step of his request, carried out by itself after the yes. */ readonly then?: string; readonly kind?: "calendar" | "skill" | "email" | "draft-delete" | "fix" | "pr-close" | "task-start" | "task-publish" | "task-merge" | "task-close" | "house" | "lights" | "house-change" | "gap-issue" | "gmail-tidy" | "calendar-change" | "drive" | "db-change" | "kanban" };
+      readonly confirm?: { readonly id: string; readonly label: string; /** #269: small and undoable: the page does it at once, no card. */ readonly auto?: boolean; /** #278: the next step of his request, carried out by itself after the yes. */ readonly then?: string; readonly kind?: "calendar" | "skill" | "email" | "draft-delete" | "fix" | "pr-close" | "task-start" | "task-publish" | "task-merge" | "task-close" | "house" | "lights" | "house-change" | "gap-issue" | "gmail-tidy" | "calendar-change" | "drive" | "db-change" | "kanban" | "finhub" };
     }
   | {
       readonly kind: "guard";
@@ -421,6 +422,8 @@ export type Deps = {
   /** #211: his answer to switching the lights (POST /house/lights). Only "yes" changes them. */
   readonly houseLights?: Pick<Lights, "decide">;
   /** #166: his answer to a change to the house (POST /house/change). Only "yes" changes it. */
+  /** FinHub: his answer to sending a month's import (POST /finhub/import). Only "yes" sends it. */
+  readonly finhubImports?: Pick<FinhubImports, "decide">;
   /** The dev kanban: his answer to a card change (POST /kanban/change). Only "yes" sends it. */
   readonly kanbanChanges?: Pick<KanbanChanges, "decide">;
   readonly houseChanges?: Pick<HouseChanges, "decide">;

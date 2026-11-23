@@ -1087,6 +1087,26 @@ Confirmed (2026-11-12):
   house's user is (`HOUSE_CONTROL=on`). Its contract is the monorepo root
   CLAUDE.md's "Tasks kanban" entry.
 
+- **FinHub, fed by Atlas (FINHUB=on):** FinHub (the books, in the monorepo)
+  has no AI; Atlas reads the documents. `src/finhub/finhub.ts` +
+  `src/connectors/finhub.ts`, the `finhub` tool group (galaxy switch on the
+  Drive node). `finhub_inventory` lists FINHUB_DRIVE_FOLDER (the year folder,
+  one subfolder per month, "3mar2026") month by month, files sorted into
+  payslips, statements, invoices and other by name, and what's missing.
+  `finhub_import` builds one entity's month: reads its payslips and statements
+  as text, extracts each with the answer model (JSON schemas, counted as
+  "finhub" in the costs panel, at most 40 model calls an import and 40 imports
+  a day), checks each statement adds up, categorises its lines and finds the
+  subscriptions, loans and contracts, then shows one "finhub" card ("Send it"),
+  never sent at once. On yes it writes ONE document,
+  `finhub_books/noisysource-group/atlas_imports/{entity}-{month}`, in the
+  shapes of FinHub's review workbench; Renato commits it there. It won't
+  overwrite a month he committed or set aside unless asked `again`. Atlas's
+  FinHub user is its own file (`npm run finhub:connect`,
+  `data/finhub/firebase.json`), so FinHub can be on dev while the house is on
+  prod. Not yet: Gmail as a source (the household's documents), invoices as
+  documents, scans and photos (text PDFs only).
+
 - **Google Cloud (#161):** Atlas (not the code agent) reads errors and
   logs, read-only, from Cloud Logging. Each environment is a project and a
   read-only service account (`jarvis-read`, Logs Viewer only) named in

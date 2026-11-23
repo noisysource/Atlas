@@ -14,10 +14,10 @@
 import type { LlmCall, LlmTool } from "../llm/types.js";
 import type { Logger } from "../types.js";
 
-export type ToolGroup = "calendar" | "gmail" | "github" | "code" | "cloud" | "invoices" | "house" | "drive" | "kanban";
+export type ToolGroup = "calendar" | "gmail" | "github" | "code" | "cloud" | "invoices" | "house" | "drive" | "kanban" | "finhub";
 
 /** In the order tools are offered: a fixed order keeps the same choice cacheable. */
-export const TOOL_GROUPS: readonly ToolGroup[] = ["calendar", "gmail", "github", "code", "cloud", "invoices", "house", "drive", "kanban"];
+export const TOOL_GROUPS: readonly ToolGroup[] = ["calendar", "gmail", "github", "code", "cloud", "invoices", "house", "drive", "kanban", "finhub"];
 
 /** One line each, for the router and for tools_more. */
 export const GROUP_ABOUT: Record<ToolGroup, string> = {
@@ -28,6 +28,7 @@ export const GROUP_ABOUT: Record<ToolGroup, string> = {
   cloud: "his Google Cloud environments: errors, logs and the database, which holds KidClub's business data (families, bills, income, costs)",
   invoices: "KidClub's invoices in Vendus: totals, VAT, one invoice",
   drive: "his Google Drive: list and read folders and files, create folders, save email attachments (like invoices) into a folder",
+  finhub: "FinHub, the books of Noisy Source, Noisy Phocus and the household: what documents each month has in Drive, and importing a month (payslips, bank statements) for him to review",
   kanban: "the dev kanban (Tasks app): what's open, his and Atlas's cards, boards per app and the roadmap, adding and moving cards, comments, a card's pull requests",
   house: "the house: heating and its settings, heat pump, thermostats, temperatures, climate history, solar, battery, energy and the electricity bill, the tariff, faults, blinds and lights",
 };
@@ -48,6 +49,7 @@ export const groupOfTool = (name: string): ToolGroup | undefined => {
   if (name.startsWith("house_")) return "house";
   if (name.startsWith("drive_")) return "drive";
   if (name.startsWith("kanban_")) return "kanban";
+  if (name.startsWith("finhub_")) return "finhub";
   return undefined;
 };
 
@@ -143,6 +145,14 @@ const RULES: readonly { readonly pattern: RegExp; readonly groups: readonly Tool
       tariff*, bill, bills, kwh, guard, e13, fault*, schedule*, window*, comfort, pause*, resume,
       tarifa*, fatura*, avaria*, horario*, janela*, conforto, pausa*, aquece*`),
     groups: ["house"],
+  },
+  {
+    // FinHub: the books, and the documents that feed them.
+    pattern: words(`
+      finhub, fin hub, books, bookkeeping, ledger, payslip*, salary, salaries, statement*, bank statement*, balance*,
+      import*, opening balance, loan, loans, bpi, social security, irs, cash flow, forecast,
+      contabilidade, recibo*, vencimento*, salario*, extrato*, saldo*, importa*, emprestimo*, seguranca social, tesouraria, previsao`),
+    groups: ["finhub", "drive"],
   },
   {
     // The dev kanban: "what's open?", cards, boards, the roadmap.

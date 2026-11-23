@@ -157,6 +157,7 @@ export const CARD_ENDPOINTS: Readonly<Record<string, string>> = {
   lights: "/house/lights",
   "house-change": "/house/change",
   kanban: "/kanban/change",
+  finhub: "/finhub/import",
   "pr-close": "/github/pr-close",
   "task-start": "/code/task",
   "task-publish": "/code/task",

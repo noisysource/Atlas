@@ -50,6 +50,8 @@ data/decisions.json
 data/plans.json
 # #166: Atlas's domotics user (Firebase Auth email and password), local only
 data/house/
+# FinHub: Atlas's own Firebase user in FinHub's project (npm run finhub:connect)
+data/finhub/
 # #8: the Vendus key of Atlas's Vendus user
 data/vendus.json
 # #294: WhatsApp's keys (token, app secret) and the numbers allowed to talk to Atlas

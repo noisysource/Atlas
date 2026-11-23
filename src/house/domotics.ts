@@ -34,6 +34,8 @@ export type Domotics = {
   readonly patch: (path: readonly string[], fields: Record<string, unknown>) => Promise<Result<true, DomoticsError>>;
   /** Adds a document with a new id, `createdAt` set by the server. */
   readonly add: (collection: string, fields: Record<string, unknown>) => Promise<Result<string, DomoticsError>>;
+  /** Writes a whole document at a path (creating or replacing it), the named fields set to the server's time. */
+  readonly put: (path: readonly string[], fields: Record<string, unknown>, serverTimes: readonly string[]) => Promise<Result<true, DomoticsError>>;
 };
 
 /** A plain value as Firestore's REST value. Integers stay integers; dates are timestamps. */
@@ -199,6 +201,25 @@ export const makeDomotics = (deps: { readonly user: () => Promise<FirebaseUser |
         `add to ${collection}`,
       );
       return got.ok ? ok(id) : got;
+    },
+    put: async (path, fields, serverTimes) => {
+      if (!safePath(path)) return err({ code: "failed", message: "not a document path" });
+      const got = await request(
+        (u) => `${base(u)}:commit`,
+        {
+          method: "POST",
+          bodyFor: (u) => ({
+            writes: [
+              {
+                update: { name: `projects/${u.project}/databases/(default)/documents/${path.join("/")}`, fields: toFields(fields) },
+                updateTransforms: serverTimes.map((fieldPath) => ({ fieldPath, setToServerValue: "REQUEST_TIME" })),
+              },
+            ],
+          }),
+        },
+        `write ${path.join("/")}`,
+      );
+      return got.ok ? ok(true) : got;
     },
   };
 };
