@@ -331,3 +331,21 @@ describe("the Atlas folder (by kind and entity)", () => {
     expect(systems.filter((x) => x.includes("payslips"))).toHaveLength(1);
   });
 });
+
+describe("extraction schemas (Anthropic structured output)", () => {
+  it("close every object, or the call is refused as a bad request", async () => {
+    const { STATEMENT_SCHEMA, PAYSLIP_SCHEMA, DISCOVERY_SCHEMA } = await import("../src/finhub/finhub.js");
+    const open: string[] = [];
+    const walk = (v: unknown, at: string): void => {
+      if (Array.isArray(v)) return v.forEach((x, i) => walk(x, `${at}[${i}]`));
+      if (v === null || typeof v !== "object") return;
+      const o = v as Record<string, unknown>;
+      if (o.type === "object" && o.additionalProperties !== false) open.push(at);
+      for (const [k, x] of Object.entries(o)) walk(x, `${at}.${k}`);
+    };
+    walk(STATEMENT_SCHEMA, "statement");
+    walk(PAYSLIP_SCHEMA, "payslip");
+    walk(DISCOVERY_SCHEMA, "discovery");
+    expect(open).toEqual([]);
+  });
+});
