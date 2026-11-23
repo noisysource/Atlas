@@ -533,6 +533,18 @@ export const makeServer = (
     });
   }
 
+  // FinHub: his answer to sending a month's import. Only "yes" sends it, to the "From Atlas" tab.
+  const finhubImports = deps.finhubImports;
+  if (finhubImports) {
+    const ImportBody = z.object({ id: z.string().regex(/^[a-f0-9]{8,64}$/), decision: z.enum(["yes", "no"]) }).strict();
+    app.post("/finhub/import", bodyLimit({ maxSize: 1024, onError: (c) => c.json(errorBody("The request is too large."), 413) }), async (c) => {
+      if (!isJson(c.req.header("content-type"))) return c.json(errorBody("POST /finhub/import needs Content-Type: application/json."), 415);
+      const body = ImportBody.safeParse(await c.req.json().catch(() => undefined));
+      if (!body.success) return c.json(errorBody('Send { id, decision: "yes" | "no" }.'), 400);
+      return c.json(await finhubImports.decide(body.data.id, body.data.decision));
+    });
+  }
+
   // The dev kanban: his answer to a new card, a change or a comment. Only "yes" sends it.
   const kanbanChanges = deps.kanbanChanges;
   if (kanbanChanges) {

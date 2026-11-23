@@ -487,7 +487,7 @@ const refreshReach = async () => {
 };
 
 /** Cards still waiting for an OK, counted per node for the badges (#133). */
-const NODE_OF_CARD = { calendar: "calendar", email: "gmail", "draft-delete": "gmail", skill: "skills", fix: "code", "pr-close": "github", "task-start": "code", "task-publish": "code", "task-merge": "code", "task-close": "code", house: "house", lights: "house", "house-change": "house", "gap-issue": "github", "gmail-tidy": "gmail", "calendar-change": "calendar", drive: "drive", "db-change": "cloud", kanban: "github" };
+const NODE_OF_CARD = { calendar: "calendar", email: "gmail", "draft-delete": "gmail", skill: "skills", fix: "code", "pr-close": "github", "task-start": "code", "task-publish": "code", "task-merge": "code", "task-close": "code", house: "house", lights: "house", "house-change": "house", "gap-issue": "github", "gmail-tidy": "gmail", "calendar-change": "calendar", drive: "drive", "db-change": "cloud", kanban: "github", finhub: "drive" };
 const refreshPending = () => {
   /** @type {Record<string, number>} */
   const counts = {};
@@ -598,6 +598,7 @@ const CARDS = {
   lights: { ask: (/** @type {string} */ l) => `Change the lights? ${l}.`, yes: "Do it", no: "Leave them", endpoint: "/house/lights", failed: "nothing changed" },
   "house-change": { ask: (/** @type {string} */ l) => `Change the house? ${l}.`, yes: "Do it", no: "Leave it", endpoint: "/house/change", failed: "nothing changed" },
   kanban: { ask: (/** @type {string} */ l) => `Change the kanban? ${l}.`, yes: "Do it", no: "Leave it", endpoint: "/kanban/change", failed: "the board didn't change" },
+  finhub: { ask: (/** @type {string} */ l) => `${l}?`, yes: "Send it", no: "Don't", endpoint: "/finhub/import", failed: "nothing was sent" },
   "pr-close": { ask: (/** @type {string} */ l) => `Close pull request ${l}? Nothing is merged; if it's one of my branches, it's deleted.`, yes: "Close it", no: "Keep it", endpoint: "/github/pr-close", failed: "nothing was closed" },
   "task-start": { ask: (/** @type {string} */ l) => `Start a coding task: ${l}? Claude Code works on a copy, on a new branch, and can run the tests. Nothing is pushed without asking you.`, yes: "Start it", no: "Not now", endpoint: "/code/task", failed: "nothing was started" },
   "task-publish": { ask: (/** @type {string} */ l) => `Push ${l}? A pull request into staging deploys a preview to dev.`, yes: "Push it", no: "Not yet", endpoint: "/code/task", failed: "nothing was pushed" },
@@ -612,7 +613,7 @@ const CARDS = {
  * is worded by code and goes into the history with what really ran.
  * #269: a small, undoable change (`auto`) is done at once, with no question:
  * the card becomes one line saying what happened, with Undo for a calendar event.
- * @param {{ id: string, label: string, auto?: boolean, then?: string, kind?: "calendar" | "skill" | "email" | "draft-delete" | "fix" | "pr-close" | "task-start" | "task-publish" | "task-merge" | "task-close" | "house" | "lights" | "house-change" | "gap-issue" | "gmail-tidy" | "calendar-change" | "drive" | "db-change" | "kanban" }} proposal
+ * @param {{ id: string, label: string, auto?: boolean, then?: string, kind?: "calendar" | "skill" | "email" | "draft-delete" | "fix" | "pr-close" | "task-start" | "task-publish" | "task-merge" | "task-close" | "house" | "lights" | "house-change" | "gap-issue" | "gmail-tidy" | "calendar-change" | "drive" | "db-change" | "kanban" | "finhub" }} proposal
  */
 const confirmCard = (proposal) => {
   const auto = proposal.auto === true;

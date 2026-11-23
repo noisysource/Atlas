@@ -225,6 +225,19 @@ export const SECTIONS: readonly Section[] = [
     ],
   },
   {
+    id: "finhub",
+    title: "FinHub (the books)",
+    about:
+      "Atlas reads each month's payslips and bank statements from Drive and sends them to FinHub's \"From Atlas\" tab after your OK; you review and commit them there.",
+    node: "drive",
+    fields: [
+      on("FINHUB", "Feed FinHub", "Needs Drive on"),
+      { key: "FINHUB_DRIVE_FOLDER", label: "Year folder in Drive", kind: "text", hint: "The folder id: the part after folders/ in its link", placeholder: "1aFSI1jBNVgaSHpPhZR55BVcxOIbo5bhL" },
+      { key: "FINHUB_DRIVE_ACCOUNT", label: "Whose Drive", kind: "select", options: ["noisysource", "personal", "kidclub", "marisa"] },
+    ],
+    command: "npm run finhub:connect",
+  },
+  {
     id: "kidclub",
     title: "KidClub (Vendus and the database)",
     about:

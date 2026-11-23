@@ -48,6 +48,10 @@ const fakeDomotics = (docs: Record<string, Record<string, unknown>> = {}, opts: 
       writes.push({ kind: "patch", path: path.join("/"), fields });
       return ok(true);
     },
+    put: async (path, fields) => {
+      writes.push({ kind: "put", path: path.join("/"), fields });
+      return ok(true);
+    },
     add: async (collection, fields) => {
       writes.push({ kind: "add", path: collection, fields });
       return ok("new-id");

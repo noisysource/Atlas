@@ -29,6 +29,9 @@ import { forCountry } from "./connectors/types.js";
 import { vendusConnector } from "./connectors/vendus.js";
 import { houseConnector } from "./connectors/house.js";
 import { kanbanConnector } from "./connectors/kanban.js";
+import { finhubConnector } from "./connectors/finhub.js";
+import { makeFinhubImports, type FinhubDb } from "./finhub/finhub.js";
+import { isGoogleAccount } from "./google-accounts.js";
 import { makeKanbanChanges, makeKanbanRead } from "./kanban/kanban.js";
 import { makeCodeRefresh } from "./code/freshness.js";
 import { briefSources } from "./brief.js";
@@ -576,6 +579,24 @@ export const buildDeps = async (inputs: AppInputs): Promise<Result<Deps, string>
   // The dev kanban: its callables live in the same project as the house (noisysource-prod), so the same user reaches them.
   const kanbanRead = domotics ? makeKanbanRead(domotics.call) : undefined;
   const kanbanChanges = domotics ? makeKanbanChanges({ call: domotics.call, ...(kanbanRead ? { read: kanbanRead } : {}), log }) : undefined;
+  // FinHub: the month's documents from Drive, extracted with the answer model (counted as "finhub"),
+  // and sent after his OK as Atlas's own user in FinHub's project (its own file: dev or prod).
+  const finhubLlm = config.finhub.enabled && driveClient && config.toolCalling ? metered(buildLlm(config.models.answer, keys, { log }), config.models.answer, "finhub") : undefined;
+  const finhubImports =
+    finhubLlm?.ok && driveClient && isGoogleAccount(config.finhub.account)
+      ? (() => {
+          const fb = makeDomotics({ user: () => readFirebaseUser(config.finhub.userPath) });
+          const db: FinhubDb = {
+            get: async (path, signal) => {
+              const got = await fb.get(path, signal);
+              return got.ok ? ok(got.value ? { fields: got.value.fields } : undefined) : err({ message: got.error.message });
+            },
+            put: fb.put,
+          };
+          const drive = { client: driveClient, account: config.finhub.account, folder: config.finhub.folder };
+          return { drive, imports: makeFinhubImports({ drive, llm: finhubLlm.value, db, log }) };
+        })()
+      : undefined;
   // The live state through the same user; without it, read-only from HOUSE_ENV's database (GCLOUD).
   const houseDb = domotics ? domoticsDb(domotics) : gcloud?.db;
   // #183: closing pull requests after his OK, with the same write token (on with CODE_FIX).
@@ -878,6 +899,7 @@ export const buildDeps = async (inputs: AppInputs): Promise<Result<Deps, string>
     ...(lights && config.house.enabled ? { houseLights: lights } : {}),
     ...(houseChanges && config.house.enabled ? { houseChanges } : {}),
     ...(kanbanChanges ? { kanbanChanges } : {}),
+    ...(finhubImports ? { finhubImports: finhubImports.imports } : {}),
     ...(gaps ? { gapIssue: gaps } : {}),
     ...(calendarChanges ? { calendarChange: calendarChanges } : {}),
     ...(reminders ? { reminders } : {}),
@@ -965,6 +987,8 @@ export const buildDeps = async (inputs: AppInputs): Promise<Result<Deps, string>
                           : []),
                         // The dev kanban, through the same user: reads at once, changes after his OK.
                         ...(kanbanRead ? [kanbanConnector({ read: kanbanRead, ...(kanbanChanges ? { changes: kanbanChanges } : {}) })] : []),
+                        // FinHub: the month's documents in, after his OK, for him to review in FinHub.
+                        ...(finhubImports ? [finhubConnector({ drive: finhubImports.drive, imports: finhubImports.imports, timeZone: config.timeZone })] : []),
                       ],
                       config.country,
                     ),

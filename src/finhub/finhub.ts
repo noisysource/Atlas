@@ -1,0 +1,688 @@
+// FinHub, the money (noisysource/noisysource, apps/noisysource/finhub). FinHub
+// has no AI: Atlas reads the documents and FinHub shows and keeps the books.
+//
+// - finhub_inventory: what's in the Noisy Source Drive's year folder (one
+//   subfolder per month: "1jan2026", "3mar2026", "9Setembro2026"), month by
+//   month: payslips, bank statements, invoices, and what's missing. Reads only.
+// - finhub_import: one entity and one month. Atlas reads the payslips and
+//   statements (as text), extracts them with the brain, works out each
+//   statement line's vendor and category and the subscriptions, loans and
+//   contracts behind them, and shows him one card. On "Do it" it writes ONE
+//   document, finhub_books/{book}/atlas_imports/{id}, in the shapes of
+//   FinHub's own review workbench; nothing reaches the books until he commits
+//   it there. The rules let Atlas write only that, only while it's pending.
+//
+// Everything Atlas sends is checked here; FinHub checks it again. Every model
+// call is counted (the costs panel's "finhub"), at most a set number per import.
+
+import { randomBytes } from "node:crypto";
+import type { DriveClient, DriveFile } from "../drive.js";
+import type { GoogleAccount } from "../google-accounts.js";
+import type { JsonObjectSchema, LlmCall, LlmTool } from "../llm/types.js";
+import { err, ok, type Result } from "../result.js";
+import type { Logger } from "../types.js";
+
+/** The one set of books (FINHUB_BOOK_ID in apps/noisysource/finhub/src/firebase.ts). */
+export const FINHUB_BOOK = "noisysource-group";
+export const IMPORTS_PATH = ["finhub_books", FINHUB_BOOK, "atlas_imports"] as const;
+
+/** The entities as FinHub names them; an import says which by name. */
+export const ENTITIES = ["Noisy Source", "Noisy Phocus", "Household"] as const;
+
+export type FileKind = "payslip" | "statement" | "invoice" | "other";
+
+/** What a file is, by its name (Portuguese and English). The brain can say otherwise. */
+export const kindOfFile = (name: string): FileKind => {
+  const n = name.toLowerCase();
+  if (/vencimento|payslip|pay slip|salari|^rc[_ -]|recibo de venc/.test(n)) return "payslip";
+  if (/extrato|statement|movimentos|conta[_ -]?corrente|extract/.test(n)) return "statement";
+  if (/fatura|factura|invoice|recibo|^f[tr][ _-]|^fs[ _-]|nota de cr|receipt/.test(n)) return "invoice";
+  return "other";
+};
+
+/** The month a year folder's subfolder is for ("3mar2026" → 2026-03); undefined when it isn't one. */
+export const monthOfFolder = (name: string, year: number): string | undefined => {
+  const m = /^\s*(\d{1,2})\s*[a-zç]*\s*(\d{4})?\s*$/i.exec(name);
+  if (!m) return undefined;
+  const month = Number(m[1]);
+  if (month < 1 || month > 12) return undefined;
+  if (m[2] && Number(m[2]) !== year) return undefined;
+  return `${year}-${String(month).padStart(2, "0")}`;
+};
+
+const MONTH = /^20\d{2}-(0[1-9]|1[0-2])$/;
+
+// ── Tools ─────────────────────────────────────────────────────────────────────
+
+export const FINHUB_INVENTORY_TOOL: LlmTool = {
+  name: "finhub_inventory",
+  description:
+    "What's in the Noisy Source Drive's year folder for FinHub, month by month: payslips, bank statements, invoices and other files, and which months miss a statement or payslips. Reads only. Use it before an import, or when he asks what FinHub still needs.",
+  inputSchema: {
+    type: "object",
+    properties: {
+      from: { type: "string", description: "First month, YYYY-MM (default January of this year)" },
+      to: { type: "string", description: "Last month, YYYY-MM (default this month)" },
+    },
+    additionalProperties: false,
+  },
+};
+
+export const FINHUB_IMPORT_TOOL: LlmTool = {
+  name: "finhub_import",
+  description:
+    "Import one month of one entity into FinHub: read that month's payslips and bank statements from the Drive folder, extract them, categorise every statement line, and find the subscriptions, loans and contracts behind them. It takes a minute or two and shows him a card; nothing is sent until his OK, and even then it only lands in FinHub's \"From Atlas\" tab for him to review and commit. One month per call. Leave files out to take every payslip and statement of the month.",
+  inputSchema: {
+    type: "object",
+    properties: {
+      entity: { type: "string", enum: [...ENTITIES], description: "Whose month it is" },
+      month: { type: "string", description: "YYYY-MM" },
+      files: {
+        type: "array",
+        description: "Only these files (ids from finhub_inventory), each with what it is",
+        items: { type: "object", properties: { id: { type: "string" }, kind: { type: "string", enum: ["payslip", "statement"] } }, required: ["id", "kind"] },
+      },
+      again: { type: "boolean", description: "Import a month again that he already committed or set aside" },
+    },
+    required: ["entity", "month"],
+    additionalProperties: false,
+  },
+};
+
+// ── What the brain extracts, and its schemas ──────────────────────────────────
+
+const num = { type: "number" } as const;
+const text = { type: "string" } as const;
+const date = { type: "string", description: "YYYY-MM-DD" } as const;
+
+export const STATEMENT_SCHEMA: JsonObjectSchema = {
+  type: "object",
+  properties: {
+    statementPeriod: { type: "string", description: "e.g. 2026-03" },
+    openingBalance: num,
+    closingBalance: num,
+    lines: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: { date, description: text, amount: { type: "number", description: "Positive" }, direction: { type: "string", enum: ["credit", "debit"] } },
+        required: ["date", "description", "amount", "direction"],
+      },
+    },
+  },
+  required: ["statementPeriod", "openingBalance", "closingBalance", "lines"],
+};
+
+export const PAYSLIP_SCHEMA: JsonObjectSchema = {
+  type: "object",
+  properties: {
+    items: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          employeeName: text,
+          periodStart: date,
+          periodEnd: date,
+          payDate: date,
+          taxDueDate: { type: "string", description: "YYYY-MM-DD: when IRS withholding and Social Security are due (the 20th of the next month in Portugal, unless the slip says)" },
+          grossPay: num,
+          netPay: num,
+          employeeWithholdings: { type: "number", description: "IRS withheld + employee Social Security" },
+          employerTaxes: { type: "number", description: "Employer Social Security" },
+          employerContributions: { type: "number", description: "Other employer costs (FCT, insurance), 0 if none" },
+          notes: text,
+        },
+        required: ["employeeName", "periodStart", "periodEnd", "payDate", "taxDueDate", "grossPay", "netPay", "employeeWithholdings", "employerTaxes", "employerContributions", "notes"],
+      },
+    },
+    contracts: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          workerName: text,
+          roleTitle: text,
+          employerName: text,
+          isOwnerHint: { type: "boolean", description: "The worker is the company's owner (Renato at Noisy Source)" },
+          paySchedule: { type: "string", enum: ["14_months", "12_months"] },
+          baseGrossMonthly: num,
+          irsRate: { type: "number", description: "Percent" },
+          employeeSsRate: { type: "number", description: "Percent, usually 11" },
+          employerSsRate: { type: "number", description: "Percent, usually 23.75" },
+          mealAllowanceDaily: num,
+          mealPaymentMethod: { type: "string", enum: ["card", "cash", "none"] },
+          childVoucherMonthly: num,
+          otherBenefitName: text,
+          otherBenefitMonthly: num,
+          notes: text,
+        },
+        required: ["workerName", "roleTitle", "employerName", "isOwnerHint", "paySchedule", "baseGrossMonthly", "irsRate", "employeeSsRate", "employerSsRate", "mealAllowanceDaily", "mealPaymentMethod", "childVoucherMonthly", "otherBenefitName", "otherBenefitMonthly", "notes"],
+      },
+    },
+  },
+  required: ["items", "contracts"],
+};
+
+export const DISCOVERY_SCHEMA: JsonObjectSchema = {
+  type: "object",
+  properties: {
+    lines: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          index: { type: "integer" },
+          vendor: text,
+          category: text,
+          type: { type: "string", enum: ["income", "expense", "transfer", "debt_payment", "payroll"] },
+          ivaRate: { type: "number", description: "VAT percent included, 0 if none or unknown" },
+          ivaDeductible: { type: "boolean" },
+        },
+        required: ["index", "vendor", "category", "type", "ivaRate", "ivaDeductible"],
+      },
+    },
+    subscriptions: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          name: text,
+          vendor: text,
+          category: text,
+          amount: num,
+          frequency: { type: "string", enum: ["monthly", "annual"] },
+          billingDay: { type: "integer" },
+          billingMonth: { type: "integer" },
+          ivaRate: num,
+          ivaDeductible: { type: "boolean" },
+          hasInvoice: { type: "boolean" },
+          matchCount: { type: "integer" },
+          sampleDates: { type: "array", items: date },
+          notes: text,
+        },
+        required: ["name", "vendor", "category", "amount", "frequency", "billingDay", "billingMonth", "ivaRate", "ivaDeductible", "hasInvoice", "matchCount", "sampleDates", "notes"],
+      },
+    },
+    facilities: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          name: text,
+          lender: text,
+          facilityType: { type: "string", enum: ["term_loan", "credit_line", "credit_card", "mortgage", "equipment_loan"] },
+          monthlyPayment: num,
+          dueDay: { type: "integer" },
+          apr: { type: "number", description: "Percent; 0 if the statement doesn't show it" },
+          matchCount: { type: "integer" },
+          notes: text,
+        },
+        required: ["name", "lender", "facilityType", "monthlyPayment", "dueDay", "apr", "matchCount", "notes"],
+      },
+    },
+  },
+  required: ["lines", "subscriptions", "facilities"],
+};
+
+const RULES = [
+  "Numbers only from the document: never invent a figure; leave a value 0 or a text empty when the document doesn't show it, and say so in notes.",
+  "Amounts in euros, as plain numbers with a dot for decimals (1.234,56 € is 1234.56).",
+  "Dates as YYYY-MM-DD. Portuguese documents write dates day first.",
+].join(" ");
+
+export const statementPrompt = (entity: string, month: string): string =>
+  `You extract a bank statement for FinHub, the bookkeeping of ${entity}, for ${month}. Return the statement period, the opening and closing balance, and EVERY movement line in order: its date, its description as written, the amount as a positive number, and the direction (credit: money in; debit: money out). ${RULES}`;
+
+export const payslipPrompt = (entity: string, month: string): string =>
+  `You extract Portuguese payslips (recibos de vencimento) for FinHub, the bookkeeping of ${entity}, for ${month}. Return one item per payslip in the document, and the employment contract each one implies (gross base salary, IRS withholding rate, Social Security rates, meal allowance and how it's paid, other benefits; 14 months when there are holiday and Christmas subsidies). Renato Lopes is Noisy Source's owner. ${RULES}`;
+
+export const discoveryPrompt = (entity: string): string =>
+  `You categorise bank statement lines for FinHub, the bookkeeping of ${entity} (Portugal). For each line give the vendor (short, clean: "Anthropic", "MEO", "BPI"), a category (e.g. Revenue & Inflows, Payroll, Taxes & Social Security, Software & Subscriptions, Telecom, Vehicle & Charging, Meals, Bank Fees, Loan Payment, Transfer, Operating Expense), its type (income, expense, transfer, debt_payment for a loan instalment, payroll for salaries) and the VAT it likely includes (23, 13, 6 or 0; 0 for salaries, taxes, transfers, loans and bank fees). Then list the recurring subscriptions you can see (the same vendor and about the same amount, monthly or yearly) and the loans or credit facilities (instalments to a bank). Only what the lines show. ${RULES}`;
+
+// ── The import's drafts (FinHub's workbench shapes) ───────────────────────────
+
+type O = Record<string, unknown>;
+const obj = (v: unknown): O => (typeof v === "object" && v !== null && !Array.isArray(v) ? (v as O) : {});
+const arr = (v: unknown, max: number): unknown[] => (Array.isArray(v) ? v.slice(0, max) : []);
+const str = (v: unknown, max = 300): string => (typeof v === "string" ? v.trim().slice(0, max) : "");
+const money = (v: unknown): number => {
+  const n = typeof v === "number" ? v : NaN;
+  return Number.isFinite(n) ? Math.round(n * 100) / 100 : 0;
+};
+const isoDate = (v: unknown): string => (typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : "");
+const intIn = (v: unknown, lo: number, hi: number, d: number): number => (typeof v === "number" && Number.isInteger(v) && v >= lo && v <= hi ? v : d);
+
+export type Line = { date: string; description: string; amount: number; direction: "credit" | "debit"; vendor: string; category: string; type: string; ivaRate: number; ivaDeductible: boolean };
+export type Statement = { filename: string; statementPeriod: string; openingBalance: number; closingBalance: number; lines: Line[] };
+export type Source = { kind: "drive"; name: string; id: string; link: string };
+export type ImportDoc = {
+  entityHint: string;
+  month: string;
+  summary: string;
+  sources: Source[];
+  statements: Statement[];
+  payslips: O[];
+  contracts: O[];
+  subscriptions: O[];
+  facilities: O[];
+};
+
+export const statementOf = (raw: unknown, filename: string): Statement => {
+  const s = obj(raw);
+  const lines = arr(s.lines, 2000).flatMap((l): Line[] => {
+    const x = obj(l);
+    const d = isoDate(x.date);
+    if (!d) return [];
+    const direction = x.direction === "credit" ? "credit" : "debit";
+    return [{ date: d, description: str(x.description), amount: Math.abs(money(x.amount)), direction, vendor: "", category: direction === "credit" ? "Revenue & Inflows" : "Operating Expense", type: direction === "credit" ? "income" : "expense", ivaRate: 0, ivaDeductible: false }];
+  });
+  return { filename: filename.slice(0, 200), statementPeriod: str(s.statementPeriod, 60), openingBalance: money(s.openingBalance), closingBalance: money(s.closingBalance), lines };
+};
+
+/** A statement's lines, re-read: does opening + credits − debits reach the closing balance? */
+export const balanceCheck = (s: Statement): { readonly ok: boolean; readonly off: number } => {
+  const net = s.lines.reduce((n, l) => n + (l.direction === "credit" ? l.amount : -l.amount), 0);
+  const off = Math.round((s.openingBalance + net - s.closingBalance) * 100) / 100;
+  return { ok: Math.abs(off) < 0.01, off };
+};
+
+const TX_TYPES = ["income", "expense", "transfer", "debt_payment", "payroll"];
+
+/** The brain's categories onto a statement's lines, by index; lines it skipped keep their defaults. */
+export const applyDiscovery = (lines: Line[], offset: number, raw: unknown): void => {
+  for (const l of arr(obj(raw).lines, 500)) {
+    const x = obj(l);
+    const i = typeof x.index === "number" && Number.isInteger(x.index) ? offset + x.index : -1;
+    const line = lines[i];
+    if (!line) continue;
+    line.vendor = str(x.vendor, 120);
+    line.category = str(x.category, 80) || line.category;
+    line.type = typeof x.type === "string" && TX_TYPES.includes(x.type) ? x.type : line.type;
+    line.ivaRate = intIn(Math.round(money(x.ivaRate)), 0, 23, 0);
+    line.ivaDeductible = x.ivaDeductible === true;
+  }
+};
+
+const key = (...parts: unknown[]): string => parts.map((p) => String(p ?? "").toLowerCase().trim()).join("::");
+
+/** Subscriptions and loans found across chunks, merged by vendor and name. */
+export const mergeFound = (into: { subscriptions: O[]; facilities: O[] }, raw: unknown): void => {
+  const o = obj(raw);
+  for (const s of arr(o.subscriptions, 100)) {
+    const x = obj(s);
+    const k = key(x.vendor || x.name, x.name || x.vendor);
+    const have = into.subscriptions.find((y) => key(y.vendor || y.name, y.name || y.vendor) === k);
+    if (have) {
+      have.matchCount = (Number(have.matchCount) || 1) + (Number(x.matchCount) || 1);
+      have.sampleDates = [...new Set([...(have.sampleDates as string[]), ...arr(x.sampleDates, 24).map(isoDate).filter(Boolean)])].slice(0, 24);
+    } else if (into.subscriptions.length < 200) {
+      into.subscriptions.push({
+        name: str(x.name, 120),
+        vendor: str(x.vendor, 120),
+        category: str(x.category, 80),
+        amount: Math.abs(money(x.amount)),
+        frequency: x.frequency === "annual" ? "annual" : "monthly",
+        billingDay: intIn(x.billingDay, 1, 31, 1),
+        billingMonth: intIn(x.billingMonth, 1, 12, 1),
+        ivaRate: money(x.ivaRate),
+        ivaDeductible: x.ivaDeductible === true,
+        hasInvoice: x.hasInvoice === true,
+        matchCount: intIn(x.matchCount, 1, 1000, 1),
+        sampleDates: arr(x.sampleDates, 24).map(isoDate).filter(Boolean),
+        notes: str(x.notes, 1000),
+      });
+    }
+  }
+  for (const f of arr(o.facilities, 20)) {
+    const x = obj(f);
+    const k = key(x.name, x.lender);
+    if (into.facilities.some((y) => key(y.name, y.lender) === k) || into.facilities.length >= 20) continue;
+    into.facilities.push({
+      name: str(x.name, 120),
+      lender: str(x.lender, 120),
+      facilityType: ["term_loan", "credit_line", "credit_card", "mortgage", "equipment_loan"].includes(String(x.facilityType)) ? x.facilityType : "term_loan",
+      monthlyPayment: Math.abs(money(x.monthlyPayment)),
+      dueDay: intIn(x.dueDay, 1, 31, 1),
+      apr: money(x.apr),
+      matchCount: intIn(x.matchCount, 1, 1000, 1),
+      notes: str(x.notes, 1000),
+    });
+  }
+};
+
+export const payslipsOf = (raw: unknown, filename: string): { payslips: O[]; contracts: O[] } => {
+  const o = obj(raw);
+  const payslips = arr(o.items, 20).map((p) => {
+    const x = obj(p);
+    return {
+      employeeName: str(x.employeeName, 120),
+      periodStart: isoDate(x.periodStart),
+      periodEnd: isoDate(x.periodEnd),
+      payDate: isoDate(x.payDate),
+      taxDueDate: isoDate(x.taxDueDate),
+      grossPay: money(x.grossPay),
+      netPay: money(x.netPay),
+      employeeWithholdings: money(x.employeeWithholdings),
+      employerTaxes: money(x.employerTaxes),
+      employerContributions: money(x.employerContributions),
+      notes: str(x.notes, 1000),
+      sourceFilename: filename.slice(0, 200),
+    };
+  });
+  const contracts = arr(o.contracts, 10).map((c) => {
+    const x = obj(c);
+    return {
+      workerName: str(x.workerName, 120),
+      roleTitle: str(x.roleTitle, 120),
+      employerName: str(x.employerName, 120),
+      isOwnerHint: x.isOwnerHint === true,
+      paySchedule: x.paySchedule === "12_months" ? "12_months" : "14_months",
+      baseGrossMonthly: money(x.baseGrossMonthly),
+      irsRate: money(x.irsRate),
+      employeeSsRate: money(x.employeeSsRate),
+      employerSsRate: money(x.employerSsRate),
+      mealAllowanceDaily: money(x.mealAllowanceDaily),
+      mealPaymentMethod: ["card", "cash", "none"].includes(String(x.mealPaymentMethod)) ? x.mealPaymentMethod : "none",
+      childVoucherMonthly: money(x.childVoucherMonthly),
+      otherBenefitName: str(x.otherBenefitName, 80),
+      otherBenefitMonthly: money(x.otherBenefitMonthly),
+      notes: str(x.notes, 1000),
+    };
+  });
+  return { payslips, contracts };
+};
+
+/** The import's id: one per entity and month; "again" adds a time so it never overwrites a decided one. */
+export const importId = (entity: string, month: string, again?: number): string =>
+  `${entity.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")}-${month}${again ? `-${again.toString(36)}` : ""}`;
+
+/** What an import holds, in a line. */
+export const countsOf = (d: Pick<ImportDoc, "statements" | "payslips" | "contracts" | "subscriptions" | "facilities">): string => {
+  const lines = d.statements.reduce((n, s) => n + s.lines.length, 0);
+  const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
+  return (
+    [
+      d.statements.length > 0 ? `${plural(d.statements.length, "statement")} (${plural(lines, "line")})` : "",
+      d.payslips.length > 0 ? plural(d.payslips.length, "payslip") : "",
+      d.contracts.length > 0 ? plural(d.contracts.length, "contract") : "",
+      d.subscriptions.length > 0 ? plural(d.subscriptions.length, "subscription") : "",
+      d.facilities.length > 0 ? plural(d.facilities.length, "loan") : "",
+    ]
+      .filter(Boolean)
+      .join(", ") || "nothing"
+  );
+};
+
+// ── Reading Drive ─────────────────────────────────────────────────────────────
+
+export type FinhubDrive = { readonly client: Pick<DriveClient, "list" | "read">; readonly account: GoogleAccount; readonly folder: string };
+
+type MonthFolder = { readonly month: string; readonly id: string; readonly name: string };
+
+const monthFolders = async (d: FinhubDrive, year: number, signal?: AbortSignal): Promise<Result<MonthFolder[], string>> => {
+  const got = await d.client.list({ account: d.account, folder: d.folder, max: 100 }, signal);
+  if (!got.ok) return err(got.error.message);
+  return ok(
+    got.value
+      .filter((f) => f.mimeType === "application/vnd.google-apps.folder")
+      .flatMap((f) => {
+        const month = monthOfFolder(f.name, year);
+        return month ? [{ month, id: f.id, name: f.name }] : [];
+      })
+      .sort((a, b) => a.month.localeCompare(b.month)),
+  );
+};
+
+const filesOf = async (d: FinhubDrive, folder: string, signal?: AbortSignal): Promise<Result<DriveFile[], string>> => {
+  const got = await d.client.list({ account: d.account, folder, max: 100 }, signal);
+  return got.ok ? ok(got.value.filter((f) => f.mimeType !== "application/vnd.google-apps.folder")) : err(got.error.message);
+};
+
+const monthsBetween = (from: string, to: string): string[] => {
+  const out: string[] = [];
+  let [y, m] = from.split("-").map(Number) as [number, number];
+  const [ty, tm] = to.split("-").map(Number) as [number, number];
+  while ((y < ty || (y === ty && m <= tm)) && out.length < 24) {
+    out.push(`${y}-${String(m).padStart(2, "0")}`);
+    m += 1;
+    if (m > 12) {
+      m = 1;
+      y += 1;
+    }
+  }
+  return out;
+};
+
+export const checkRange = (input: unknown, today: string): Result<{ from: string; to: string }, string> => {
+  const i = obj(input);
+  const to = i.to === undefined ? today.slice(0, 7) : String(i.to);
+  const from = i.from === undefined ? `${to.slice(0, 4)}-01` : String(i.from);
+  if (!MONTH.test(from) || !MONTH.test(to)) return err("from and to are YYYY-MM");
+  if (from > to) return err("from is after to");
+  if (from.slice(0, 4) !== to.slice(0, 4)) return err("one year at a time: the Drive keeps a folder per year");
+  return ok({ from, to });
+};
+
+/** finhub_inventory's answer, for the brain. */
+export const inventory = async (d: FinhubDrive, range: { from: string; to: string }, signal?: AbortSignal): Promise<Result<string, string>> => {
+  const year = Number(range.from.slice(0, 4));
+  const folders = await monthFolders(d, year, signal);
+  if (!folders.ok) return folders;
+  const out: string[] = [`FinHub inventory, the ${d.account} Drive's year folder, ${range.from} to ${range.to}:`];
+  for (const month of monthsBetween(range.from, range.to)) {
+    const f = folders.value.find((x) => x.month === month);
+    if (!f) {
+      out.push(`${month}: no folder yet (nothing to import).`);
+      continue;
+    }
+    const files = await filesOf(d, f.id, signal);
+    if (!files.ok) {
+      out.push(`${month} (${f.name}): couldn't list it: ${files.error}.`);
+      continue;
+    }
+    const by = (k: FileKind) => files.value.filter((x) => kindOfFile(x.name) === k);
+    const say = (k: FileKind, label: string) => {
+      const list = by(k);
+      return list.length > 0 ? `${label} (${list.length}): ${list.slice(0, 15).map((x) => `${x.name} [${x.id}]`).join("; ")}${list.length > 15 ? "; …" : ""}` : `${label}: none`;
+    };
+    const missing = [by("statement").length === 0 ? "no bank statement" : "", by("payslip").length === 0 ? "no payslips" : ""].filter(Boolean);
+    out.push(`${month} (${f.name}), ${files.value.length} files${missing.length > 0 ? `, ${missing.join(" and ")}` : ""}:`, `  ${say("statement", "statements")}`, `  ${say("payslip", "payslips")}`, `  ${say("invoice", "invoices")}`, `  ${say("other", "other")}`);
+  }
+  out.push("Kinds are guessed from file names: if a file is what its name doesn't say, give it to finhub_import with its kind. Personal documents (Gmail) and invoices as documents aren't imported yet: statements bring their lines.");
+  return ok(out.join("\n"));
+};
+
+// ── The import ────────────────────────────────────────────────────────────────
+
+/** Model calls an import may make (files + discovery chunks); past it, the rest is left out and said. */
+export const MAX_CALLS = 40;
+const CHUNK = 120;
+const MAX_TEXT = 60_000;
+
+export type ImportPlan = { readonly id: string; readonly doc: ImportDoc; readonly label: string; readonly warnings: readonly string[] };
+
+export const buildImport = async (deps: {
+  readonly drive: FinhubDrive;
+  readonly llm: LlmCall;
+  readonly entity: string;
+  readonly month: string;
+  readonly files?: readonly { readonly id: string; readonly kind: "payslip" | "statement" }[];
+  readonly id: string;
+  readonly signal?: AbortSignal;
+  readonly log?: Logger;
+}): Promise<Result<ImportPlan, string>> => {
+  const { drive, llm, entity, month, signal } = deps;
+  let calls = 0;
+  const warnings: string[] = [];
+  const ask = async (system: string, body: string, schema: JsonObjectSchema, maxTokens: number): Promise<Result<unknown, string>> => {
+    if (calls >= MAX_CALLS) return err(`the import's limit of ${MAX_CALLS} model calls`);
+    calls += 1;
+    const got = await llm({ system, messages: [{ role: "user", text: body }], outputSchema: schema, maxTokens });
+    if (!got.ok) return err(`the model failed (${got.error.kind})`);
+    return got.value.kind === "json" ? ok(got.value.value) : err("the model didn't answer in the expected shape");
+  };
+
+  // Which files: those he named, or every payslip and statement in the month's folder.
+  let chosen: { id: string; name: string; kind: "payslip" | "statement" }[];
+  if (deps.files && deps.files.length > 0) {
+    chosen = deps.files.slice(0, 25).map((f) => ({ id: f.id, name: f.id, kind: f.kind }));
+  } else {
+    const folders = await monthFolders(drive, Number(month.slice(0, 4)), signal);
+    if (!folders.ok) return folders;
+    const folder = folders.value.find((f) => f.month === month);
+    if (!folder) return err(`there's no folder for ${month} in the year folder`);
+    const files = await filesOf(drive, folder.id, signal);
+    if (!files.ok) return files;
+    chosen = files.value.flatMap((f) => {
+      const k = kindOfFile(f.name);
+      return k === "payslip" || k === "statement" ? [{ id: f.id, name: f.name, kind: k }] : [];
+    });
+    if (chosen.length > 25) {
+      warnings.push(`only the first 25 of ${chosen.length} payslips and statements`);
+      chosen = chosen.slice(0, 25);
+    }
+  }
+  if (chosen.length === 0) return err(`no payslips or statements for ${month} (names with extrato, statement, vencimento, payslip…); name the files and their kinds`);
+
+  const doc: ImportDoc = { entityHint: entity, month, summary: "", sources: [], statements: [], payslips: [], contracts: [], subscriptions: [], facilities: [] };
+  for (const f of chosen) {
+    const read = await drive.client.read({ account: drive.account, id: f.id }, signal);
+    if (!read.ok) {
+      warnings.push(`${f.name}: couldn't read it (${read.error.message})`);
+      continue;
+    }
+    const name = read.value.name;
+    if (read.value.text.trim().length < 40) {
+      warnings.push(`${name}: no text in it (a scan or a photo?), left out`);
+      continue;
+    }
+    if (read.value.cut) warnings.push(`${name}: too long, read only its start`);
+    doc.sources.push({ kind: "drive", name: name.slice(0, 200), id: f.id, link: `https://drive.google.com/file/d/${encodeURIComponent(f.id)}/view` });
+    const body = `<document name="${name.replace(/"/g, "'")}">\n${read.value.text.slice(0, MAX_TEXT)}\n</document>`;
+    if (f.kind === "statement") {
+      const got = await ask(statementPrompt(entity, month), body, STATEMENT_SCHEMA, 16_000);
+      if (!got.ok) {
+        warnings.push(`${name}: not extracted: ${got.error}`);
+        continue;
+      }
+      const st = statementOf(got.value, name);
+      const check = balanceCheck(st);
+      if (!check.ok) warnings.push(`${name}: the lines don't reach the closing balance (off by ${check.off.toFixed(2)} €): check it in the workbench`);
+      doc.statements.push(st);
+    } else {
+      const got = await ask(payslipPrompt(entity, month), body, PAYSLIP_SCHEMA, 6_000);
+      if (!got.ok) {
+        warnings.push(`${name}: not extracted: ${got.error}`);
+        continue;
+      }
+      const p = payslipsOf(got.value, name);
+      doc.payslips.push(...p.payslips);
+      for (const c of p.contracts) if (!doc.contracts.some((x) => key(x.workerName) === key(c.workerName))) doc.contracts.push(c);
+    }
+  }
+
+  // Each statement's lines, in chunks: vendor, category, type, VAT; and what recurs.
+  for (const st of doc.statements) {
+    for (let offset = 0; offset < st.lines.length; offset += CHUNK) {
+      const chunk = st.lines.slice(offset, offset + CHUNK).map((l, i) => `${i}\t${l.date}\t${l.direction}\t${l.amount.toFixed(2)}\t${l.description}`);
+      const got = await ask(discoveryPrompt(entity), `Lines (index, date, direction, amount €, description):\n${chunk.join("\n")}`, DISCOVERY_SCHEMA, 12_000);
+      if (!got.ok) {
+        warnings.push(`${st.filename} lines ${offset + 1}–${offset + chunk.length}: not categorised: ${got.error}`);
+        continue;
+      }
+      applyDiscovery(st.lines, offset, got.value);
+      mergeFound(doc, got.value);
+    }
+  }
+
+  if (doc.statements.length === 0 && doc.payslips.length === 0) return err(`nothing could be extracted for ${month}${warnings.length > 0 ? `: ${warnings.join("; ")}` : ""}`);
+  doc.summary = [`Read by Atlas from ${doc.sources.length} document${doc.sources.length === 1 ? "" : "s"}: ${countsOf(doc)}.`, ...warnings.map((w) => `⚠ ${w}`)].join("\n").slice(0, 4000);
+  deps.log?.info("finhub import built", { month, calls, sources: doc.sources.length });
+  return ok({ id: deps.id, doc, label: `Send ${entity} · ${month} to FinHub for review: ${countsOf(doc)}${warnings.length > 0 ? ` (${warnings.length} warning${warnings.length === 1 ? "" : "s"})` : ""}`, warnings });
+};
+
+// ── Writing the import, after his OK ──────────────────────────────────────────
+
+/** FinHub's project as Atlas (domotics.ts's client, with FinHub's own user). */
+export type FinhubDb = {
+  readonly get: (path: readonly string[], signal?: AbortSignal) => Promise<Result<{ readonly fields: O } | undefined, { readonly message: string }>>;
+  /** Writes the whole document, its createdAt and updatedAt set by the server. */
+  readonly put: (path: readonly string[], fields: O, serverTimes: readonly string[]) => Promise<Result<true, { readonly code: string; readonly message: string }>>;
+};
+
+export type FinhubImports = {
+  readonly propose: (input: unknown, now: Date, signal?: AbortSignal) => Promise<Result<{ readonly id: string; readonly label: string; readonly warnings: readonly string[] }, string>>;
+  readonly decide: (id: string, decision: "yes" | "no") => Promise<{ readonly ok: boolean; readonly text: string; readonly tool?: string }>;
+};
+
+export const checkImport = (input: unknown): Result<{ entity: string; month: string; again: boolean; files?: { id: string; kind: "payslip" | "statement" }[] }, string> => {
+  const i = obj(input);
+  const entity = (ENTITIES as readonly string[]).includes(String(i.entity)) ? String(i.entity) : "";
+  if (!entity) return err(`entity: one of ${ENTITIES.join(", ")}`);
+  const month = String(i.month ?? "");
+  if (!MONTH.test(month)) return err("month: YYYY-MM");
+  const files = arr(i.files, 25).flatMap((f) => {
+    const x = obj(f);
+    return typeof x.id === "string" && /^[A-Za-z0-9_-]{10,100}$/.test(x.id) && (x.kind === "payslip" || x.kind === "statement") ? [{ id: x.id, kind: x.kind as "payslip" | "statement" }] : [];
+  });
+  if (Array.isArray(i.files) && files.length !== i.files.length) return err("files: each an id from finhub_inventory and its kind, payslip or statement");
+  return ok({ entity, month, again: i.again === true, ...(files.length > 0 ? { files } : {}) });
+};
+
+export const IMPORTS_PER_DAY = 40;
+
+export const makeFinhubImports = (deps: {
+  readonly drive: FinhubDrive;
+  readonly llm: LlmCall;
+  readonly db: FinhubDb;
+  readonly now?: () => number;
+  readonly newId?: () => string;
+  readonly log?: Logger;
+  readonly perDay?: number;
+}): FinhubImports => {
+  const now = deps.now ?? Date.now;
+  const newId = deps.newId ?? (() => randomBytes(12).toString("hex"));
+  const cap = deps.perDay ?? IMPORTS_PER_DAY;
+  const built: number[] = [];
+  const pending = new Map<string, { plan: ImportPlan; until: number }>();
+
+  return {
+    propose: async (input, today, signal) => {
+      const c = checkImport(input);
+      if (!c.ok) return c;
+      if (c.value.month > today.toISOString().slice(0, 7)) return err("that month hasn't happened yet");
+      // Building one reads documents and calls the model: a day's cap, before any of it.
+      while (built.length > 0 && (built[0] ?? 0) <= now() - 86_400_000) built.shift();
+      if (built.length >= cap) return err(`I've built ${cap} imports today, my limit; try tomorrow`);
+      const id = c.value.again ? importId(c.value.entity, c.value.month, now()) : importId(c.value.entity, c.value.month);
+      const existing = await deps.db.get([...IMPORTS_PATH, id], signal);
+      if (!existing.ok) return err(`FinHub couldn't be read: ${existing.error.message}`);
+      const status = existing.value?.fields.status;
+      if (status === "applied" || status === "dismissed")
+        return err(`${c.value.entity} · ${c.value.month} was already ${status === "applied" ? "committed in FinHub" : "set aside"}; import it again only if he asks (again: true)`);
+      built.push(now());
+      const plan = await buildImport({ drive: deps.drive, llm: deps.llm, entity: c.value.entity, month: c.value.month, ...(c.value.files ? { files: c.value.files } : {}), id, ...(signal ? { signal } : {}), ...(deps.log ? { log: deps.log } : {}) });
+      if (!plan.ok) return plan;
+      for (const [k, v] of pending) if (v.until <= now()) pending.delete(k);
+      const card = newId();
+      // An hour to look at it: it took a while to build.
+      pending.set(card, { plan: plan.value, until: now() + 60 * 60_000 });
+      return ok({ id: card, label: plan.value.label, warnings: plan.value.warnings });
+    },
+    decide: async (id, decision) => {
+      const got = pending.get(id);
+      pending.delete(id);
+      if (!got || got.until <= now()) return { ok: false, text: "That import has expired or was already answered, so nothing was sent. Ask me to import the month again." };
+      if (decision === "no") return { ok: true, text: "Okay, I didn't send it to FinHub." };
+      const { plan } = got;
+      const written = await deps.db.put([...IMPORTS_PATH, plan.id], { ...plan.doc, status: "pending", createdBy: "atlas" }, ["createdAt", "updatedAt"]);
+      if (!written.ok) {
+        deps.log?.warn("finhub import write failed", { code: written.error.code });
+        return { ok: false, text: `Nothing was sent: ${written.error.message}.` };
+      }
+      deps.log?.info("finhub import sent", { month: plan.doc.month });
+      return { ok: true, text: `Sent: ${plan.doc.entityHint} · ${plan.doc.month} is in FinHub's "From Atlas" tab (${countsOf(plan.doc)}). Review it in the workbench and commit it there.`, tool: FINHUB_IMPORT_TOOL.name };
+    },
+  };
+};
