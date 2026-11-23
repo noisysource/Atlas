@@ -56,7 +56,7 @@ describe("the switches", () => {
     expect(off.decisions).toBeUndefined();
     expect(off.gmail).toBeDefined();
     // Switching on something .env left off (the house, the calendar) does nothing.
-    expect(withSwitches(d, new Set()).house).toBeUndefined();
+    expect(withSwitches(d, new Set()).connectors).toBeUndefined();
     expect(off.calendar).toBeUndefined();
   });
 

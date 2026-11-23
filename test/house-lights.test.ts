@@ -1,5 +1,6 @@
 // #211: the lights, switched or dimmed only after his OK, through the same Legrand functions as the blinds.
 
+import { houseConnector } from "../src/connectors/house.js";
 import { describe, expect, it } from "vitest";
 import { makeBareAnswerer } from "../src/answer/bare.js";
 import { groupsByWords } from "../src/answer/tool-groups.js";
@@ -141,7 +142,7 @@ describe("asking Atlas", () => {
     await makeBareAnswerer({
       llm,
       tools: true,
-      house: { db, env: "nsprod", timeZone: "Europe/Lisbon", blinds: makeBlinds({ legrand }), lights: makeLights({ legrand }) },
+      connectors: [houseConnector({ db, env: "nsprod", timeZone: "Europe/Lisbon", blinds: makeBlinds({ legrand }), lights: makeLights({ legrand }) })],
       route: { mode: "rules" },
     })({ context: { id: "personal", name: "Personal" } as unknown as Context, question: "Turn off the kitchen lights", history: [], memories: [], now: new Date("2026-11-16T22:00:00Z"), onStep: (s) => steps.push(s) });
     expect(requests[0]?.tools?.map((t) => t.name)).toEqual(expect.arrayContaining(["house_now", "house_blinds", "house_lights"]));

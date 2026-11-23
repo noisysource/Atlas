@@ -26,7 +26,14 @@ export type ConnectorCall = {
   readonly signal?: AbortSignal;
   readonly onStep?: (step: PathStep) => void;
   readonly log?: Logger;
+  /** ASK_SMALL off: small, undoable changes (a light, a blind, one thermostat) are done at once, with Undo. */
+  readonly autoSmall?: boolean;
+  /** #312: Local mode: every undoable change is done at once; what reaches others or production still asks. */
+  readonly local?: boolean;
 };
+
+/** What the brain is told when a change is done at once, without a card. */
+export const AUTO_SAY = (label: string): string => `The app is doing this now, without a card (small and undoable): ${label}. Say in one short sentence what you're doing; don't ask for an OK, and don't claim it worked: the app says so.`;
 
 export type Connector = {
   /** Its own id: "vendus". One folder under src/connectors/ per connector. */
@@ -43,6 +50,8 @@ export type Connector = {
   readonly run: (c: ConnectorCall) => Promise<LlmToolResult>;
   /** The galaxy node that shows it (GET /reach). */
   readonly node?: string;
+  /** The same connector with some of it switched off on the galaxy (e.g. "house.control"). */
+  readonly narrow?: (off: ReadonlySet<string>) => Connector;
 };
 
 /** The connector that owns a tool, if any. */

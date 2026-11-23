@@ -1,5 +1,6 @@
 // #166: the whole house as Atlas's domotics user: reads, and changes only after his OK.
 
+import { houseConnector } from "../src/connectors/house.js";
 import { describe, expect, it } from "vitest";
 import { makeBareAnswerer } from "../src/answer/bare.js";
 import { groupsByWords } from "../src/answer/tool-groups.js";
@@ -227,7 +228,7 @@ describe("asking Atlas", () => {
     await makeBareAnswerer({
       llm,
       tools: true,
-      house: { db: { get: async () => ok(undefined) }, env: "domotics", timeZone: "Europe/Lisbon", read: readHouse(f.d), changes: makeHouseChanges({ domotics: f.d }) },
+      connectors: [houseConnector({ db: { get: async () => ok(undefined) }, env: "domotics", timeZone: "Europe/Lisbon", read: readHouse(f.d), changes: makeHouseChanges({ domotics: f.d }) })],
       route: { mode: "rules" },
     })({ context: { id: "personal", name: "Personal" } as unknown as Context, question: "Lower the heating comfort to 22", history: [], memories: [], now: new Date("2026-11-16T22:00:00Z"), onStep: (s) => steps.push(s) });
     expect(requests[0]?.tools?.map((t) => t.name)).toEqual(expect.arrayContaining(["house_settings", "house_heating", "house_thermostat", "house_tariff"]));

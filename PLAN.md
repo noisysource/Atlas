@@ -1507,6 +1507,11 @@ personal data tools (Gmail, Drive, calendar), phone access (#19), local speech
   routes, switches and runs connectors without knowing them; a new provider
   is one file in `src/connectors/` and one line in `app.ts`. `ATLAS_COUNTRY`
   (Tools → You, default PT) plugs in only the connectors for that country.
+  Vendus and the house are connectors (`src/connectors/vendus.ts`,
+  `house.ts`); a connector gets `autoSmall` and `local` with each call, so
+  its cards follow ASK_SMALL and Local mode, and `narrow` lets a galaxy
+  sub-switch (house.control) take part of it away. Calendar, Gmail, Drive,
+  GitHub and Google Cloud follow, one PR each.
   Vendus is the first one moved; calendar, Gmail, Drive, GitHub, Google Cloud
   and the house follow, one PR each, with their cards and household checks.
 

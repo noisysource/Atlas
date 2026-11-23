@@ -1,5 +1,6 @@
 // #166, part 2: the blinds, moved only after his OK.
 
+import { houseConnector } from "../src/connectors/house.js";
 import { describe, expect, it } from "vitest";
 import { makeBareAnswerer } from "../src/answer/bare.js";
 import { groupsByWords } from "../src/answer/tool-groups.js";
@@ -164,7 +165,7 @@ describe("asking Atlas", () => {
     };
     const f = fakeCall();
     const steps: PathStep[] = [];
-    await makeBareAnswerer({ llm, tools: true, house: { db, env: "dev", timeZone: "Europe/Lisbon", blinds: makeBlinds({ call: f.call, newId: () => "abcdef0123456789" }) }, route: { mode: "rules" } })({
+    await makeBareAnswerer({ llm, tools: true, connectors: [houseConnector({ db, env: "dev", timeZone: "Europe/Lisbon", blinds: makeBlinds({ call: f.call, newId: () => "abcdef0123456789" }) })], route: { mode: "rules" } })({
       context: { id: "personal", name: "Personal" } as unknown as Context,
       question: "Close the blinds in the living room",
       history: [],

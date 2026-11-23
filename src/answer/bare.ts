@@ -43,7 +43,6 @@ import {
   reposForBrain,
   type GithubReader,
 } from "../github/github.js";
-import { HOUSE_NOW_TOOL, HOUSE_STATE_PATH, houseForBrain, houseSummary } from "../house/house.js";
 import { isGmailAccount } from "../gmail/gmail.js";
 import { GMAIL_TIDY_TOOL, type InboxTidy } from "../gmail/tidy.js";
 import { checkListRequest, checkReadRequest as checkDriveRead, DRIVE_CREATE_FOLDER_TOOL, DRIVE_LIST_TOOL, DRIVE_READ_TOOL, DRIVE_SAVE_ATTACHMENT_TOOL, DRIVE_READ_TOOLS, DRIVE_WRITE_TOOLS, fileForBrain, listForBrain, type DriveClient, type DriveWrites } from "../drive.js";
@@ -54,11 +53,7 @@ import { REMINDER_ADD_TOOL, REMINDER_DONE_TOOL, REMINDER_TOOLS, reminderLine, ty
 import { GAP_LIST_TOOL, GAP_NOTE_TOOL, GAP_TOOLS, gapLine, type Gaps } from "../gaps/gaps.js";
 import { DECISION_LIST_TOOL, DECISION_RECORD_TOOL, DECISION_TOOLS, decisionLine, decisionsForPrompt, type Decisions } from "../decisions/decisions.js";
 import { PLAN_FOLLOW_TOOL, PLAN_STATUS_TOOL, PLAN_TOOLS, planForBrain, type Plans } from "../plans/plans.js";
-import { blindsForBrain, HOUSE_BLINDS_TOOL, type Blinds } from "../house/blinds.js";
-import { HOUSE_LIGHTS_TOOL, lightsForBrain, type Lights } from "../house/lights.js";
-import { checkRange, HOUSE_CLIMATE_TOOL, HOUSE_ENERGY_TOOL, HOUSE_INCIDENTS_TOOL, HOUSE_READ_TOOLS, HOUSE_SETTINGS_TOOL, type readHouse } from "../house/house-data.js";
-import { HOUSE_CHANGE_TOOLS, type HouseChanges } from "../house/house-changes.js";
-import { connectorOf, type Connector } from "../connectors/types.js";
+import { AUTO_SAY, connectorOf, type Connector } from "../connectors/types.js";
 import { staleNote, staleSuffix, type CodeRefresh } from "../code/freshness.js";
 import { checkStart, TASK_LIST_TOOL, TASK_MERGE_TOOL, TASK_PUBLISH_TOOL, TASK_START_TOOL, TASK_TELL_TOOL, TASK_TOOLS, taskForBrain, type Tasks } from "../code/tasks.js";
 import { checkFixRequest, CODE_FIX_TOOL, type Fixes } from "../code/fix.js";
@@ -129,7 +124,6 @@ export const takeThen = (call: LlmToolCall, isEc: (text: string) => boolean = ()
 };
 
 /** #269: what the brain is told when the app does a small change without a card. */
-const AUTO_SAY = (label: string): string => `The app is doing this now, without a card (small and undoable): ${label}. Say in one short sentence what you're doing; don't ask for an OK, and don't claim it worked: the app says so.`;
 /** #268: a round cut off before anything was shown is tried once more with this much room. */
 const BARE_MAX_TOKENS_RETRY = 16000;
 
@@ -416,18 +410,8 @@ export const barePrompt = (
           "Not every tool is offered on every question: Atlas offers the groups the question seems to need. If you need a group that isn't offered, call tools_more with it first, then use its tools. Never say you can't do something because its tool isn't offered right now.",
         ]
       : [];
-  const vendusLines = options.tools === true ? (options.connectors ?? []) : [];
-  const houseLines =
-    options.house === true && options.tools === true
-      ? [
-          options.houseControl === true
-            ? "You can see the house right now with house_now: what the heating automation is doing and why, today's plan, room and outdoor temperatures, each thermostat, the heat pump, solar, battery, grid and consumption, and where each blind is. Answer from it in plain words; quote the automation's reason when he asks why. You can move the blinds with house_blinds and switch or dim the lights with house_lights: each shows him a card and nothing changes until his OK, so call them directly when he asks (\"close the blinds in the living room\", \"abre as persianas\", \"turn off the kitchen lights\", \"apaga as luzes da sala\")." +
-              (options.houseAll === true
-                ? " You also see the electricity over any days, in kWh and euros (house_energy), a day's climate per room and the heat pump's hours (house_climate), the heat pump's faults and switching (house_incidents) and the settings (house_settings). You can change the heating automation (house_heating: on/off, pause, warm windows, comfort, day minimum), ask for the house warm by a time (house_warm_by), set a room's thermostat (house_thermostat), switch the heat pump (house_heat_pump), the E13 guard (house_guard) and the tariff (house_tariff): each one is a card, nothing changes until his OK. Read the settings first when a change depends on them. Dates are Lisbon days; work out the range from today."
-                : " The heating can't be changed from here: say so if he asks.")
-            : "You can see the house right now, read-only, with house_now: what the heating automation is doing and why, today's plan, room and outdoor temperatures, each thermostat, the heat pump, solar, battery, grid and consumption. Answer from it in plain words; quote the automation's reason when he asks why. You can't change anything in the house yet: say so if he asks, and that it's coming with an OK step.",
-        ]
-      : [];
+  // #168: what the plugged-in connectors say about themselves.
+  const connectorLines = options.tools === true ? (options.connectors ?? []) : [];
   const cloudLines =
     options.gcloud === true && options.tools === true
       ? [
@@ -525,8 +509,7 @@ export const barePrompt = (
           ...emailLines,
           ...githubLines,
           ...cloudLines,
-          ...vendusLines,
-          ...houseLines,
+          ...connectorLines,
           ...routedLines,
           ...briefLines,
           ...fixLines,
@@ -540,8 +523,7 @@ export const barePrompt = (
             ...emailLines,
             ...githubLines,
             ...cloudLines,
-            ...vendusLines,
-            ...houseLines,
+            ...connectorLines,
             ...routedLines,
             ...briefLines,
             ...fixLines,
@@ -550,13 +532,12 @@ export const barePrompt = (
             "What you really did for earlier answers is listed at the end of this prompt; trust that list.",
             `You can't see a calendar. ${cannot} When something needs one of those, say plainly that you can't do that yet, and offer what you can do instead, like talking it through.`,
           ]
-        : githubLines.length + cloudLines.length + vendusLines.length + houseLines.length > 0
+        : githubLines.length + cloudLines.length + connectorLines.length > 0
           ? [
-              `What you can do right now: talk, and read ${githubLines.length > 0 ? "his GitHub repositories" : cloudLines.length > 0 ? "errors and logs in his Google Cloud environments" : vendusLines.length > 0 ? "KidClub's invoices" : "the house's state"}.`,
+              `What you can do right now: talk, and read ${githubLines.length > 0 ? "his GitHub repositories" : cloudLines.length > 0 ? "errors and logs in his Google Cloud environments" : "what's connected"}.`,
               ...githubLines,
               ...cloudLines,
-              ...vendusLines,
-              ...houseLines,
+              ...connectorLines,
               ...routedLines,
               ...briefLines,
               ...fixLines,
@@ -804,17 +785,6 @@ export const makeBareAnswerer = (deps: {
   /** #168: tools as plug-ins: each provides a group (Vendus gives "invoices"). */
   readonly connectors?: readonly Connector[];
   /** #166: the house now, read-only, from the domotics bridge's state in an environment's database. */
-  readonly house?: {
-    readonly db: Pick<DbReader, "get">;
-    readonly env: string;
-    readonly timeZone: string;
-    readonly blinds?: Blinds;
-    readonly lights?: Lights;
-    /** #166: energy, climate, incidents and settings, as Atlas's domotics user. */
-    readonly read?: ReturnType<typeof readHouse>;
-    /** #166: heating, warm-by, thermostats, the heat pump, the guard and the tariff, after his OK. */
-    readonly changes?: HouseChanges;
-  };
   /**
    * #175: which tool groups Claude gets per question. Without it, every tool
    * every time. "rules": the words of the question and the last answers;
@@ -850,7 +820,7 @@ export const makeBareAnswerer = (deps: {
   const prompts = (profile?: string, who?: string) => {
     // #290: someone else talking goes by their name; for him ATLAS_USER_NAME wins, then the profile's "Name:" line.
     const name = who ?? deps.userName ?? (profile ? profileName(profile) : undefined);
-    const extra = { ...(deps.elsewhere && deps.tools !== true ? { elsewhere: deps.elsewhere } : {}), ...(deps.decisions && deps.tools === true ? { decisions: true, tools: true } : {}), ...(deps.gaps && deps.tools === true ? { gaps: true, tools: true } : {}), ...(deps.reminders && deps.tools === true ? { reminders: true, tools: true } : {}), ...(deps.talk && deps.tools === true ? { talk: true, tools: true } : {}), ...(deps.webSearch && deps.tools === true ? { web: true, tools: true } : {}), ...(profile ? { profile } : {}), ...(deps.calendar ? { calendar: true } : {}), ...(deps.calendar && deps.tools === true ? { tools: true } : {}), ...(deps.calendar?.create && deps.tools === true ? { create: true } : {}), ...(deps.calendar?.change && deps.tools === true ? { calendarChange: true } : {}), ...(deps.gmail && deps.tools === true ? { email: true, tools: true } : {}), ...(deps.gmail?.writer && deps.tools === true ? { emailDrafts: true } : {}), ...(deps.gmail?.tidy && deps.tools === true ? { emailTidy: true } : {}), ...(deps.gmail?.reader.unanswered && deps.tools === true ? { emailFollowups: true } : {}), ...(deps.memory && deps.tools === true ? { memory: true, tools: true } : {}), ...(deps.memory && deps.skills && deps.tools === true ? { skills: true } : {}), ...(deps.github && deps.tools === true ? { github: true, tools: true } : {}), ...(deps.github?.plans && deps.tools === true ? { plans: true } : {}), ...(deps.github && deps.code && deps.tools === true ? { code: true } : {}), ...(deps.github && deps.code?.study && deps.tools === true ? { study: true } : {}), ...(deps.gcloud && deps.tools === true ? { gcloud: true, tools: true } : {}), ...(deps.connectors && deps.connectors.length > 0 && deps.tools === true ? { connectors: deps.connectors.flatMap((c) => c.prompt), tools: true } : {}), ...(deps.house && deps.tools === true ? { house: true, tools: true } : {}), ...((deps.house?.blinds || deps.house?.changes) && deps.tools === true ? { houseControl: true } : {}), ...(deps.house?.changes && deps.tools === true ? { houseAll: true } : {}), ...(deps.gcloud?.db && deps.tools === true ? { gcloudDb: true } : {}), ...(deps.gcloud?.db && deps.gcloud.writes && deps.tools === true ? { gcloudWrites: true } : {}), ...(deps.route && deps.route.mode !== "all" && deps.tools === true ? { routed: true } : {}), ...(deps.brief === true && deps.calendar && deps.tools === true ? { brief: true } : {}), ...(deps.github && deps.code?.fix && deps.tools === true ? { fix: true } : {}), ...(deps.github && deps.code?.tasks && deps.tools === true ? { tasks: true } : {}) };
+    const extra = { ...(deps.elsewhere && deps.tools !== true ? { elsewhere: deps.elsewhere } : {}), ...(deps.decisions && deps.tools === true ? { decisions: true, tools: true } : {}), ...(deps.gaps && deps.tools === true ? { gaps: true, tools: true } : {}), ...(deps.reminders && deps.tools === true ? { reminders: true, tools: true } : {}), ...(deps.talk && deps.tools === true ? { talk: true, tools: true } : {}), ...(deps.webSearch && deps.tools === true ? { web: true, tools: true } : {}), ...(profile ? { profile } : {}), ...(deps.calendar ? { calendar: true } : {}), ...(deps.calendar && deps.tools === true ? { tools: true } : {}), ...(deps.calendar?.create && deps.tools === true ? { create: true } : {}), ...(deps.calendar?.change && deps.tools === true ? { calendarChange: true } : {}), ...(deps.gmail && deps.tools === true ? { email: true, tools: true } : {}), ...(deps.gmail?.writer && deps.tools === true ? { emailDrafts: true } : {}), ...(deps.gmail?.tidy && deps.tools === true ? { emailTidy: true } : {}), ...(deps.gmail?.reader.unanswered && deps.tools === true ? { emailFollowups: true } : {}), ...(deps.memory && deps.tools === true ? { memory: true, tools: true } : {}), ...(deps.memory && deps.skills && deps.tools === true ? { skills: true } : {}), ...(deps.github && deps.tools === true ? { github: true, tools: true } : {}), ...(deps.github?.plans && deps.tools === true ? { plans: true } : {}), ...(deps.github && deps.code && deps.tools === true ? { code: true } : {}), ...(deps.github && deps.code?.study && deps.tools === true ? { study: true } : {}), ...(deps.gcloud && deps.tools === true ? { gcloud: true, tools: true } : {}), ...(deps.connectors && deps.connectors.length > 0 && deps.tools === true ? { connectors: deps.connectors.flatMap((c) => c.prompt), tools: true } : {}), ...(deps.gcloud?.db && deps.tools === true ? { gcloudDb: true } : {}), ...(deps.gcloud?.db && deps.gcloud.writes && deps.tools === true ? { gcloudWrites: true } : {}), ...(deps.route && deps.route.mode !== "all" && deps.tools === true ? { routed: true } : {}), ...(deps.brief === true && deps.calendar && deps.tools === true ? { brief: true } : {}), ...(deps.github && deps.code?.fix && deps.tools === true ? { fix: true } : {}), ...(deps.github && deps.code?.tasks && deps.tools === true ? { tasks: true } : {}) };
     return { typed: barePrompt(name, extra), spoken: barePrompt(name, { spoken: true, maxSentences: max, pauses, ...extra }) };
   };
   const withoutProfile = prompts();
@@ -966,7 +936,7 @@ export const makeBareAnswerer = (deps: {
   const connectors = deps.connectors ?? [];
   // #168: a group is connected when a connector provides it, or (for those not moved yet) its built-in tools are there.
   const builtIn = (g: ToolGroup): boolean =>
-    g === "calendar" ? deps.calendar !== undefined : g === "gmail" ? deps.gmail !== undefined : g === "github" ? deps.github !== undefined : g === "code" ? deps.github !== undefined && deps.code !== undefined : g === "cloud" ? deps.gcloud !== undefined : g === "drive" ? deps.drive !== undefined : g === "house" ? deps.house !== undefined : false;
+    g === "calendar" ? deps.calendar !== undefined : g === "gmail" ? deps.gmail !== undefined : g === "github" ? deps.github !== undefined : g === "code" ? deps.github !== undefined && deps.code !== undefined : g === "cloud" ? deps.gcloud !== undefined : g === "drive" ? deps.drive !== undefined : false;
   const connectedGroups: readonly ToolGroup[] = TOOL_GROUPS.filter((g) => builtIn(g) || connectors.some((c) => c.group === g));
   const toolsOf = (g: ToolGroup): readonly LlmTool[] => [...connectors.filter((c) => c.group === g).flatMap((c) => c.tools), ...builtInTools(g)];
   const builtInTools = (g: ToolGroup): readonly LlmTool[] =>
@@ -984,7 +954,7 @@ export const makeBareAnswerer = (deps: {
               ? [...GCLOUD_TOOLS, ...(deps.gcloud?.db ? DB_TOOLS : []), ...(deps.gcloud?.db && deps.gcloud.writes ? [DB_CHANGE_TOOL] : [])]
               : g === "drive"
                   ? [...DRIVE_READ_TOOLS, ...(deps.drive?.writes ? DRIVE_WRITE_TOOLS : [])]
-                  : [HOUSE_NOW_TOOL, ...(deps.house?.blinds ? [HOUSE_BLINDS_TOOL] : []), ...(deps.house?.lights ? [HOUSE_LIGHTS_TOOL] : []), ...(deps.house?.read ? HOUSE_READ_TOOLS : []), ...(deps.house?.changes ? HOUSE_CHANGE_TOOLS : [])];
+                  : [];
   const routing = deps.tools === true && deps.route !== undefined && deps.route.mode !== "all";
 
   return async ({ question, history, onText, signal, spoken, onStep: onStepAsked, onReach, onOffered, now, remember, onToolSucceeded, user }) => {
@@ -1026,7 +996,7 @@ export const makeBareAnswerer = (deps: {
     // Native tool calling (#104): the brain reads the calendar itself, and answers "did you
     // check?" from the record of what really ran (toolsSoFar). Code only checks each call.
     // Without tools (the local brain), code decides and words the date sentence, as before.
-    const tools = deps.tools === true && (deps.calendar !== undefined || deps.gmail !== undefined || deps.memory !== undefined || deps.github !== undefined || deps.gcloud !== undefined || (deps.connectors ?? []).length > 0 || deps.house !== undefined || deps.drive !== undefined || deps.decisions !== undefined || deps.gaps !== undefined || deps.reminders !== undefined || deps.webSearch !== undefined || deps.talk !== undefined);
+    const tools = deps.tools === true && (deps.calendar !== undefined || deps.gmail !== undefined || deps.memory !== undefined || deps.github !== undefined || deps.gcloud !== undefined || (deps.connectors ?? []).length > 0 || deps.drive !== undefined || deps.decisions !== undefined || deps.gaps !== undefined || deps.reminders !== undefined || deps.webSearch !== undefined || deps.talk !== undefined);
     // #107: this turn's memory: recent short-term notes go in the prompt; the rest is recalled on demand.
     // #290: each person sees only their own memories (his stay where they always were).
     const memoryDeps = deps.memory ? { ...deps.memory, store: scopedMemoryStore(deps.memory.store, guest?.id) } : undefined;
@@ -1440,98 +1410,7 @@ export const makeBareAnswerer = (deps: {
       if (deps.gcloud && GCLOUD_TOOLS.some((t) => t.name === call.name)) return runGcloud(deps.gcloud, call);
       // #168: a plugged-in connector runs its own tools.
       const connector = connectorOf(connectors, call.name);
-      if (connector) return connector.run({ call, now, ...(signal ? { signal } : {}), ...(onStep ? { onStep } : {}), ...(deps.log ? { log: deps.log } : {}) });
-      if (deps.house && call.name === HOUSE_NOW_TOOL.name) {
-        const got = await deps.house.db.get({ env: deps.house.env, path: [...HOUSE_STATE_PATH] }, signal);
-        if (!got.ok) {
-          deps.log?.warn("house read failed", { code: got.error.code });
-          onStep?.({ kind: "tool", name: call.name, args: deps.house.env, by: "model", ok: false, error: got.error.code });
-          return { callId: call.id, content: `The house: ${got.error.message}. Say so plainly; don't guess.`, isError: true };
-        }
-        const fields = got.value?.fields;
-        // The blinds too, when Atlas can see them; a failure there doesn't hide the rest.
-        const blinds = deps.house.blinds ? await deps.house.blinds.list(signal) : undefined;
-        const extra = blinds === undefined ? [] : blinds.ok ? [blindsForBrain(blinds.value)] : [`The blinds: ${blinds.error.message}.`];
-        // #211: and which lights are on (the same Netatmo read, cached).
-        const lights = deps.house.lights ? await deps.house.lights.list(signal) : undefined;
-        if (lights) extra.push(lights.ok ? lightsForBrain(lights.value) : `The lights: ${lights.error.message}.`);
-        onStep?.({ kind: "tool", name: call.name, args: deps.house.env, by: "model", ok: true, result: houseSummary(fields, now) });
-        return { callId: call.id, content: houseForBrain(fields, now, deps.house.timeZone, extra, deps.house.blinds !== undefined) };
-      }
-      if (deps.house?.blinds && call.name === HOUSE_BLINDS_TOOL.name) {
-        const input = typeof call.input === "object" && call.input !== null ? (call.input as Record<string, unknown>) : {};
-        const asked = Array.isArray(input.blinds) ? input.blinds.filter((b): b is string => typeof b === "string").slice(0, 20).map((b) => b.slice(0, 80)) : [];
-        const proposed = await deps.house.blinds.propose(asked, input.position, signal);
-        if (!proposed.ok) {
-          onStep?.({ kind: "tool", name: call.name, args: asked.join(", "), by: "model", ok: false, error: `refused: ${proposed.error.slice(0, 60)}` });
-          return { callId: call.id, content: `Not proposed: ${proposed.error}. Tell him plainly, or ask which blinds he means.`, isError: true };
-        }
-        if (deps.autoSmall || deps.local) {
-          onStep?.({ kind: "tool", name: call.name, args: asked.join(", "), by: "model", ok: true, result: "doing it now", confirm: { id: proposed.value.id, label: proposed.value.label, kind: "house", auto: true } });
-          return { callId: call.id, content: AUTO_SAY(proposed.value.label) };
-        }
-        onStep?.({ kind: "tool", name: call.name, args: asked.join(", "), by: "model", ok: true, result: "waiting for your OK", confirm: { id: proposed.value.id, label: proposed.value.label, kind: "house" } });
-        return { callId: call.id, content: `Not moved yet: the app is asking him "Move them" / "Leave them" for: ${proposed.value.label}. Say in one sentence that it needs his OK. Never say they've moved.` };
-      }
-      // #166: the house's history and settings, read as Atlas.
-      if (deps.house?.read && HOUSE_READ_TOOLS.some((t) => t.name === call.name)) {
-        const input = typeof call.input === "object" && call.input !== null ? (call.input as Record<string, unknown>) : {};
-        const read = deps.house.read;
-        let got: Result<string, string>;
-        let args = "";
-        if (call.name === HOUSE_ENERGY_TOOL.name) {
-          const range = checkRange(input);
-          if (!range.ok) return { callId: call.id, content: `Refused: ${range.error}.`, isError: true };
-          args = `${range.value.from}..${range.value.to}`;
-          got = await read.energy(range.value.from, range.value.to, signal);
-        } else if (call.name === HOUSE_CLIMATE_TOOL.name) {
-          const date = typeof input.date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(input.date) ? input.date : "";
-          if (date === "") return { callId: call.id, content: "Refused: date is YYYY-MM-DD.", isError: true };
-          args = date;
-          got = await read.climate(date, signal);
-        } else if (call.name === HOUSE_INCIDENTS_TOOL.name) {
-          const days = typeof input.days === "number" && Number.isInteger(input.days) && input.days >= 1 && input.days <= 60 ? input.days : 7;
-          args = `${days} days`;
-          got = await read.incidents(days, now, signal);
-        } else if (call.name === HOUSE_SETTINGS_TOOL.name) {
-          got = await read.settings(signal);
-        } else got = err("unknown");
-        if (!got.ok) {
-          onStep?.({ kind: "tool", name: call.name, args, by: "model", ok: false, error: got.error.slice(0, 80) });
-          return { callId: call.id, content: `The house: ${got.error}. Say so plainly; don't guess.`, isError: true };
-        }
-        onStep?.({ kind: "tool", name: call.name, args, by: "model", ok: true, result: "read" });
-        return { callId: call.id, content: got.value };
-      }
-      // #166: a change to the house, proposed on a card; nothing changes until his OK.
-      if (deps.house?.changes && HOUSE_CHANGE_TOOLS.some((t) => t.name === call.name)) {
-        const proposed = await deps.house.changes.propose(call.name, call.input, signal);
-        if (!proposed.ok) {
-          onStep?.({ kind: "tool", name: call.name, args: "", by: "model", ok: false, error: `refused: ${proposed.error.slice(0, 60)}` });
-          return { callId: call.id, content: `Not proposed: ${proposed.error}. Tell him plainly, or ask what he means.`, isError: true };
-        }
-        if ((deps.autoSmall && call.name === "house_thermostat") || deps.local) {
-          onStep?.({ kind: "tool", name: call.name, args: "", by: "model", ok: true, result: "doing it now", confirm: { id: proposed.value.id, label: proposed.value.label, kind: "house-change", auto: true } });
-          return { callId: call.id, content: AUTO_SAY(proposed.value.label) };
-        }
-        onStep?.({ kind: "tool", name: call.name, args: "", by: "model", ok: true, result: "waiting for your OK", confirm: { id: proposed.value.id, label: proposed.value.label, kind: "house-change" } });
-        return { callId: call.id, content: `Not changed yet: the app is asking him "Do it" / "Leave it" for: ${proposed.value.label}. Say in one sentence that it needs his OK. Never say it's done.` };
-      }
-      if (deps.house?.lights && call.name === HOUSE_LIGHTS_TOOL.name) {
-        const input = typeof call.input === "object" && call.input !== null ? (call.input as Record<string, unknown>) : {};
-        const asked = Array.isArray(input.lights) ? input.lights.filter((b): b is string => typeof b === "string").slice(0, 30).map((b) => b.slice(0, 80)) : [];
-        const proposed = await deps.house.lights.propose(asked, input.action, signal);
-        if (!proposed.ok) {
-          onStep?.({ kind: "tool", name: call.name, args: asked.join(", "), by: "model", ok: false, error: `refused: ${proposed.error.slice(0, 60)}` });
-          return { callId: call.id, content: `Not proposed: ${proposed.error}. Tell him plainly, or ask which lights he means.`, isError: true };
-        }
-        if (deps.autoSmall || deps.local) {
-          onStep?.({ kind: "tool", name: call.name, args: asked.join(", "), by: "model", ok: true, result: "doing it now", confirm: { id: proposed.value.id, label: proposed.value.label, kind: "lights", auto: true } });
-          return { callId: call.id, content: AUTO_SAY(proposed.value.label) };
-        }
-        onStep?.({ kind: "tool", name: call.name, args: asked.join(", "), by: "model", ok: true, result: "waiting for your OK", confirm: { id: proposed.value.id, label: proposed.value.label, kind: "lights" } });
-        return { callId: call.id, content: `Not changed yet: the app is asking him "Do it" / "Leave them" for: ${proposed.value.label}. Say in one sentence that it needs his OK. Never say they've changed.` };
-      }
+      if (connector) return connector.run({ call, now, ...(signal ? { signal } : {}), ...(onStep ? { onStep } : {}), ...(deps.log ? { log: deps.log } : {}), ...(deps.autoSmall ? { autoSmall: true } : {}), ...(deps.local ? { local: true } : {}) });
       if (deps.gcloud?.db && DB_TOOLS.some((t) => t.name === call.name)) return runGcloudDb(deps.gcloud.reader, deps.gcloud.db, call);
       if (deps.gcloud?.writes && call.name === DB_CHANGE_TOOL.name) {
         const input = typeof call.input === "object" && call.input !== null ? (call.input as Record<string, unknown>) : {};

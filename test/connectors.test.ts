@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 import { makeBareAnswerer } from "../src/answer/bare.js";
 import { checkConnectors, connectorOf, forCountry, type Connector } from "../src/connectors/types.js";
 import { vendusConnector } from "../src/connectors/vendus.js";
+import { houseConnector } from "../src/connectors/house.js";
 import type { LlmRequest, LlmResponse, LlmToolCall } from "../src/llm/types.js";
 import { ok } from "../src/result.js";
 import type { Context, PathStep } from "../src/types.js";
@@ -58,5 +59,18 @@ describe("connectors (#168)", () => {
     const deps = { llm: async () => ok(text("")), connectors: [vendus] };
     expect(withSwitches(deps, new Set(["invoices"])).connectors).toEqual([]);
     expect(withSwitches(deps, new Set(["house"])).connectors).toEqual([vendus]);
+  });
+
+  it("the house is a connector: the galaxy's house.control takes the blinds away, and Local does undoable changes at once", async () => {
+    const blinds = { list: async () => ok([]), propose: async () => ok({ id: "b1", label: "Kitchen blinds down" }) };
+    const house = houseConnector({ db: { get: async () => ok(undefined) }, env: "dev", timeZone: "Europe/Lisbon", blinds: blinds as never });
+    expect(house.tools.map((t) => t.name)).toEqual(["house_now", "house_blinds"]);
+    const narrowed = withSwitches({ llm: async () => ok(text("")), connectors: [house] }, new Set(["house.control"])).connectors?.[0];
+    expect(narrowed?.tools.map((t) => t.name)).toEqual(["house_now"]);
+    const steps: PathStep[] = [];
+    const call = { id: "1", name: "house_blinds", input: { blinds: ["kitchen"], position: 0 } };
+    await house.run({ call, now: NOW, onStep: (s) => void steps.push(s) });
+    await house.run({ call, now: NOW, local: true, onStep: (s) => void steps.push(s) });
+    expect(steps.map((s) => (s.kind === "tool" ? s.confirm?.auto === true : null))).toEqual([false, true]);
   });
 });
