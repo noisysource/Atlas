@@ -2,6 +2,7 @@
 // server (#15) and the end-to-end tests. Refuses to start (returns an error)
 // if contexts.md, the profile or the API key is missing or invalid.
 
+import { makeOllamaReady } from "./llm/ollama.js";
 import { execFile } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import { makeToolRouter } from "./answer/tool-groups.js";
@@ -217,6 +218,8 @@ export const buildDeps = async (inputs: AppInputs): Promise<Result<Deps, string>
   if (!answerLlm.ok) return err(`ANSWER_MODEL: ${answerLlm.error}`);
   // The "Local" brain (#88): Ollama on this machine.
   const localLlm = metered(buildLlm(config.models.local, keys, { ollama: config.ollamaUrl, ollamaThink: config.ollamaThink }), config.models.local, "local");
+  // #323: is Ollama there with the model? Checked quickly before a Local answer.
+  const localReady = makeOllamaReady({ model: config.models.local.model, baseUrl: config.ollamaUrl });
   if (!localLlm.ok) return err(`OLLAMA_MODEL: ${localLlm.error}`);
   // #248: the Google brain: Gemini answers, Flash-Lite picks the tool groups.
   const googleLlm = config.gemini.enabled ? metered(buildLlm(config.gemini.model, keys, { log }), config.gemini.model, "answer") : undefined;
@@ -906,7 +909,7 @@ export const buildDeps = async (inputs: AppInputs): Promise<Result<Deps, string>
     classify: makeClassifier({ contexts: contexts.value, llm: classifierLlm.value, log, thinking: config.turn.classifierThinking }),
     stickyContext: config.turn.stickyContext,
     speculativeAnswer: config.turn.speculativeAnswer,
-    answer: makeBrainRouter({ claude: makeAnswerRouter(answerers), local: makeAnswerRouter(localAnswerers) }),
+    answer: makeBrainRouter({ claude: makeAnswerRouter(answerers), local: makeAnswerRouter(localAnswerers), localReady }),
     ...(config.bareMode
       ? {
           bare: makeBrainRouter({
@@ -1008,6 +1011,8 @@ export const buildDeps = async (inputs: AppInputs): Promise<Result<Deps, string>
                     talk,
                     log,
                   }),
+            // #323: Local not there: Gemini or Claude answers, and the page says so.
+            localReady,
           }),
         }
       : {}),

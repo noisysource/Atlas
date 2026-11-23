@@ -265,3 +265,33 @@ export const warmOllama = async (deps: { readonly model: string; readonly baseUr
     return false;
   }
 };
+
+/**
+ * #323: is the local brain there? Ollama answering, and the model pulled.
+ * Undefined when it is; otherwise why not, in a few words. One quick GET of
+ * /api/tags (1.5 s), remembered for a while so a working Local isn't slowed.
+ */
+export const makeOllamaReady = (deps: { readonly model: string; readonly baseUrl: URL; readonly fetch?: typeof fetch; readonly now?: () => number }): (() => Promise<string | undefined>) => {
+  const doFetch = deps.fetch ?? fetch;
+  const now = deps.now ?? Date.now;
+  let last: { readonly at: number; readonly why: string | undefined } | undefined;
+  return async () => {
+    // Ready: checked again after 30 s. Not ready: after 5 s, so starting Ollama is noticed soon.
+    if (last && now() - last.at < (last.why === undefined ? 30_000 : 5_000)) return last.why;
+    let why: string | undefined;
+    try {
+      const res = await doFetch(new URL("/api/tags", deps.baseUrl), { signal: AbortSignal.timeout(1500) });
+      if (!res.ok) why = `Ollama answered ${res.status}`;
+      else {
+        const body = (await res.json().catch(() => ({}))) as { models?: { name?: unknown; model?: unknown }[] };
+        const names = (body.models ?? []).flatMap((m) => [m.name, m.model]).filter((n): n is string => typeof n === "string");
+        const wanted = deps.model.includes(":") ? deps.model : `${deps.model}:latest`;
+        if (!names.some((n) => n === deps.model || n === wanted)) why = `${deps.model} isn't pulled in Ollama`;
+      }
+    } catch {
+      why = "Ollama isn't running";
+    }
+    last = { at: now(), why };
+    return why;
+  };
+};

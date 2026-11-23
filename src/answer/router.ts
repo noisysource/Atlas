@@ -16,7 +16,38 @@ export const makeAnswerRouter = (answerers: Readonly<Record<string, Deps["answer
       : ok({ kind: "unavailable", message: notConnectedMessage(input.context) });
   };
 
-/** Picks the brain (#88), then the context's answerer. Claude unless "local" or "google" (#248) is asked for and there. */
-export const makeBrainRouter = (routers: { readonly claude: Deps["answer"]; readonly local?: Deps["answer"]; readonly google?: Deps["answer"] }): Deps["answer"] =>
-  async (input) =>
-    input.brain === "local" && routers.local ? routers.local(input) : input.brain === "google" && routers.google ? routers.google(input) : routers.claude(input);
+/** Why Local didn't answer, for the page (#323). */
+export type BrainFallback = { readonly from: "local"; readonly to: "claude" | "google"; readonly why: string };
+
+/**
+ * Picks the brain (#88), then the context's answerer. Claude unless "local" or
+ * "google" (#248) is asked for and there. #323: when Local is asked for but
+ * isn't available (Ollama down, the model missing, or its call failing before
+ * any words), Gemini answers if it's set up, otherwise Claude, and
+ * `onFallback` says so. The fallback is the cloud brain as it always is: Local
+ * mode's lifted limits don't come with it.
+ */
+export const makeBrainRouter = (routers: {
+  readonly claude: Deps["answer"];
+  readonly local?: Deps["answer"];
+  readonly google?: Deps["answer"];
+  /** Undefined when Local can answer; otherwise why not. */
+  readonly localReady?: () => Promise<string | undefined>;
+}): Deps["answer"] =>
+  async (input) => {
+    if (input.brain === "google" && routers.google) return routers.google(input);
+    if (input.brain !== "local" || !routers.local) return routers.claude(input);
+    const to = routers.google ? ("google" as const) : ("claude" as const);
+    const instead = (why: string) => {
+      input.onFallback?.({ from: "local", to, why });
+      return (routers.google ?? routers.claude)({ ...input, brain: to });
+    };
+    const notReady = await routers.localReady?.().catch(() => "Ollama didn't answer");
+    if (notReady) return instead(notReady);
+    // Its call can still fail: then the cloud answers, but only if no words were shown yet.
+    let spoke = false;
+    const onText = input.onText;
+    const got = await routers.local({ ...input, ...(onText ? { onText: (t: string) => ((spoke = true), onText(t)) } : {}) });
+    if (!got.ok && !spoke && got.error.code !== "cancelled" && !input.signal?.aborted) return instead(`the local model failed (${got.error.message.slice(0, 80)})`);
+    return got;
+  };

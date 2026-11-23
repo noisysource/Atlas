@@ -1512,3 +1512,15 @@ personal data tools (Gmail, Drive, calendar), phone access (#19), local speech
   its cards follow ASK_SMALL and Local mode, and `narrow` lets a galaxy
   sub-switch (house.control) take part of it away. Calendar, Gmail, Drive,
   GitHub and Google Cloud follow, one PR each.
+  Vendus is the first one moved; calendar, Gmail, Drive, GitHub, Google Cloud
+  and the house follow, one PR each, with their cards and household checks.
+
+- **Local's fallback (#323):** on Local, a quick check of Ollama (`/api/tags`,
+  1.5 s, remembered 30 s when up and 5 s when down) runs first. If Ollama is
+  down, the model isn't pulled, or the local call fails before any words,
+  Gemini answers (Claude without Gemini), as the normal cloud brain: Local
+  mode's lifted limits don't come with it. The answer's path says so
+  (*Google (Local not available: Ollama isn't running)*), and so does the
+  status line. The answer's `brain`, the dataset and the costs dashboard count
+  the brain that really answered.
+

@@ -163,7 +163,7 @@ export const makeServer = (
   /** #295: one /ask into the dataset, after the reply (never in its way). */
   const keep = (request: AskRequest, response: AskResponse, started: number, channel: "page" | "whatsapp", steps?: readonly PathStep[], turn?: string): void => {
     // #299: how long it took, beside what it cost (never its words).
-    if (turn && response.type !== "handoff") deps.costs?.answer?.({ kind: "answer", at: deps.now().toISOString(), turn, brain: request.brain ?? "claude", ms: Math.round(performance.now() - started), outcome: response.type, channel });
+    if (turn && response.type !== "handoff") deps.costs?.answer?.({ kind: "answer", at: deps.now().toISOString(), turn, brain: (response.type === "answer" ? response.brain : undefined) ?? request.brain ?? "claude", ms: Math.round(performance.now() - started), outcome: response.type, channel });
     const dataset = options.dataset;
     if (!dataset) return;
     const entry = exchangeOf(request, response, { at: deps.now(), ms: performance.now() - started, mainId: "renato", channel, ...(steps ? { steps } : {}) });
