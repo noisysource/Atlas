@@ -61,7 +61,7 @@ const MONTH = /^20\d{2}-(0[1-9]|1[0-2])$/;
 export const FINHUB_INVENTORY_TOOL: LlmTool = {
   name: "finhub_inventory",
   description:
-    "What's in the Noisy Source Drive's year folder for FinHub, month by month: payslips, bank statements, invoices and other files, and which months miss a statement or payslips. Reads only. Use it before an import, or when he asks what FinHub still needs.",
+    "What's in FinHub's Drive folder (the Atlas folder: bank statements, payslips and invoices by entity), for each entity month by month, and which months miss a statement or payslips. Reads only. Use it before an import, or when he asks what FinHub still needs.",
   inputSchema: {
     type: "object",
     properties: {
@@ -468,8 +468,120 @@ export const checkRange = (input: unknown, today: string): Result<{ from: string
   return ok({ from, to });
 };
 
-/** finhub_inventory's answer, for the brain. */
+// ── The "Atlas" folder: by kind and entity, not by month ──────────────────────
+//
+//   Atlas/bank statements/BPI - NoisySource/Extrato_Conta_2026-01-30.pdf
+//   Atlas/bank statements/BPI - Personal/20260109_Extrato_Integrado.pdf
+//   Atlas/payslips/NOISYSOURCE/517010585_RC_2026_M03P1_F.pdf
+//   Atlas/payslips/517010585_RC_2026_M02P1_F.pdf          (loose is fine)
+//   Atlas/invoices/…
+// Whose a file is comes from its folder; a payslip's comes from the employer's
+// NIPC at the start of its name first (a copy filed in the wrong folder still
+// lands right). Its month comes from the name.
+
+/** Employers by NIPC, as the accountant names payslips ("517010585_RC_…"). */
+export const EMPLOYERS: Readonly<Record<string, (typeof ENTITIES)[number]>> = { "517010585": "Noisy Source", "518942120": "Noisy Phocus" };
+
+/** The entity a folder is for, by its name ("BPI - NoisyPhocus", "NOISY PHOCUS", "BPI - Personal"). */
+export const entityOfFolder = (name: string): (typeof ENTITIES)[number] | undefined => {
+  const n = name.toLowerCase().replace(/[^a-z]/g, "");
+  if (n.includes("noisysource")) return "Noisy Source";
+  if (n.includes("noisyphocus") || n.includes("phocus") || n.includes("kidclub")) return "Noisy Phocus";
+  if (n.includes("personal") || n.includes("pessoal") || n.includes("household") || n.includes("casa")) return "Household";
+  return undefined;
+};
+
+/** The month a file is for, by its name; undefined when the name doesn't say. */
+export const monthOfFile = (name: string): string | undefined => {
+  const rc = /rc[_ -](20\d\d)[_ -]m(0[1-9]|1[0-2])/i.exec(name);
+  if (rc) return `${rc[1]}-${rc[2]}`;
+  const iso = /(20\d\d)-(0[1-9]|1[0-2])-\d\d/.exec(name);
+  if (iso) return `${iso[1]}-${iso[2]}`;
+  // BPI's integrated statement is named by its issue day: 20260109 is January's (10 Dec – 9 Jan).
+  const compact = /(?:^|[^0-9])(20\d\d)(0[1-9]|1[0-2])([0-3]\d)(?:[^0-9]|$)/.exec(name);
+  if (compact) return `${compact[1]}-${compact[2]}`;
+  return undefined;
+};
+
+export type LibraryFile = { readonly file: DriveFile; readonly kind: FileKind; readonly entity?: (typeof ENTITIES)[number]; readonly month?: string; readonly where: string };
+
+const FOLDER_MIME = "application/vnd.google-apps.folder";
+const KIND_FOLDERS: readonly { readonly match: RegExp; readonly kind: FileKind }[] = [
+  { match: /bank|statement|extrato|extracto/i, kind: "statement" },
+  { match: /payslip|recibo|vencimento|salar/i, kind: "payslip" },
+  { match: /invoice|fatura|factura/i, kind: "invoice" },
+];
+
+/** The library's files, if the folder is laid out by kind (bank statements, payslips, invoices); undefined if it isn't. */
+export const libraryFiles = async (d: FinhubDrive, signal?: AbortSignal): Promise<Result<LibraryFile[] | undefined, string>> => {
+  const top = await d.client.list({ account: d.account, folder: d.folder, max: 100 }, signal);
+  if (!top.ok) return err(top.error.message);
+  const kinds = top.value.flatMap((f) => {
+    const k = f.mimeType === FOLDER_MIME ? KIND_FOLDERS.find((x) => x.match.test(f.name)) : undefined;
+    return k ? [{ folder: f, kind: k.kind }] : [];
+  });
+  if (kinds.length === 0) return ok(undefined);
+  const out: LibraryFile[] = [];
+  const seen = new Set<string>();
+  const add = (file: DriveFile, kind: FileKind, folderEntity: (typeof ENTITIES)[number] | undefined, where: string) => {
+    const nipc = /^\.?(\d{9})[_ -]/.exec(file.name)?.[1];
+    const entity = (kind === "payslip" && nipc ? EMPLOYERS[nipc] : undefined) ?? folderEntity;
+    // The same document filed twice counts once: same entity, name and size. Both
+    // companies' statements share names (Extrato_Conta_2026-01-30.pdf), so the entity is part of it.
+    const key = `${entity ?? where}::${file.name.toLowerCase()}::${file.size ?? ""}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    const month = monthOfFile(file.name);
+    out.push({ file, kind, ...(entity ? { entity } : {}), ...(month ? { month } : {}), where });
+  };
+  for (const { folder, kind } of kinds) {
+    const inside = await d.client.list({ account: d.account, folder: folder.id, max: 100 }, signal);
+    if (!inside.ok) return err(inside.error.message);
+    for (const f of inside.value) {
+      if (f.mimeType !== FOLDER_MIME) {
+        add(f, kind, undefined, folder.name);
+        continue;
+      }
+      const files = await d.client.list({ account: d.account, folder: f.id, max: 100 }, signal);
+      if (!files.ok) return err(files.error.message);
+      for (const x of files.value) if (x.mimeType !== FOLDER_MIME) add(x, kind, entityOfFolder(f.name), `${folder.name}/${f.name}`);
+    }
+  }
+  return ok(out);
+};
+
+export const libraryInventory = (files: readonly LibraryFile[], range: { from: string; to: string }): string => {
+  const months = monthsBetween(range.from, range.to);
+  const out: string[] = [`FinHub inventory, the Atlas folder (by kind and entity), ${range.from} to ${range.to}:`];
+  const list = (l: readonly LibraryFile[]) => l.map((f) => `${f.file.name} [${f.file.id}]`).join("; ");
+  for (const entity of ENTITIES) {
+    const mine = files.filter((f) => f.entity === entity);
+    if (mine.length === 0) {
+      out.push(`${entity}: nothing filed.`);
+      continue;
+    }
+    out.push(`${entity}:`);
+    for (const month of months) {
+      const here = mine.filter((f) => f.month === month);
+      const st = here.filter((f) => f.kind === "statement");
+      const ps = here.filter((f) => f.kind === "payslip");
+      const inv = here.filter((f) => f.kind === "invoice");
+      const missing = [st.length === 0 ? "no bank statement" : "", ps.length === 0 && entity !== "Household" ? "no payslips" : ""].filter(Boolean);
+      const has = [st.length > 0 ? `statement: ${list(st)}` : "", ps.length > 0 ? `payslips: ${list(ps)}` : "", inv.length > 0 ? `${inv.length} invoice${inv.length === 1 ? "" : "s"}` : ""].filter(Boolean);
+      out.push(`  ${month}: ${has.join(" · ") || "nothing"}${missing.length > 0 ? ` (${missing.join(", ")})` : ""}`);
+    }
+  }
+  const unplaced = files.filter((f) => !f.month || !f.entity);
+  if (unplaced.length > 0) out.push(`Not placed (no month or no entity in its name or folder): ${unplaced.slice(0, 20).map((f) => `${f.where}/${f.file.name} [${f.file.id}]`).join("; ")}.`);
+  out.push("Household payslips (his and Marisa's from their own employers) and Gmail aren't read yet: a household month is its statement only.");
+  return out.join("\n");
+};
+
+/** finhub_inventory's answer, for the brain: the Atlas folder's layout if it is one, else a year folder by month. */
 export const inventory = async (d: FinhubDrive, range: { from: string; to: string }, signal?: AbortSignal): Promise<Result<string, string>> => {
+  const lib = await libraryFiles(d, signal);
+  if (!lib.ok) return lib;
+  if (lib.value) return ok(libraryInventory(lib.value, range));
   const year = Number(range.from.slice(0, 4));
   const folders = await monthFolders(d, year, signal);
   if (!folders.ok) return folders;
@@ -532,22 +644,29 @@ export const buildImport = async (deps: {
   if (deps.files && deps.files.length > 0) {
     chosen = deps.files.slice(0, 25).map((f) => ({ id: f.id, name: f.id, kind: f.kind }));
   } else {
-    const folders = await monthFolders(drive, Number(month.slice(0, 4)), signal);
-    if (!folders.ok) return folders;
-    const folder = folders.value.find((f) => f.month === month);
-    if (!folder) return err(`there's no folder for ${month} in the year folder`);
-    const files = await filesOf(drive, folder.id, signal);
-    if (!files.ok) return files;
-    chosen = files.value.flatMap((f) => {
-      const k = kindOfFile(f.name);
-      return k === "payslip" || k === "statement" ? [{ id: f.id, name: f.name, kind: k }] : [];
-    });
+    // The Atlas folder (by kind and entity), or else a year folder with a subfolder per month.
+    const lib = await libraryFiles(drive, signal);
+    if (!lib.ok) return lib;
+    if (lib.value) {
+      chosen = lib.value.flatMap((f) => (f.entity === entity && f.month === month && (f.kind === "payslip" || f.kind === "statement") ? [{ id: f.file.id, name: f.file.name, kind: f.kind }] : []));
+    } else {
+      const folders = await monthFolders(drive, Number(month.slice(0, 4)), signal);
+      if (!folders.ok) return folders;
+      const folder = folders.value.find((f) => f.month === month);
+      if (!folder) return err(`there's no folder for ${month} in the year folder`);
+      const files = await filesOf(drive, folder.id, signal);
+      if (!files.ok) return files;
+      chosen = files.value.flatMap((f) => {
+        const k = kindOfFile(f.name);
+        return k === "payslip" || k === "statement" ? [{ id: f.id, name: f.name, kind: k }] : [];
+      });
+    }
     if (chosen.length > 25) {
       warnings.push(`only the first 25 of ${chosen.length} payslips and statements`);
       chosen = chosen.slice(0, 25);
     }
   }
-  if (chosen.length === 0) return err(`no payslips or statements for ${month} (names with extrato, statement, vencimento, payslip…); name the files and their kinds`);
+  if (chosen.length === 0) return err(`no payslips or statements for ${entity} in ${month} (by folder, or names with extrato, statement, vencimento, payslip…); name the files and their kinds`);
 
   const doc: ImportDoc = { entityHint: entity, month, summary: "", sources: [], statements: [], payslips: [], contracts: [], subscriptions: [], facilities: [] };
   for (const f of chosen) {

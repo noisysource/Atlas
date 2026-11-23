@@ -1090,8 +1090,10 @@ Confirmed (2026-11-12):
 - **FinHub, fed by Atlas (FINHUB=on):** FinHub (the books, in the monorepo)
   has no AI; Atlas reads the documents. `src/finhub/finhub.ts` +
   `src/connectors/finhub.ts`, the `finhub` tool group (galaxy switch on the
-  Drive node). `finhub_inventory` lists FINHUB_DRIVE_FOLDER (the year folder,
-  one subfolder per month, "3mar2026") month by month, files sorted into
+  Drive node). `finhub_inventory` lists FINHUB_DRIVE_FOLDER: the Atlas folder
+  (bank statements/BPI - <entity>, payslips/<ENTITY>, invoices; whose a payslip
+  is from the employer's NIPC in its name, the month from the name), or a year
+  folder with one subfolder per month ("3mar2026"), entity by entity, month by month, files sorted into
   payslips, statements, invoices and other by name, and what's missing.
   `finhub_import` builds one entity's month: reads its payslips and statements
   as text, extracts each with the answer model (JSON schemas, counted as

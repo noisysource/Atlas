@@ -10,7 +10,10 @@ import {
   balanceCheck,
   checkImport,
   checkRange,
+  entityOfFolder,
   importId,
+  libraryFiles,
+  monthOfFile,
   inventory,
   kindOfFile,
   makeFinhubImports,
@@ -258,5 +261,73 @@ describe("wiring", () => {
     expect(groupsByWords("importa os extratos de março")).toContain("finhub");
     expect(groupOfTool("finhub_import")).toBe("finhub");
     expect(CARD_ENDPOINTS.finhub).toBe("/finhub/import");
+  });
+});
+
+describe("the Atlas folder (by kind and entity)", () => {
+  const F = (id: string, name: string, size?: number): DriveFile => ({ id, name, mimeType: "application/pdf", modified: "2026-11-23", ...(size ? { size } : {}) });
+  const D = (id: string, name: string): DriveFile => ({ id, name, mimeType: "application/vnd.google-apps.folder", modified: "2026-11-23" });
+  // The real layout (2026-11-23), trimmed.
+  const LIB: Record<string, DriveFile[]> = {
+    atlasRoot0001: [D("bankFolder01", "bank statements"), D("payFolder001", "payslips"), D("invFolder001", "invoices")],
+    bankFolder01: [D("bpiNS0000001", "BPI - NoisySource"), D("bpiNP0000001", "BPI - NoisyPhocus"), D("bpiPers00001", "BPI - Personal")],
+    bpiNS0000001: [F("nsJan0000001", "Extrato_Conta_2026-01-30.pdf"), F("nsFeb0000001", "Extrato_Conta_2026-02-27.pdf")],
+    bpiNP0000001: [F("npJan0000001", "Extrato_Conta_2026-01-30.pdf")],
+    bpiPers00001: [F("perJan000001", "20260109_Extrato_Integrado.pdf"), F("perDec000001", "20251209_Extrato_Integrado.pdf")],
+    payFolder001: [D("payNS0000001", "NOISYSOURCE"), D("payNP0000001", "NOISY PHOCUS"), F("psFeb0000001", "517010585_RC_2026_M02P1_F.pdf")],
+    payNS0000001: [F("psJan0000001", "517010585_RC_2026_M01P1_F.pdf"), F("phocusCopy01", "518942120_RC_2026_M10P1_F.pdf", 15643)],
+    payNP0000001: [F("phocusOct001", "518942120_RC_2026_M10P1_F.pdf", 15643)],
+    invFolder001: [],
+  };
+  const lib = (): FinhubDrive => ({
+    client: {
+      list: async (r) => ok(LIB[r.folder] ?? []),
+      read: async (r) => ok({ name: r.id, mimeType: "application/pdf", text: "texto do documento ".repeat(10), cut: false }),
+    },
+    account: "noisysource",
+    folder: "atlasRoot0001",
+  });
+
+  it("reads months and entities from names and folders", () => {
+    expect(monthOfFile("Extrato_Conta_2026-01-30.pdf")).toBe("2026-01");
+    expect(monthOfFile("20260109_Extrato_Integrado.pdf")).toBe("2026-01");
+    expect(monthOfFile("517010585_RC_2026_M06P2_F.pdf")).toBe("2026-06");
+    expect(monthOfFile("notes.pdf")).toBeUndefined();
+    expect(entityOfFolder("BPI - NoisyPhocus")).toBe("Noisy Phocus");
+    expect(entityOfFolder("NOISYSOURCE")).toBe("Noisy Source");
+    expect(entityOfFolder("BPI - Personal")).toBe("Household");
+  });
+
+  it("places each file, by the employer's NIPC first, once", async () => {
+    const got = await libraryFiles(lib());
+    expect(got.ok).toBe(true);
+    if (!got.ok || !got.value) return;
+    const at = (id: string) => got.value?.find((f) => f.file.id === id);
+    expect(at("psFeb0000001")).toMatchObject({ kind: "payslip", entity: "Noisy Source", month: "2026-02" });
+    // Filed under NOISYSOURCE, but it's Noisy Phocus's (518942120); the second copy is dropped.
+    expect(got.value.filter((f) => f.file.name === "518942120_RC_2026_M10P1_F.pdf")).toHaveLength(1);
+    expect(got.value.find((f) => f.file.name === "518942120_RC_2026_M10P1_F.pdf")?.entity).toBe("Noisy Phocus");
+    expect(at("perJan000001")).toMatchObject({ kind: "statement", entity: "Household", month: "2026-01" });
+  });
+
+  it("lists each entity's months and what's missing", async () => {
+    const got = await inventory(lib(), { from: "2026-01", to: "2026-02" });
+    expect(got.ok).toBe(true);
+    if (!got.ok) return;
+    expect(got.value).toContain("Noisy Source:");
+    expect(got.value).toContain("2026-01: statement: Extrato_Conta_2026-01-30.pdf [nsJan0000001] · payslips: 517010585_RC_2026_M01P1_F.pdf [psJan0000001]");
+    expect(got.value).toContain("Noisy Phocus:\n  2026-01: statement: Extrato_Conta_2026-01-30.pdf [npJan0000001] (no payslips)");
+  });
+
+  it("imports one entity's month from it, and only that entity's files", async () => {
+    const { llm, asked } = fakeLlm();
+    const { db } = fakeDb();
+    const imports = makeFinhubImports({ drive: lib(), llm, db, newId: () => "abcdef0099" });
+    const got = await imports.propose({ entity: "Noisy Source", month: "2026-01" }, NOW);
+    expect(got.ok).toBe(true);
+    // Its statement and its payslip (plus the statement's categorising), not Noisy Phocus's statement.
+    const systems = asked.map((a) => a.system);
+    expect(systems.filter((x) => x.includes("bank statement for FinHub, the bookkeeping of Noisy Source"))).toHaveLength(1);
+    expect(systems.filter((x) => x.includes("payslips"))).toHaveLength(1);
   });
 });
