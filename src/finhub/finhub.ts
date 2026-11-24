@@ -184,12 +184,12 @@ export const PAYSLIP_SCHEMA: JsonObjectSchema = closed({
           isOwnerHint: { type: "boolean", description: "The worker is the company's owner (Renato at Noisy Source)" },
           paySchedule: { type: "string", enum: ["14_months", "12_months"] },
           baseGrossMonthly: num,
-          irsRate: { type: "number", description: "Percent" },
+          irsRate: { type: "number", description: "Percent: the IRS withholding rate PRINTED on the slip (taxa de retenção / taxa IRS), never worked out from the amounts; 0 only when the slip shows none" },
           employeeSsRate: { type: "number", description: "Percent, usually 11" },
           employerSsRate: { type: "number", description: "Percent: 23.75 for employees and for managers/directors (gerentes) unless the slip says otherwise; payslips rarely print it, so don't answer 0 just because it isn't shown" },
-          mealAllowanceDaily: num,
+          mealAllowanceDaily: { type: "number", description: "Euros per working day (the daily value), not the month's total" },
           mealPaymentMethod: { type: "string", enum: ["card", "cash", "none"] },
-          childVoucherMonthly: num,
+          childVoucherMonthly: { type: "number", description: "Euros a month, the usual value (not a one-off)" },
           otherBenefitName: text,
           otherBenefitMonthly: num,
           notes: text,
@@ -272,7 +272,7 @@ export const statementPrompt = (entity: string, month: string): string =>
   `You extract a bank statement for FinHub, the bookkeeping of ${entity}, for ${month}. Return the statement period, the opening and closing balance, and EVERY movement line in order: its date, its description as written, the amount as a positive number, and the direction (credit: money in; debit: money out). ${RULES}`;
 
 export const payslipPrompt = (entity: string, month: string): string =>
-  `You extract Portuguese payslips (recibos de vencimento) for FinHub, the bookkeeping of ${entity}, for ${month}. Return one item per payslip in the document, and the employment contract each one implies (gross base salary, IRS withholding rate, Social Security rates, meal allowance and how it's paid, other benefits; 14 months when there are holiday and Christmas subsidies). The contract is what's agreed, not what this month paid: when the month is reduced (leave, absence, a pro-rata start) still give the full base salary from the slip's base (vencimento base), and say in notes what was different this month. Renato Lopes is Noisy Source's owner. ${RULES}`;
+  `You extract Portuguese payslips (recibos de vencimento) for FinHub, the bookkeeping of ${entity}, for ${month}. Return one item per payslip in the document, and the employment contract each one implies (gross base salary, IRS withholding rate, Social Security rates, meal allowance and how it's paid, other benefits; 14 months when there are holiday and Christmas subsidies). The contract is what's agreed, not what this month paid: holiday and Christmas subsidies (or their twelfths), overtime, bonuses and absences are not terms, only notes; the IRS rate is the one printed on the slip; when the month is reduced (leave, absence, a pro-rata start) still give the full base salary from the slip's base (vencimento base), and say in notes what was different this month. Renato Lopes is Noisy Source's owner. ${RULES}`;
 
 export const discoveryPrompt = (entity: string): string =>
   `You categorise bank statement lines for FinHub, the bookkeeping of ${entity} (Portugal). For each line give the vendor (short, clean: "Anthropic", "MEO", "BPI"), a category (e.g. Revenue & Inflows, Payroll, Taxes & Social Security, Software & Subscriptions, Telecom, Vehicle & Charging, Meals, Bank Fees, Loan Payment, Transfer, Operating Expense), its type (income, expense, transfer, debt_payment for a loan instalment, payroll for salaries) and the VAT it likely includes (23, 13, 6 or 0; 0 for salaries, taxes, transfers, loans and bank fees). Then list the recurring subscriptions you can see (the same vendor and about the same amount, monthly or yearly) and the loans or credit facilities (instalments to a bank). Only what the lines show. ${RULES}`;
@@ -798,6 +798,26 @@ const signature = (t: Terms): string =>
 const MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const monthName = (m: string): string => `${MONTH_NAMES[Number(m.slice(5, 7)) - 1] ?? m} ${m.slice(0, 4)}`;
 
+/** What changed between two sets of terms, in words: "IRS 17.8% → 16.9% · child voucher €0.00 → €420.00". */
+export const changedTerms = (a: Terms, b: Terms): string => {
+  const eur = (n: number) => `€${n.toFixed(2)}`;
+  const pct = (n: number) => `${Number(n.toFixed(2))}%`;
+  const parts: string[] = [];
+  const add = (label: string, x: number, y: number, show: (n: number) => string, digits: number) => {
+    if (x.toFixed(digits) !== y.toFixed(digits)) parts.push(`${label} ${show(x)} → ${show(y)}`);
+  };
+  add("base", a.baseGrossMonthly, b.baseGrossMonthly, eur, 2);
+  add("IRS", a.irsRate, b.irsRate, pct, 1);
+  add("SS", a.employeeSsRate, b.employeeSsRate, pct, 2);
+  add("TSU", a.employerSsRate, b.employerSsRate, pct, 2);
+  add("meal/day", a.mealAllowanceDaily, b.mealAllowanceDaily, eur, 2);
+  add("child voucher", a.childVoucherMonthly, b.childVoucherMonthly, eur, 2);
+  add("other benefit", a.otherBenefitMonthly, b.otherBenefitMonthly, eur, 2);
+  if (a.paySchedule !== b.paySchedule) parts.push(`${a.paySchedule === "14_months" ? "14" : "12"} → ${b.paySchedule === "14_months" ? "14" : "12"} payments`);
+  if (a.mealPaymentMethod !== b.mealPaymentMethod) parts.push(`meal by ${a.mealPaymentMethod} → ${b.mealPaymentMethod}`);
+  return parts.join(" · ");
+};
+
 /** A person's name as a key: lower case, no accents, single spaces. */
 export const personKey = (name: string): string =>
   name.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/\s+/g, " ").trim();
@@ -808,7 +828,9 @@ export const personKey = (name: string): string =>
  * change: it's folded into its neighbour and named, so a month on leave doesn't become a
  * contract. A change seen only in the last month is kept as a version, flagged to check.
  */
-export const versionsFrom = (seen: readonly Seen[]): { versions: Version[]; exceptions: string[]; unsure: string[] } => {
+export const versionsFrom = (
+  seen: readonly Seen[],
+): { versions: Version[]; exceptions: string[]; unsure: string[]; /** Each exception month: what was different. */ differed: Record<string, string> } => {
   const months = [...seen].sort((a, b) => a.month.localeCompare(b.month));
   type Run = { sig: string; terms: Terms; months: string[] };
   const runs: Run[] = [];
@@ -819,6 +841,7 @@ export const versionsFrom = (seen: readonly Seen[]): { versions: Version[]; exce
     else runs.push({ sig, terms: s.terms, months: [s.month] });
   }
   const exceptions: string[] = [];
+  const differed: Record<string, string> = {};
   const unsure: string[] = [];
   const steady = runs.filter((r) => r.months.length >= 2);
   const kept: Run[] = [];
@@ -835,6 +858,8 @@ export const versionsFrom = (seen: readonly Seen[]): { versions: Version[]; exce
     if (r.months.length === 1 && steady.length > 0 && !(isLast && kept.length > 0)) {
       exceptions.push(r.months[0] ?? "");
       const prev = kept[kept.length - 1];
+      const around = prev ?? runs[i + 1];
+      if (around) differed[r.months[0] ?? ""] = changedTerms(around.terms, r.terms);
       if (prev) prev.months.push(...r.months);
       else (runs[i + 1] ?? r).months.unshift(...r.months);
       return;
@@ -846,10 +871,12 @@ export const versionsFrom = (seen: readonly Seen[]): { versions: Version[]; exce
   });
   const versions = kept.map((r, i) => {
     const from = [...r.months].sort()[0] ?? "";
-    const note = i === 0 ? `From the payslips, ${monthName(from)} on` : unsure.includes(from) ? `Changed in ${monthName(from)} (only that month seen: check)` : `Changed in ${monthName(from)}`;
-    return { effectiveFrom: from, note, terms: r.terms };
+    const before = kept[i - 1];
+    const what = before ? changedTerms(before.terms, r.terms) : "";
+    const note = !before ? `From the payslips, ${monthName(from)} on` : `${what || "Changed"}${unsure.includes(from) ? " (only that month seen: check)" : ""}`;
+    return { effectiveFrom: from, note: note.slice(0, 200), terms: r.terms };
   });
-  return { versions, exceptions: exceptions.sort(), unsure };
+  return { versions, exceptions: exceptions.sort(), unsure, differed };
 };
 
 /** Each person's contract from their months: the latest terms on top, the versions beside them. */
@@ -862,11 +889,13 @@ export const contractsFromSeen = (seen: readonly Seen[]): O[] => {
   }
   return [...byPerson.values()].slice(0, 20).map((list) => {
     const latest = [...list].sort((a, b) => a.month.localeCompare(b.month))[list.length - 1] as Seen;
-    const { versions, exceptions, unsure } = versionsFrom(list);
+    const { versions, exceptions, unsure, differed } = versionsFrom(list);
     const top = versions[versions.length - 1]?.terms ?? latest.terms;
     const notes = [
       `${list.length} payslip${list.length === 1 ? "" : "s"} read.`,
-      exceptions.length > 0 ? `Different only in ${exceptions.map(monthName).join(", ")} (leave, a bonus or a pro-rata month?): kept on those payslips, not in the contract.` : "",
+      exceptions.length > 0
+        ? `Different only in ${exceptions.map((m) => `${monthName(m)}${differed[m] ? ` (${differed[m]})` : ""}`).join(", ")}: leave, a bonus or a pro-rata month? Kept on those payslips, not in the contract.`
+        : "",
       unsure.length > 0 ? `${unsure.map(monthName).join(", ")} differs and is the last month read: check it's a real change.` : "",
     ].filter(Boolean).join(" ");
     return {
