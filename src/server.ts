@@ -299,6 +299,7 @@ export const makeServer = (
           onSentence: (text) => sendSentences([text]),
           // Live path for the brain view (#130): the same steps the final path carries.
           onReach: (tool) => send("reach", { tool }),
+          onProgress: (text) => send("progress", { text }),
           onStep: (step) => {
             steps.push(step);
             send("step", step);

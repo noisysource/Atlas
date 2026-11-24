@@ -340,8 +340,13 @@ describe("the Atlas folder (by kind and entity)", () => {
     const { llm, asked } = fakeLlm();
     const { db, puts } = fakeDb();
     const imports = makeFinhubImports({ drive: lib(), llm, db, newId: () => "abcdef0100" });
-    const got = await imports.proposeContracts({ entity: "Noisy Source", year: 2026 }, NOW);
+    const said: string[] = [];
+    const got = await imports.proposeContracts({ entity: "Noisy Source", year: 2026 }, NOW, undefined, (t) => said.push(t));
     if (!got.ok) throw new Error(got.error);
+    // He sees what it's doing, payslip by payslip, and the model gets what it found to tell him.
+    expect(said[0]).toMatch(/^Reading Jan 2026's payslip .* \(1\/\d+\)…$/);
+    expect(said[said.length - 1]).toContain("Working out the contracts");
+    expect(got.value.summary).toContain("Renato Lopes:");
     // Only payslips, only Noisy Source's (not the Phocus slip filed under NOISYSOURCE).
     expect(asked.every((a) => a.system.includes("payslips"))).toBe(true);
     expect(asked.length).toBeGreaterThan(1);

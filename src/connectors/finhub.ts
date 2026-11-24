@@ -22,7 +22,7 @@ export const finhubConnector = (d: FinhubDeps): Connector => ({
   group: "finhub",
   tools: [FINHUB_INVENTORY_TOOL, FINHUB_CONTRACTS_TOOL, FINHUB_IMPORT_TOOL],
   prompt: [FINHUB_PROMPT],
-  run: async ({ call, now, signal, onStep, log }) => {
+  run: async ({ call, now, signal, onStep, onProgress, log }) => {
     if (call.name === FINHUB_INVENTORY_TOOL.name) {
       const range = checkRange(call.input, localDate(now, d.timeZone));
       if (!range.ok) {
@@ -42,7 +42,7 @@ export const finhubConnector = (d: FinhubDeps): Connector => ({
     if (call.name === FINHUB_IMPORT_TOOL.name) {
       const input = (call.input ?? {}) as Record<string, unknown>;
       const args = `${String(input.entity ?? "")} · ${String(input.month ?? "")}`;
-      const proposed = await d.imports.propose(call.input, now, signal);
+      const proposed = await d.imports.propose(call.input, now, signal, (onProgress ? (text: string) => onProgress(text.slice(0, 160)) : undefined));
       if (!proposed.ok) {
         onStep?.({ kind: "tool", name: call.name, args, by: "model", ok: false, error: `not built: ${proposed.error.slice(0, 60)}` });
         return { callId: call.id, content: `Not built: ${proposed.error}. Tell him plainly.`, isError: true };
@@ -55,14 +55,14 @@ export const finhubConnector = (d: FinhubDeps): Connector => ({
     if (call.name === FINHUB_CONTRACTS_TOOL.name) {
       const input = (call.input ?? {}) as Record<string, unknown>;
       const args = `${String(input.entity ?? "")} · ${String(input.year ?? now.getUTCFullYear())}`;
-      const proposed = await d.imports.proposeContracts(call.input, now, signal);
+      const proposed = await d.imports.proposeContracts(call.input, now, signal, (onProgress ? (text: string) => onProgress(text.slice(0, 160)) : undefined));
       if (!proposed.ok) {
         onStep?.({ kind: "tool", name: call.name, args, by: "model", ok: false, error: `not built: ${proposed.error.slice(0, 60)}` });
         return { callId: call.id, content: `Not built: ${proposed.error}. Tell him plainly.`, isError: true };
       }
       onStep?.({ kind: "tool", name: call.name, args, by: "model", ok: true, result: "waiting for your OK", confirm: { id: proposed.value.id, label: proposed.value.label, kind: "finhub" } });
       const warned = proposed.value.warnings.length > 0 ? ` Warnings to tell him: ${proposed.value.warnings.join("; ")}.` : "";
-      return { callId: call.id, content: `Built, not sent yet: the app is asking him "Send it" / "Don't" for: ${proposed.value.label}.${warned} Say in a sentence or two who has a contract, which changed during the year, and which months were exceptions; it needs his OK. Never say it's in FinHub yet.` };
+      return { callId: call.id, content: `Built, not sent yet: the app is asking him "Send it" / "Don't" for: ${proposed.value.label}.${warned} What it found:\n${proposed.value.summary}\nSay in a few sentences who has a contract, the months each one changed, and which months were exceptions (from what it found, nothing else); it needs his OK. Never say it's in FinHub yet.` };
     }
     return { callId: call.id, content: `Refused: ${call.name} isn't one of FinHub's tools here.`, isError: true };
   },

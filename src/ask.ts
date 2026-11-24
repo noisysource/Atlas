@@ -97,6 +97,8 @@ export type AskMeta = {
   /** Live path (#130): a tool call starting, and each step as it ends. Same content as the final path. */
   readonly onReach?: (tool: string) => void;
   readonly onStep?: (step: PathStep) => void;
+  /** A long tool's progress, shown in place of "Thinking…"; never kept. */
+  readonly onProgress?: (text: string) => void;
 };
 
 /** The context answered speculatively while the classifier runs (#76, SPECULATIVE_ANSWER=on). */
@@ -199,6 +201,7 @@ const handleBare = async (deps: Deps, bare: Deps["answer"], request: AskRequest,
     ...(request.remember === false ? { remember: false } : {}),
     onToolSucceeded: guard.toolSucceeded,
     ...(meta.onReach ? { onReach: meta.onReach } : {}),
+    ...(meta.onProgress ? { onProgress: meta.onProgress } : {}),
     onOffered: (tools) => {
       const step: PathStep = { kind: "tools", offered: tools };
       // #175: tools_more widens what was offered; the path keeps one, the latest.

@@ -233,7 +233,7 @@ const randomBytes = (count) => crypto.getRandomValues(new Uint8Array(count));
  * voiceSession: the user is talking (last question was spoken and they haven't stopped).
  * autoBlocked: the browser refused to reopen the mic by itself; paused until the toggle is flipped.
  * @type {{
- *   history: import("./chat.js").Turn[], language: "en" | "pt", muted: boolean, readTyped: boolean, busy: boolean,
+ *   progress: string, history: import("./chat.js").Turn[], language: "en" | "pt", muted: boolean, readTyped: boolean, busy: boolean,
  *   listening: boolean, transcribing: boolean, pending: PendingClarify | null,
  *   phase: import("./turn-lib.js").Phase, lastContext: string | undefined,
  *   conversation: boolean, voiceSession: boolean, autoBlocked: boolean,
@@ -241,6 +241,8 @@ const randomBytes = (count) => crypto.getRandomValues(new Uint8Array(count));
  * }}
  */
 const state = {
+  /** What a long tool is doing right now ("Reading March's payslip (3/11)…"), shown instead of "Thinking…". */
+  progress: "",
   history: [],
   language: parseLanguage(load("atlas.language")),
   muted: load("atlas.muted") === "true",
@@ -506,6 +508,7 @@ const refreshPending = () => {
 const setPhase = (phase) => {
   if (state.phase === phase) return;
   state.phase = phase;
+  state.progress = "";
   renderControls();
 };
 
@@ -870,7 +873,8 @@ const renderControls = () => {
   document.body.dataset.phase = state.phase;
   document.body.dataset.voice = String(session !== null);
   phaseBanner.hidden = state.phase === "idle";
-  phaseText.textContent = phaseLabel(state.phase, state.language, session?.bargeIn ?? null);
+  phaseText.textContent =
+    state.phase === "thinking" && state.progress ? state.progress : phaseLabel(state.phase, state.language, session?.bargeIn ?? null);
   micButton.disabled = !listenAvailable() && session === null;
   if (!listenAvailable()) micButton.title = !micSupported ? "This browser can't record the microphone" : "Listening is English-only for now";
   micNote.hidden = listenAvailable();
@@ -1471,11 +1475,19 @@ const ask = async (question, context, hidden = false) => {
             else appendToMessage(item, sentence);
             // A filler already reacted: don't add the reply's own reaction on top (#92).
             if (!skipSpokenReaction({ usedFiller, first, sentence })) await say(sentence);
+          } else if (ev.event === "progress") {
+            state.progress = String(data.text ?? "").slice(0, 160);
+            renderControls();
           } else if (ev.event === "reach") {
             brainView.reach(String(data.tool ?? ""));
             traceView.reach(String(data.tool ?? ""));
           }
           else if (ev.event === "step") {
+            // A tool finished: its progress line is done.
+            if (state.progress) {
+              state.progress = "";
+              renderControls();
+            }
             // The same steps the final path carries (#130), drawn as they happen.
             const [step] = pathOf({ path: [data] });
             if (step) {
