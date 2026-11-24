@@ -960,7 +960,7 @@ export const makeBareAnswerer = (deps: {
                   : [];
   const routing = deps.tools === true && deps.route !== undefined && deps.route.mode !== "all";
 
-  return async ({ question, history, onText, signal, spoken, onStep: onStepAsked, onReach, onOffered, now, remember, onToolSucceeded, user }) => {
+  return async ({ question, history, onText, signal, spoken, onStep: onStepAsked, onReach, onProgress, onOffered, now, remember, onToolSucceeded, user }) => {
     // #290: someone of his household who isn't him: her name, profile, memories, accounts and tools.
     const guest = user && !user.main ? user : undefined;
     // #312: in Local mode nothing leaves the Mac, and the household's limits are off.
@@ -1416,7 +1416,7 @@ export const makeBareAnswerer = (deps: {
       if (deps.gcloud && GCLOUD_TOOLS.some((t) => t.name === call.name)) return runGcloud(deps.gcloud, call);
       // #168: a plugged-in connector runs its own tools.
       const connector = connectorOf(connectors, call.name);
-      if (connector) return connector.run({ call, now, ...(signal ? { signal } : {}), ...(onStep ? { onStep } : {}), ...(deps.log ? { log: deps.log } : {}), ...(deps.autoSmall ? { autoSmall: true } : {}), ...(deps.local ? { local: true } : {}) });
+      if (connector) return connector.run({ call, now, ...(signal ? { signal } : {}), ...(onStep ? { onStep } : {}), ...(onProgress ? { onProgress } : {}), ...(deps.log ? { log: deps.log } : {}), ...(deps.autoSmall ? { autoSmall: true } : {}), ...(deps.local ? { local: true } : {}) });
       if (deps.gcloud?.db && DB_TOOLS.some((t) => t.name === call.name)) return runGcloudDb(deps.gcloud.reader, deps.gcloud.db, call);
       if (deps.gcloud?.writes && call.name === DB_CHANGE_TOOL.name) {
         const input = typeof call.input === "object" && call.input !== null ? (call.input as Record<string, unknown>) : {};

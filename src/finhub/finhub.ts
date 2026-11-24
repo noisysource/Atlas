@@ -662,6 +662,8 @@ export const buildImport = async (deps: {
   readonly id: string;
   readonly signal?: AbortSignal;
   readonly log?: Logger;
+  /** What it's doing now, for the page ("Reading March's payslip (3/11)…"). */
+  readonly progress?: (text: string) => void;
 }): Promise<Result<ImportPlan, string>> => {
   const { drive, llm, entity, month, signal } = deps;
   let calls = 0;
@@ -707,7 +709,8 @@ export const buildImport = async (deps: {
   if (chosen.length === 0) return err(`no payslips or statements for ${entity} in ${month} (by folder, or names with extrato, statement, vencimento, payslip…); name the files and their kinds`);
 
   const doc: ImportDoc = { entityHint: entity, month, summary: "", sources: [], statements: [], payslips: [], contracts: [], subscriptions: [], facilities: [] };
-  for (const f of chosen) {
+  for (const [i, f] of chosen.entries()) {
+    deps.progress?.(`Reading ${f.kind === "statement" ? "the statement" : "a payslip"} ${f.name} (${i + 1}/${chosen.length})…`);
     const read = await drive.client.read({ account: drive.account, id: f.id }, signal);
     if (!read.ok) {
       warnings.push(`${f.name}: couldn't read it (${read.error.message})`);
@@ -746,6 +749,7 @@ export const buildImport = async (deps: {
   // Each statement's lines, in chunks: vendor, category, type, VAT; and what recurs.
   for (const st of doc.statements) {
     for (let offset = 0; offset < st.lines.length; offset += CHUNK) {
+      deps.progress?.(`Categorising ${st.filename}'s lines ${offset + 1}–${Math.min(st.lines.length, offset + CHUNK)} of ${st.lines.length}…`);
       const chunk = st.lines.slice(offset, offset + CHUNK).map((l, i) => `${i}\t${l.date}\t${l.direction}\t${l.amount.toFixed(2)}\t${l.description}`);
       const got = await ask(discoveryPrompt(entity), `Lines (index, date, direction, amount €, description):\n${chunk.join("\n")}`, DISCOVERY_SCHEMA, 12_000);
       if (!got.ok) {
@@ -891,6 +895,8 @@ export const buildYearContracts = async (deps: {
   readonly id: string;
   readonly signal?: AbortSignal;
   readonly log?: Logger;
+  /** What it's doing now, for the page ("Reading March's payslip (3/11)…"). */
+  readonly progress?: (text: string) => void;
 }): Promise<Result<ImportPlan, string>> => {
   const { drive, llm, entity, year, signal } = deps;
   const lib = await libraryFiles(drive, signal);
@@ -907,8 +913,9 @@ export const buildYearContracts = async (deps: {
   }
   const seen: Seen[] = [];
   const sources: Source[] = [];
-  for (const f of files) {
+  for (const [i, f] of files.entries()) {
     const month = f.month ?? "";
+    deps.progress?.(`Reading ${monthName(month)}'s payslip ${f.file.name} (${i + 1}/${files.length})…`);
     const read = await drive.client.read({ account: drive.account, id: f.file.id }, signal);
     if (!read.ok) {
       warnings.push(`${f.file.name}: couldn't read it (${read.error.message})`);
@@ -936,6 +943,7 @@ export const buildYearContracts = async (deps: {
     }
   }
   if (seen.length === 0) return err(`nothing could be extracted from ${entity}'s ${year} payslips${warnings.length > 0 ? `: ${warnings.join("; ")}` : ""}`);
+  deps.progress?.(`Working out the contracts from ${seen.length} payslip lines…`);
   const contracts = contractsFromSeen(seen);
   const versionsCount = contracts.reduce((n, c) => n + (Array.isArray(c.versions) ? c.versions.length : 0), 0);
   const first = [...seen].sort((a, b) => a.month.localeCompare(b.month))[0]?.month ?? `${year}-01`;
@@ -974,10 +982,10 @@ export type FinhubDb = {
 };
 
 export type FinhubImports = {
-  readonly propose: (input: unknown, now: Date, signal?: AbortSignal) => Promise<Result<{ readonly id: string; readonly label: string; readonly warnings: readonly string[] }, string>>;
+  readonly propose: (input: unknown, now: Date, signal?: AbortSignal, progress?: (text: string) => void) => Promise<Result<{ readonly id: string; readonly label: string; readonly warnings: readonly string[] }, string>>;
   readonly decide: (id: string, decision: "yes" | "no") => Promise<{ readonly ok: boolean; readonly text: string; readonly tool?: string }>;
   /** The year pass: one entity's contracts from all its payslips of a year. */
-  readonly proposeContracts: (input: unknown, now: Date, signal?: AbortSignal) => Promise<Result<{ readonly id: string; readonly label: string; readonly warnings: readonly string[] }, string>>;
+  readonly proposeContracts: (input: unknown, now: Date, signal?: AbortSignal, progress?: (text: string) => void) => Promise<Result<{ readonly id: string; readonly label: string; readonly warnings: readonly string[]; /** Each person's versions and exceptions, for the model to tell him. */ readonly summary: string }, string>>;
 };
 
 export const checkContracts = (input: unknown, today: Date): Result<{ entity: string; year: number; again: boolean }, string> => {
@@ -1022,7 +1030,7 @@ export const makeFinhubImports = (deps: {
   const pending = new Map<string, { plan: ImportPlan; until: number }>();
 
   return {
-    propose: async (input, today, signal) => {
+    propose: async (input, today, signal, progress) => {
       const c = checkImport(input);
       if (!c.ok) return c;
       if (c.value.month > today.toISOString().slice(0, 7)) return err("that month hasn't happened yet");
@@ -1036,7 +1044,7 @@ export const makeFinhubImports = (deps: {
       if (status === "applied" || status === "dismissed")
         return err(`${c.value.entity} · ${c.value.month} was already ${status === "applied" ? "committed in FinHub" : "set aside"}; import it again only if he asks (again: true)`);
       built.push(now());
-      const plan = await buildImport({ drive: deps.drive, llm: deps.llm, entity: c.value.entity, month: c.value.month, ...(c.value.files ? { files: c.value.files } : {}), id, ...(signal ? { signal } : {}), ...(deps.log ? { log: deps.log } : {}) });
+      const plan = await buildImport({ drive: deps.drive, llm: deps.llm, entity: c.value.entity, month: c.value.month, ...(c.value.files ? { files: c.value.files } : {}), id, ...(signal ? { signal } : {}), ...(deps.log ? { log: deps.log } : {}), ...(progress ? { progress } : {}) });
       if (!plan.ok) return plan;
       for (const [k, v] of pending) if (v.until <= now()) pending.delete(k);
       const card = newId();
@@ -1044,7 +1052,7 @@ export const makeFinhubImports = (deps: {
       pending.set(card, { plan: plan.value, until: now() + 60 * 60_000 });
       return ok({ id: card, label: plan.value.label, warnings: plan.value.warnings });
     },
-    proposeContracts: async (input, today, signal) => {
+    proposeContracts: async (input, today, signal, progress) => {
       const c = checkContracts(input, today);
       if (!c.ok) return c;
       while (built.length > 0 && (built[0] ?? 0) <= now() - 86_400_000) built.shift();
@@ -1056,12 +1064,12 @@ export const makeFinhubImports = (deps: {
       if (status === "applied" || status === "dismissed")
         return err(`${c.value.entity}'s ${c.value.year} contracts were already ${status === "applied" ? "committed in FinHub" : "set aside"}; work them out again only if he asks (again: true)`);
       built.push(now());
-      const plan = await buildYearContracts({ drive: deps.drive, llm: deps.llm, entity: c.value.entity, year: c.value.year, id, ...(signal ? { signal } : {}), ...(deps.log ? { log: deps.log } : {}) });
+      const plan = await buildYearContracts({ drive: deps.drive, llm: deps.llm, entity: c.value.entity, year: c.value.year, id, ...(signal ? { signal } : {}), ...(deps.log ? { log: deps.log } : {}), ...(progress ? { progress } : {}) });
       if (!plan.ok) return plan;
       for (const [k, v] of pending) if (v.until <= now()) pending.delete(k);
       const card = newId();
       pending.set(card, { plan: plan.value, until: now() + 60 * 60_000 });
-      return ok({ id: card, label: plan.value.label, warnings: plan.value.warnings });
+      return ok({ id: card, label: plan.value.label, warnings: plan.value.warnings, summary: plan.value.doc.summary });
     },
     decide: async (id, decision) => {
       const got = pending.get(id);

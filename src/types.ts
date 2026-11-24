@@ -302,6 +302,8 @@ export type AnswerInput = {
   readonly onStep?: (step: PathStep) => void;
   /** A tool call is starting (#130): its name, one of the tools offered this turn. For the page's brain view. */
   readonly onReach?: (tool: string) => void;
+  /** What a long tool is doing right now ("Reading March's payslip (3/11)…"): live only, never kept. */
+  readonly onProgress?: (text: string) => void;
   /** The tools offered to the brain this turn (#141), once, before it answers. */
   readonly onOffered?: (tools: readonly string[]) => void;
   /** #290: who's talking; the main user when undefined. */
