@@ -884,7 +884,7 @@ export const versionsFrom = (
 };
 
 /** Each person's contract from their months: the latest terms on top, the versions beside them. */
-export const contractsFromSeen = (seen: readonly Seen[], secondRun: ReadonlySet<string> = new Set()): O[] => {
+export const contractsFromSeen = (seen: readonly Seen[]): O[] => {
   const byPerson = new Map<string, Seen[]>();
   for (const s of seen) {
     const k = personKey(s.name);
@@ -895,10 +895,9 @@ export const contractsFromSeen = (seen: readonly Seen[], secondRun: ReadonlySet<
     const latest = [...list].sort((a, b) => a.month.localeCompare(b.month))[list.length - 1] as Seen;
     const found = versionsFrom(list);
     const { exceptions, unsure, differed } = found;
-    // 14 payments when he was on a second run (a separate holiday or Christmas subsidy slip);
-    // otherwise what most months' guesses said, 14 on a tie.
-    const fourteen = list.filter((x) => x.terms.paySchedule === "14_months").length;
-    const paySchedule: Terms["paySchedule"] = secondRun.has(personKey(latest.name)) || fourteen * 2 >= list.length ? "14_months" : "12_months";
+    // Portugal pays 14 times a year (holiday and Christmas subsidies); a payslip doesn't say so,
+    // and the model's month-by-month guesses were wrong. 12 only when he says so in FinHub.
+    const paySchedule: Terms["paySchedule"] = "14_months";
     const versions = found.versions.map((v) => ({ ...v, terms: { ...v.terms, paySchedule } }));
     const top = versions[versions.length - 1]?.terms ?? { ...latest.terms, paySchedule };
     const notes = [
@@ -947,7 +946,6 @@ export const buildYearContracts = async (deps: {
     files = files.slice(0, MAX_YEAR_PAYSLIPS);
   }
   const seen: Seen[] = [];
-  const secondRun = new Set<string>();
   const sources: Source[] = [];
   for (const [i, f] of files.entries()) {
     const month = f.month ?? "";
@@ -974,11 +972,8 @@ export const buildYearContracts = async (deps: {
     for (const c of p.contracts) {
       const name = str(c.workerName, 120);
       if (!name) continue;
-      // A second run (…P2…) is a subsidy or a correction, not the month's terms: it only says the person gets 14 payments.
-      if (secondRunFile) {
-        secondRun.add(personKey(name));
-        continue;
-      }
+      // A second run (…P2…) is a subsidy or a correction, not the month's terms.
+      if (secondRunFile) continue;
       // Each payslip is one month of each person on it.
       if (seen.some((x) => x.month === month && personKey(x.name) === personKey(name))) continue;
       seen.push({ month, name, role: str(c.roleTitle, 120), employer: str(c.employerName, 120), owner: c.isOwnerHint === true, terms: termsOfContract(c), notes: str(c.notes, 300) });
@@ -986,7 +981,7 @@ export const buildYearContracts = async (deps: {
   }
   if (seen.length === 0) return err(`nothing could be extracted from ${entity}'s ${year} payslips${warnings.length > 0 ? `: ${warnings.join("; ")}` : ""}`);
   deps.progress?.(`Working out the contracts from ${seen.length} payslip lines…`);
-  const contracts = contractsFromSeen(seen, secondRun);
+  const contracts = contractsFromSeen(seen);
   const versionsCount = contracts.reduce((n, c) => n + (Array.isArray(c.versions) ? c.versions.length : 0), 0);
   const first = [...seen].sort((a, b) => a.month.localeCompare(b.month))[0]?.month ?? `${year}-01`;
   const doc: ImportDoc = {
