@@ -349,3 +349,14 @@ describe("extraction schemas (Anthropic structured output)", () => {
     expect(open).toEqual([]);
   });
 });
+
+describe("employer Social Security on contracts", () => {
+  it("0 beside a worker's 11% becomes the general 23.75%, said in the notes", async () => {
+    const { payslipsOf } = await import("../src/finhub/finhub.js");
+    const c = { workerName: "A", employeeSsRate: 11, employerSsRate: 0, notes: "" };
+    const got = payslipsOf({ items: [], contracts: [c, { ...c, workerName: "B", employerSsRate: 20.3 }, { ...c, workerName: "C", employeeSsRate: 0 }] }, "x.pdf").contracts;
+    expect(got.map((x) => x.employerSsRate)).toEqual([23.75, 20.3, 0]);
+    expect(String(got[0]?.notes)).toContain("23.75% assumed");
+    expect(String(got[1]?.notes)).not.toContain("assumed");
+  });
+});

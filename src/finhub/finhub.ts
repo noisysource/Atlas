@@ -103,6 +103,9 @@ const date = { type: "string", description: "YYYY-MM-DD" } as const;
  * Every object closed (additionalProperties: false), as Anthropic's structured
  * output requires: without it the extraction call is refused as a bad request.
  */
+/** Portugal's employer Social Security rate for employees, and for managers and directors (seg-social.pt). */
+export const EMPLOYER_SS_RATE = 23.75;
+
 export const closed = (schema: JsonObjectSchema): JsonObjectSchema => {
   const walk = (v: unknown): unknown => {
     if (Array.isArray(v)) return v.map(walk);
@@ -167,7 +170,7 @@ export const PAYSLIP_SCHEMA: JsonObjectSchema = closed({
           baseGrossMonthly: num,
           irsRate: { type: "number", description: "Percent" },
           employeeSsRate: { type: "number", description: "Percent, usually 11" },
-          employerSsRate: { type: "number", description: "Percent, usually 23.75" },
+          employerSsRate: { type: "number", description: "Percent: 23.75 for employees and for managers/directors (gerentes) unless the slip says otherwise; payslips rarely print it, so don't answer 0 just because it isn't shown" },
           mealAllowanceDaily: num,
           mealPaymentMethod: { type: "string", enum: ["card", "cash", "none"] },
           childVoucherMonthly: num,
@@ -399,13 +402,15 @@ export const payslipsOf = (raw: unknown, filename: string): { payslips: O[]; con
       baseGrossMonthly: money(x.baseGrossMonthly),
       irsRate: money(x.irsRate),
       employeeSsRate: money(x.employeeSsRate),
-      employerSsRate: money(x.employerSsRate),
+      // Payslips rarely print the employer's share: 0 next to a worker's 11% means "not on the slip",
+      // so the general rate (23.75%, also for managers and directors) stands in, said in the notes.
+      employerSsRate: money(x.employerSsRate) > 0 || money(x.employeeSsRate) === 0 ? money(x.employerSsRate) : EMPLOYER_SS_RATE,
       mealAllowanceDaily: money(x.mealAllowanceDaily),
       mealPaymentMethod: ["card", "cash", "none"].includes(String(x.mealPaymentMethod)) ? x.mealPaymentMethod : "none",
       childVoucherMonthly: money(x.childVoucherMonthly),
       otherBenefitName: str(x.otherBenefitName, 80),
       otherBenefitMonthly: money(x.otherBenefitMonthly),
-      notes: str(x.notes, 1000),
+      notes: str([str(x.notes, 900), money(x.employerSsRate) > 0 || money(x.employeeSsRate) === 0 ? "" : `Employer Social Security not on the payslip: ${EMPLOYER_SS_RATE}% assumed (the general rate).`].filter(Boolean).join(" "), 1000),
     };
   });
   return { payslips, contracts };
