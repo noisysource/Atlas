@@ -378,7 +378,13 @@ describe("contract versions from a year of payslips", () => {
     const got = versionsFrom([...months(1, 9, terms()), ...months(10, 10, terms({ irsRate: 12 }))]);
     expect(got.versions.map((v) => v.effectiveFrom)).toEqual(["2026-01", "2026-10"]);
     expect(got.unsure).toEqual(["2026-10"]);
-    expect(got.versions[1]?.note).toContain("check");
+    expect(got.versions[1]?.note).toBe("IRS 10% → 12% (only that month seen: check)");
+  });
+
+  it("says what changed, and what was different in an exception month", () => {
+    const got = versionsFrom([...months(1, 3, terms()), ...months(4, 4, terms({ irsRate: 14.5 })), ...months(5, 6, terms()), ...months(7, 10, terms({ childVoucherMonthly: 420 }))]);
+    expect(got.versions[1]?.note).toBe("child voucher €0.00 → €420.00");
+    expect(got.differed["2026-04"]).toBe("IRS 10% → 14.5%");
   });
 
   it("one contract per person, whatever the accents; the latest terms on top", () => {
