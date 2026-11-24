@@ -407,6 +407,19 @@ describe("contract versions from a year of payslips", () => {
     expect(contractsFromSeen(months(1, 10, terms({ paySchedule: "12_months" })))[0]).toMatchObject({ paySchedule: "14_months" });
   });
 
+  it("months cut by leave say nothing about the contract, even two in a row", () => {
+    const leave = (m: number, t: Terms) => months(m, m, t).map((x) => ({ ...x, reduced: true }));
+    const got = versionsFrom([
+      ...leave(1, terms({ baseGrossMonthly: 0, irsRate: 0 })),
+      ...leave(2, terms({ irsRate: 21.03 })),
+      ...months(3, 4, terms({ irsRate: 15.35 })),
+      ...months(5, 10, terms({ irsRate: 17.75 })),
+    ]);
+    expect(got.versions.map((v) => [v.effectiveFrom, v.terms.irsRate])).toEqual([["2026-01", 15.35], ["2026-05", 17.75]]);
+    expect(got.exceptions).toEqual(["2026-01", "2026-02"]);
+    expect(got.differed["2026-02"]).toBe("pay cut by leave or absence");
+  });
+
   it("checks the year asked for", () => {
     expect(checkContracts({ entity: "Noisy Source" }, NOW)).toEqual({ ok: true, value: { entity: "Noisy Source", year: 2026, again: false } });
     expect(checkContracts({ entity: "Noisy Source", year: 2027 }, NOW).ok).toBe(false);
