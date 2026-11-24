@@ -399,6 +399,16 @@ describe("contract versions from a year of payslips", () => {
     expect((got[0]?.versions as unknown[]).length).toBe(2);
   });
 
+  it("the pay schedule is the year's, not each month's guess", () => {
+    const list = [...months(1, 6, terms({ paySchedule: "14_months" })), ...months(7, 7, terms({ paySchedule: "12_months" })), ...months(8, 10, terms({ paySchedule: "14_months" }))];
+    expect(versionsFrom(list).versions).toHaveLength(1);
+    expect(versionsFrom(list).exceptions).toEqual([]);
+    const twelve = months(1, 10, terms({ paySchedule: "12_months" }));
+    expect(contractsFromSeen(twelve)[0]).toMatchObject({ paySchedule: "12_months" });
+    // On a second run (a subsidy slip): 14 payments, whatever the guesses.
+    expect(contractsFromSeen(twelve, new Set(["renato lopes"]))[0]).toMatchObject({ paySchedule: "14_months" });
+  });
+
   it("checks the year asked for", () => {
     expect(checkContracts({ entity: "Noisy Source" }, NOW)).toEqual({ ok: true, value: { entity: "Noisy Source", year: 2026, again: false } });
     expect(checkContracts({ entity: "Noisy Source", year: 2027 }, NOW).ok).toBe(false);
