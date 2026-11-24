@@ -64,8 +64,20 @@ export const ollamaBody = (model: string, request: LlmRequest, think?: boolean) 
   ...(request.tools && request.tools.length > 0 ? { tools: request.tools.map((t) => ({ type: "function", function: { name: t.name, description: t.description, parameters: t.inputSchema } })) } : {}),
   // Structured output (#100): Ollama keeps the reply to this JSON schema.
   ...(request.outputSchema ? { format: request.outputSchema } : {}),
-  options: { num_predict: request.maxTokens },
+  // A document to extract is long: Ollama's default context (a few thousand tokens) would cut it
+  // without saying so. Structured requests get a context sized to them (chat keeps the default,
+  // since changing it reloads the model).
+  options: { num_predict: request.maxTokens, ...(request.outputSchema ? { num_ctx: contextFor(request) } : {}) },
 });
+
+/** A context for the request: its text (about 3 characters a token) plus the answer, as a power of two, 8k to 32k. */
+export const contextFor = (request: LlmRequest): number => {
+  const chars = (request.system?.length ?? 0) + request.messages.reduce((n, m) => n + ("text" in m && typeof m.text === "string" ? m.text.length : 0), 0);
+  const need = Math.ceil(chars / 3) + (request.maxTokens ?? 2000) + 512;
+  let ctx = 8192;
+  while (ctx < need && ctx < 32_768) ctx *= 2;
+  return ctx;
+};
 
 /** Reads NDJSON lines from a body as they arrive. */
 async function* ndjson(body: ReadableStream<Uint8Array>): AsyncIterable<Record<string, unknown>> {

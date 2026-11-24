@@ -153,7 +153,7 @@ const RULES: readonly { readonly pattern: RegExp; readonly groups: readonly Tool
     pattern: words(`
       finhub, fin hub, books, bookkeeping, ledger, payslip*, salary, salaries, statement*, bank statement*, balance*,
       import*, opening balance, loan, loans, bpi, social security, irs, cash flow, forecast,
-      contabilidade, recibo*, vencimento*, salario*, extrato*, saldo*, importa*, emprestimo*, seguranca social, tesouraria, previsao`),
+      contabilidade, contrato*, employment contract*, payroll, recibo*, vencimento*, salario*, extrato*, saldo*, importa*, emprestimo*, seguranca social, tesouraria, previsao`),
     // FinHub's tools read the Drive folder themselves; with drive_list beside them,
     // the model browsed the folders and miscounted what was there.
     groups: ["finhub"],

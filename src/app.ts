@@ -581,7 +581,12 @@ export const buildDeps = async (inputs: AppInputs): Promise<Result<Deps, string>
   const kanbanChanges = domotics ? makeKanbanChanges({ call: domotics.call, ...(kanbanRead ? { read: kanbanRead } : {}), log }) : undefined;
   // FinHub: the month's documents from Drive, extracted with the answer model (counted as "finhub"),
   // and sent after his OK as Atlas's own user in FinHub's project (its own file: dev or prod).
-  const finhubLlm = config.finhub.enabled && driveClient && config.toolCalling ? metered(buildLlm(config.models.answer, keys, { log }), config.models.answer, "finhub") : undefined;
+  // FINHUB_MODEL can put the reading on this Mac (Ollama), without thinking: it's extraction.
+  const finhubRef = config.finhub.model ?? config.models.answer;
+  const finhubLlm =
+    config.finhub.enabled && driveClient && config.toolCalling
+      ? metered(buildLlm(finhubRef, keys, { log, ollama: config.ollamaUrl, ollamaThink: false }), finhubRef, "finhub")
+      : undefined;
   const finhubImports =
     finhubLlm?.ok && driveClient && isGoogleAccount(config.finhub.account)
       ? (() => {

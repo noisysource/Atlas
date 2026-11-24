@@ -3,7 +3,7 @@
 // (finhub/finhub.ts). FinHub itself has no AI.
 
 import { localDate } from "../calendar/read.js";
-import { checkRange, ENTITIES, FINHUB_IMPORT_TOOL, FINHUB_INVENTORY_TOOL, inventory, type FinhubDrive, type FinhubImports } from "../finhub/finhub.js";
+import { checkRange, ENTITIES, FINHUB_CONTRACTS_TOOL, FINHUB_IMPORT_TOOL, FINHUB_INVENTORY_TOOL, inventory, type FinhubDrive, type FinhubImports } from "../finhub/finhub.js";
 import type { Connector } from "./types.js";
 
 export type FinhubDeps = {
@@ -14,13 +14,13 @@ export type FinhubDeps = {
 
 export const FINHUB_PROMPT =
   `You keep FinHub fed: FinHub is the bookkeeping app of ${ENTITIES.join(", ")} (Noisy Source is Renato's IT company, Noisy Phocus runs KidClub, the household is him and Marisa). FinHub has no AI: you read the documents and it keeps the books. ` +
-  "For what FinHub's folder holds or still needs, always call finhub_inventory and answer from it, never from listing Drive folders yourself or from what you remember: it knows whose each file is and which month it covers. finhub_inventory lists what FinHub's Drive folder holds for each entity, month by month (bank statements, payslips, invoices), and what's missing. finhub_import builds one entity's month: it reads the payslips and statements, extracts them, categorises every line and finds the subscriptions, loans and contracts; it takes a minute or two, so say you're on it. It shows him a card and sends nothing before his OK; even then it only lands in FinHub's \"From Atlas\" tab, where he reviews and commits it. Import one month at a time, oldest first, and say the warnings it gives (a statement that doesn't add up, a file it couldn't read). " +
+  "For what FinHub's folder holds or still needs, always call finhub_inventory and answer from it, never from listing Drive folders yourself or from what you remember: it knows whose each file is and which month it covers. finhub_inventory lists what FinHub's Drive folder holds for each entity, month by month (bank statements, payslips, invoices), and what's missing. finhub_import builds one entity's month: it reads the payslips and statements, extracts them, categorises every line and finds the subscriptions, loans and contracts; it takes a minute or two, so say you're on it. It shows him a card and sends nothing before his OK; even then it only lands in FinHub's \"From Atlas\" tab, where he reviews and commits it. Before an entity's first month, run finhub_contracts once for its year: it reads all the payslips together and gives each person's contract with the months it changed, so one odd month (leave, a bonus) isn't taken for a contract. Then import one month at a time, oldest first, and say the warnings it gives (a statement that doesn't add up, a file it couldn't read). " +
   "Numbers only from what the tools returned. EC invoicing is Noisy Source's (Kiro handles the EC work itself, not its invoices).";
 
 export const finhubConnector = (d: FinhubDeps): Connector => ({
   id: "finhub",
   group: "finhub",
-  tools: [FINHUB_INVENTORY_TOOL, FINHUB_IMPORT_TOOL],
+  tools: [FINHUB_INVENTORY_TOOL, FINHUB_CONTRACTS_TOOL, FINHUB_IMPORT_TOOL],
   prompt: [FINHUB_PROMPT],
   run: async ({ call, now, signal, onStep, log }) => {
     if (call.name === FINHUB_INVENTORY_TOOL.name) {
@@ -51,6 +51,18 @@ export const finhubConnector = (d: FinhubDeps): Connector => ({
       onStep?.({ kind: "tool", name: call.name, args, by: "model", ok: true, result: "waiting for your OK", confirm: { id: proposed.value.id, label: proposed.value.label, kind: "finhub" } });
       const warned = proposed.value.warnings.length > 0 ? ` Warnings to tell him: ${proposed.value.warnings.join("; ")}.` : "";
       return { callId: call.id, content: `Built, not sent yet: the app is asking him "Send it" / "Don't" for: ${proposed.value.label}.${warned} Say in a sentence or two what it found and that it needs his OK. Never say it's in FinHub yet.` };
+    }
+    if (call.name === FINHUB_CONTRACTS_TOOL.name) {
+      const input = (call.input ?? {}) as Record<string, unknown>;
+      const args = `${String(input.entity ?? "")} · ${String(input.year ?? now.getUTCFullYear())}`;
+      const proposed = await d.imports.proposeContracts(call.input, now, signal);
+      if (!proposed.ok) {
+        onStep?.({ kind: "tool", name: call.name, args, by: "model", ok: false, error: `not built: ${proposed.error.slice(0, 60)}` });
+        return { callId: call.id, content: `Not built: ${proposed.error}. Tell him plainly.`, isError: true };
+      }
+      onStep?.({ kind: "tool", name: call.name, args, by: "model", ok: true, result: "waiting for your OK", confirm: { id: proposed.value.id, label: proposed.value.label, kind: "finhub" } });
+      const warned = proposed.value.warnings.length > 0 ? ` Warnings to tell him: ${proposed.value.warnings.join("; ")}.` : "";
+      return { callId: call.id, content: `Built, not sent yet: the app is asking him "Send it" / "Don't" for: ${proposed.value.label}.${warned} Say in a sentence or two who has a contract, which changed during the year, and which months were exceptions; it needs his OK. Never say it's in FinHub yet.` };
     }
     return { callId: call.id, content: `Refused: ${call.name} isn't one of FinHub's tools here.`, isError: true };
   },
