@@ -1108,6 +1108,16 @@ Confirmed (2026-11-12):
   `data/finhub/firebase.json`), so FinHub can be on dev while the house is on
   prod. Not yet: Gmail as a source (the household's documents), invoices as
   documents, scans and photos (text PDFs only).
+  `finhub_contracts` (the year pass, 2026-11-24) runs first per entity: it reads
+  ALL of a year's payslips (at most 36) and builds each person's contract as
+  versions, each from a month on (`versionsFrom`: a one-month stretch between
+  steadier ones is an exception, like a month on leave, not a change; a change
+  seen only in the last month is kept and flagged). Same card and OK; one
+  document `{entity}-{year}-contracts`, whose contract drafts carry `versions`
+  (FinHub merges them into the worker's contract, the import's months winning).
+  FINHUB_MODEL picks who reads the documents (default the answer model;
+  `ollama:<model>` keeps them on this Mac, with a context sized to the document
+  and thinking off).
 
 - **Google Cloud (#161):** Atlas (not the code agent) reads errors and
   logs, read-only, from Cloud Logging. Each environment is a project and a

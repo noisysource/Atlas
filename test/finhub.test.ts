@@ -17,6 +17,11 @@ import {
   inventory,
   kindOfFile,
   makeFinhubImports,
+  checkContracts,
+  contractsFromSeen,
+  versionsFrom,
+  type Seen,
+  type Terms,
   mergeFound,
   monthOfFolder,
   statementOf,
@@ -329,6 +334,72 @@ describe("the Atlas folder (by kind and entity)", () => {
     const systems = asked.map((a) => a.system);
     expect(systems.filter((x) => x.includes("bank statement for FinHub, the bookkeeping of Noisy Source"))).toHaveLength(1);
     expect(systems.filter((x) => x.includes("payslips"))).toHaveLength(1);
+  });
+
+  it("works out an entity's year of contracts from all its payslips, after his OK", async () => {
+    const { llm, asked } = fakeLlm();
+    const { db, puts } = fakeDb();
+    const imports = makeFinhubImports({ drive: lib(), llm, db, newId: () => "abcdef0100" });
+    const got = await imports.proposeContracts({ entity: "Noisy Source", year: 2026 }, NOW);
+    if (!got.ok) throw new Error(got.error);
+    // Only payslips, only Noisy Source's (not the Phocus slip filed under NOISYSOURCE).
+    expect(asked.every((a) => a.system.includes("payslips"))).toBe(true);
+    expect(asked.length).toBeGreaterThan(1);
+    const sent = await imports.decide("abcdef0100", "yes");
+    expect(sent.text).toContain("Noisy Source's 2026 contracts are in FinHub");
+    expect(puts[0]?.path).toBe("finhub_books/noisysource-group/atlas_imports/noisy-source-2026-contracts");
+    const contracts = puts[0]?.fields.contracts as { versions: unknown[] }[];
+    expect(contracts.length).toBeGreaterThan(0);
+    expect(contracts[0]?.versions).toHaveLength(1);
+  });
+});
+
+describe("contract versions from a year of payslips", () => {
+  const terms = (over: Partial<Terms> = {}): Terms => ({
+    paySchedule: "12_months", baseGrossMonthly: 2000, irsRate: 10, employeeSsRate: 11, employerSsRate: 23.75,
+    mealAllowanceDaily: 0, mealPaymentMethod: "none", childVoucherMonthly: 0, otherBenefitName: "", otherBenefitMonthly: 0, ...over,
+  });
+  const months = (from: number, to: number, t: Terms, name = "Renato Lopes"): Seen[] =>
+    Array.from({ length: to - from + 1 }, (_, i) => ({ month: `2026-${String(from + i).padStart(2, "0")}`, name, role: "Gerente", employer: "Noisy Source", owner: true, terms: t, notes: "" }));
+
+  it("a month on leave at the start is an exception, not a contract", () => {
+    const got = versionsFrom([...months(1, 1, terms({ baseGrossMonthly: 0, employeeSsRate: 0 })), ...months(2, 10, terms())]);
+    expect(got.versions).toEqual([expect.objectContaining({ effectiveFrom: "2026-01", terms: terms() })]);
+    expect(got.exceptions).toEqual(["2026-01"]);
+  });
+
+  it("a one-month blip in the middle goes back; a raise that stays is a version", () => {
+    const got = versionsFrom([...months(1, 3, terms()), ...months(4, 4, terms({ baseGrossMonthly: 3000 })), ...months(5, 5, terms()), ...months(6, 10, terms({ baseGrossMonthly: 2200 }))]);
+    expect(got.versions.map((v) => [v.effectiveFrom, v.terms.baseGrossMonthly])).toEqual([["2026-01", 2000], ["2026-06", 2200]]);
+    expect(got.exceptions).toEqual(["2026-04"]);
+  });
+
+  it("a change seen only in the last month is kept, flagged to check", () => {
+    const got = versionsFrom([...months(1, 9, terms()), ...months(10, 10, terms({ irsRate: 12 }))]);
+    expect(got.versions.map((v) => v.effectiveFrom)).toEqual(["2026-01", "2026-10"]);
+    expect(got.unsure).toEqual(["2026-10"]);
+    expect(got.versions[1]?.note).toContain("check");
+  });
+
+  it("one contract per person, whatever the accents; the latest terms on top", () => {
+    const got = contractsFromSeen([...months(1, 5, terms(), "Simão Lopes"), ...months(6, 10, terms({ baseGrossMonthly: 2100 }), "Simao  Lopes"), ...months(1, 10, terms({ baseGrossMonthly: 950 }), "Marisa")]);
+    expect(got).toHaveLength(2);
+    expect(got[0]).toMatchObject({ baseGrossMonthly: 2100, isOwnerHint: true });
+    expect((got[0]?.versions as unknown[]).length).toBe(2);
+  });
+
+  it("checks the year asked for", () => {
+    expect(checkContracts({ entity: "Noisy Source" }, NOW)).toEqual({ ok: true, value: { entity: "Noisy Source", year: 2026, again: false } });
+    expect(checkContracts({ entity: "Noisy Source", year: 2027 }, NOW).ok).toBe(false);
+    expect(checkContracts({ entity: "Someone" }, NOW).ok).toBe(false);
+  });
+});
+
+describe("Ollama context for an extraction", () => {
+  it("fits the document, 8k to 32k", async () => {
+    const { contextFor } = await import("../src/llm/ollama.js");
+    expect(contextFor({ system: "x", messages: [{ role: "user", text: "a".repeat(100) }], maxTokens: 2000 })).toBe(8192);
+    expect(contextFor({ system: "x", messages: [{ role: "user", text: "a".repeat(60_000) }], maxTokens: 16_000 })).toBe(32_768);
   });
 });
 

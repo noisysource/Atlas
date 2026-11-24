@@ -188,7 +188,7 @@ export type Config = {
    * user in FinHub's project (npm run finhub:connect, data/finhub/firebase.json).
    * Needs DRIVE=on. Local only for now.
    */
-  readonly finhub: { readonly enabled: boolean; readonly folder: string; readonly account: string; readonly userPath: string };
+  readonly finhub: { readonly enabled: boolean; readonly folder: string; readonly account: string; readonly userPath: string; /** FINHUB_MODEL: who reads the documents; default the answer model. */ readonly model?: ModelRef };
   /**
    * CODE_AGENT=on (#126): Claude can ask a code agent (Claude Code, read-only,
    * on a local copy in data/repos/) about one of the repos GITHUB=on reaches.
@@ -430,6 +430,7 @@ const EnvSchema = z.object({
   HOUSE_CONTROL: onOff,
   FINHUB: onOff,
   FINHUB_DRIVE_FOLDER: z.preprocess((v) => (typeof v === "string" && v.trim() === "" ? undefined : v), z.string().regex(/^[A-Za-z0-9_-]{10,100}$/, { error: "must be a Drive folder id (the part after folders/ in its link)" }).optional()),
+  FINHUB_MODEL: optionalString,
   FINHUB_DRIVE_ACCOUNT: z.preprocess((v) => (typeof v === "string" && v.trim() === "" ? undefined : v), z.enum(["personal", "noisysource", "kidclub", "marisa"]).default("noisysource")),
   HOUSE_ENV: z.preprocess((v) => (typeof v === "string" && v.trim() === "" ? undefined : v), z.string().regex(/^[a-z][a-z0-9-]{0,19}$/, { error: "must be an environment name like dev" }).default("dev")),
   CODE_AGENT: onOff,
@@ -620,6 +621,8 @@ export const loadConfig = (given: Env): Result<Config, string> => {
 
   const classifier = field("CLASSIFIER_MODEL", parseModelRef(raw("CLASSIFIER_MODEL") ?? DEFAULTS.classifierModel));
   const answer = field("ANSWER_MODEL", parseModelRef(raw("ANSWER_MODEL") ?? DEFAULTS.answerModel));
+  // FINHUB_MODEL (e.g. ollama:qwen3.5:4b): who reads FinHub's documents; unset, the answer model.
+  const finhubModel = raw("FINHUB_MODEL") ? field("FINHUB_MODEL", parseModelRef(raw("FINHUB_MODEL") ?? "")) : undefined;
   const profileSource = field("PROFILE_SOURCE", parseProfileSource(raw("PROFILE_SOURCE") ?? DEFAULTS.profileSource));
   const timeZone = field("TIMEZONE", parseTimeZone(raw("TIMEZONE") ?? DEFAULTS.timeZone));
   const kokoroUrl = field("KOKORO_URL", parseLocalUrl(raw("KOKORO_URL") ?? DEFAULTS.kokoroUrl));
@@ -746,7 +749,7 @@ export const loadConfig = (given: Env): Result<Config, string> => {
       env: e.HOUSE_ENV,
       control: { enabled: e.HOUSE === "on" && e.HOUSE_CONTROL === "on", userPath: "data/house/firebase.json" },
     },
-    finhub: { enabled: e.FINHUB === "on" && e.DRIVE === "on" && e.FINHUB_DRIVE_FOLDER !== undefined, folder: e.FINHUB_DRIVE_FOLDER ?? "", account: e.FINHUB_DRIVE_ACCOUNT, userPath: "data/finhub/firebase.json" },
+    finhub: { enabled: e.FINHUB === "on" && e.DRIVE === "on" && e.FINHUB_DRIVE_FOLDER !== undefined, folder: e.FINHUB_DRIVE_FOLDER ?? "", account: e.FINHUB_DRIVE_ACCOUNT, userPath: "data/finhub/firebase.json", ...(finhubModel ? { model: finhubModel } : {}) },
     codeAgent: { enabled: e.GITHUB === "on" && e.CODE_AGENT === "on", maxUsd: e.CODE_AGENT_MAX_USD, maxTurns: e.CODE_AGENT_MAX_TURNS, reposPath: "data/repos", auth: e.CODE_AGENT_AUTH, model: e.CODE_AGENT_MODEL, study: { maxUsd: e.CODE_STUDY_MAX_USD, maxTurns: e.CODE_STUDY_MAX_TURNS, notesPath: "data/code" }, refresh: { mode: e.CODE_REFRESH, maxStudies: e.CODE_REFRESH_MAX }, tasks: { enabled: e.GITHUB === "on" && e.CODE_AGENT === "on" && e.CODE_TASKS === "on", maxUsd: e.CODE_TASK_MAX_USD, maxTurns: e.CODE_TASK_MAX_TURNS, path: "data/tasks" }, fix: { enabled: e.GITHUB === "on" && e.CODE_AGENT === "on" && e.CODE_FIX === "on", maxUsd: e.CODE_FIX_MAX_USD, maxTurns: e.CODE_FIX_MAX_TURNS, writeTokensPath: "data/github-write-tokens.json", fixesPath: "data/fixes" } },
     ollamaThink: e.OLLAMA_THINK === "on",
     userName: e.ATLAS_USER_NAME,

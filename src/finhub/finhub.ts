@@ -93,6 +93,22 @@ export const FINHUB_IMPORT_TOOL: LlmTool = {
   },
 };
 
+export const FINHUB_CONTRACTS_TOOL: LlmTool = {
+  name: "finhub_contracts",
+  description:
+    "Work out one entity's employment contracts for a year from ALL its payslips at once: each person's terms (base, IRS, Social Security, vouchers) and the month each changed, as versions. A month that differs once and then goes back (leave, a bonus, a pro-rata month) is not a change: it's noted as an exception. Run it before importing that entity's months. It takes a few minutes and shows him a card; nothing is sent until his OK, and then it lands in FinHub's \"From Atlas\" tab to review and commit.",
+  inputSchema: {
+    type: "object",
+    properties: {
+      entity: { type: "string", enum: [...ENTITIES], description: "Whose contracts" },
+      year: { type: "integer", description: "The year, e.g. 2026 (default this year)" },
+      again: { type: "boolean", description: "Work them out again after he committed or set aside the last ones" },
+    },
+    required: ["entity"],
+    additionalProperties: false,
+  },
+};
+
 // ── What the brain extracts, and its schemas ──────────────────────────────────
 
 const num = { type: "number" } as const;
@@ -253,7 +269,7 @@ export const statementPrompt = (entity: string, month: string): string =>
   `You extract a bank statement for FinHub, the bookkeeping of ${entity}, for ${month}. Return the statement period, the opening and closing balance, and EVERY movement line in order: its date, its description as written, the amount as a positive number, and the direction (credit: money in; debit: money out). ${RULES}`;
 
 export const payslipPrompt = (entity: string, month: string): string =>
-  `You extract Portuguese payslips (recibos de vencimento) for FinHub, the bookkeeping of ${entity}, for ${month}. Return one item per payslip in the document, and the employment contract each one implies (gross base salary, IRS withholding rate, Social Security rates, meal allowance and how it's paid, other benefits; 14 months when there are holiday and Christmas subsidies). Renato Lopes is Noisy Source's owner. ${RULES}`;
+  `You extract Portuguese payslips (recibos de vencimento) for FinHub, the bookkeeping of ${entity}, for ${month}. Return one item per payslip in the document, and the employment contract each one implies (gross base salary, IRS withholding rate, Social Security rates, meal allowance and how it's paid, other benefits; 14 months when there are holiday and Christmas subsidies). The contract is what's agreed, not what this month paid: when the month is reduced (leave, absence, a pro-rata start) still give the full base salary from the slip's base (vencimento base), and say in notes what was different this month. Renato Lopes is Noisy Source's owner. ${RULES}`;
 
 export const discoveryPrompt = (entity: string): string =>
   `You categorise bank statement lines for FinHub, the bookkeeping of ${entity} (Portugal). For each line give the vendor (short, clean: "Anthropic", "MEO", "BPI"), a category (e.g. Revenue & Inflows, Payroll, Taxes & Social Security, Software & Subscriptions, Telecom, Vehicle & Charging, Meals, Bank Fees, Loan Payment, Transfer, Operating Expense), its type (income, expense, transfer, debt_payment for a loan instalment, payroll for salaries) and the VAT it likely includes (23, 13, 6 or 0; 0 for salaries, taxes, transfers, loans and bank fees). Then list the recurring subscriptions you can see (the same vendor and about the same amount, monthly or yearly) and the loans or credit facilities (instalments to a bank). Only what the lines show. ${RULES}`;
@@ -630,7 +646,7 @@ export const MAX_CALLS = 40;
 const CHUNK = 120;
 const MAX_TEXT = 60_000;
 
-export type ImportPlan = { readonly id: string; readonly doc: ImportDoc; readonly label: string; readonly warnings: readonly string[] };
+export type ImportPlan = { readonly id: string; readonly doc: ImportDoc; readonly label: string; readonly warnings: readonly string[]; /** For the sent message; default "{entity} · {month}". */ readonly what?: string };
 
 export const buildImport = async (deps: {
   readonly drive: FinhubDrive;
@@ -742,6 +758,207 @@ export const buildImport = async (deps: {
   return ok({ id: deps.id, doc, label: `Send ${entity} · ${month} to FinHub for review: ${countsOf(doc)}${warnings.length > 0 ? ` (${warnings.length} warning${warnings.length === 1 ? "" : "s"})` : ""}`, warnings });
 };
 
+// ── Contracts from a year of payslips ─────────────────────────────────────────
+
+/** The terms a contract version carries (FinHub's ContractTerms, without its tax flags). */
+export type Terms = {
+  paySchedule: "12_months" | "14_months";
+  baseGrossMonthly: number;
+  irsRate: number;
+  employeeSsRate: number;
+  employerSsRate: number;
+  mealAllowanceDaily: number;
+  mealPaymentMethod: string;
+  childVoucherMonthly: number;
+  otherBenefitName: string;
+  otherBenefitMonthly: number;
+};
+
+/** One person's terms as one month's payslip showed them. */
+export type Seen = { readonly month: string; readonly name: string; readonly role: string; readonly employer: string; readonly owner: boolean; readonly terms: Terms; readonly notes: string };
+
+export type Version = { readonly effectiveFrom: string; readonly note: string; readonly terms: Terms };
+
+const TERM_KEYS = ["paySchedule", "baseGrossMonthly", "irsRate", "employeeSsRate", "employerSsRate", "mealAllowanceDaily", "mealPaymentMethod", "childVoucherMonthly", "otherBenefitName", "otherBenefitMonthly"] as const;
+
+export const termsOfContract = (c: O): Terms => {
+  const t = Object.fromEntries(TERM_KEYS.map((k) => [k, c[k]])) as unknown as Terms;
+  return { ...t, paySchedule: t.paySchedule === "12_months" ? "12_months" : "14_months", mealPaymentMethod: ["card", "cash", "none"].includes(String(t.mealPaymentMethod)) ? t.mealPaymentMethod : "none" };
+};
+
+/** Same terms, give or take rounding (an IRS rate of 16.1 vs 16.10). */
+const signature = (t: Terms): string =>
+  [t.paySchedule, t.baseGrossMonthly.toFixed(2), t.irsRate.toFixed(1), t.employeeSsRate.toFixed(2), t.employerSsRate.toFixed(2), t.mealAllowanceDaily.toFixed(2), t.mealPaymentMethod, t.childVoucherMonthly.toFixed(2), t.otherBenefitMonthly.toFixed(2)].join("|");
+
+const MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const monthName = (m: string): string => `${MONTH_NAMES[Number(m.slice(5, 7)) - 1] ?? m} ${m.slice(0, 4)}`;
+
+/** A person's name as a key: lower case, no accents, single spaces. */
+export const personKey = (name: string): string =>
+  name.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/\s+/g, " ").trim();
+
+/**
+ * One person's months as contract versions. Months with the same terms in a row are one
+ * stretch; a stretch of one month between (or before) longer ones is an exception, not a
+ * change: it's folded into its neighbour and named, so a month on leave doesn't become a
+ * contract. A change seen only in the last month is kept as a version, flagged to check.
+ */
+export const versionsFrom = (seen: readonly Seen[]): { versions: Version[]; exceptions: string[]; unsure: string[] } => {
+  const months = [...seen].sort((a, b) => a.month.localeCompare(b.month));
+  type Run = { sig: string; terms: Terms; months: string[] };
+  const runs: Run[] = [];
+  for (const s of months) {
+    const sig = signature(s.terms);
+    const last = runs[runs.length - 1];
+    if (last && last.sig === sig) last.months.push(s.month);
+    else runs.push({ sig, terms: s.terms, months: [s.month] });
+  }
+  const exceptions: string[] = [];
+  const unsure: string[] = [];
+  const steady = runs.filter((r) => r.months.length >= 2);
+  const kept: Run[] = [];
+  runs.forEach((r, i) => {
+    const isLast = i === runs.length - 1;
+    // Back to the terms before an exception: the same stretch going on.
+    const before = kept[kept.length - 1];
+    if (before && before.sig === r.sig) {
+      before.months.push(...r.months);
+      return;
+    }
+    // A single month is an exception when there's a steadier stretch to fold it into,
+    // unless it's the last month seen (it may be a change that has only just started).
+    if (r.months.length === 1 && steady.length > 0 && !(isLast && kept.length > 0)) {
+      exceptions.push(r.months[0] ?? "");
+      const prev = kept[kept.length - 1];
+      if (prev) prev.months.push(...r.months);
+      else (runs[i + 1] ?? r).months.unshift(...r.months);
+      return;
+    }
+    if (r.months.length === 1 && isLast && kept.length > 0) unsure.push(r.months[0] ?? "");
+    const prev = kept[kept.length - 1];
+    if (prev && prev.sig === r.sig) prev.months.push(...r.months);
+    else kept.push({ ...r, months: [...r.months] });
+  });
+  const versions = kept.map((r, i) => {
+    const from = [...r.months].sort()[0] ?? "";
+    const note = i === 0 ? `From the payslips, ${monthName(from)} on` : unsure.includes(from) ? `Changed in ${monthName(from)} (only that month seen: check)` : `Changed in ${monthName(from)}`;
+    return { effectiveFrom: from, note, terms: r.terms };
+  });
+  return { versions, exceptions: exceptions.sort(), unsure };
+};
+
+/** Each person's contract from their months: the latest terms on top, the versions beside them. */
+export const contractsFromSeen = (seen: readonly Seen[]): O[] => {
+  const byPerson = new Map<string, Seen[]>();
+  for (const s of seen) {
+    const k = personKey(s.name);
+    if (!k) continue;
+    byPerson.set(k, [...(byPerson.get(k) ?? []), s]);
+  }
+  return [...byPerson.values()].slice(0, 20).map((list) => {
+    const latest = [...list].sort((a, b) => a.month.localeCompare(b.month))[list.length - 1] as Seen;
+    const { versions, exceptions, unsure } = versionsFrom(list);
+    const top = versions[versions.length - 1]?.terms ?? latest.terms;
+    const notes = [
+      `${list.length} payslip${list.length === 1 ? "" : "s"} read.`,
+      exceptions.length > 0 ? `Different only in ${exceptions.map(monthName).join(", ")} (leave, a bonus or a pro-rata month?): kept on those payslips, not in the contract.` : "",
+      unsure.length > 0 ? `${unsure.map(monthName).join(", ")} differs and is the last month read: check it's a real change.` : "",
+    ].filter(Boolean).join(" ");
+    return {
+      workerName: latest.name,
+      roleTitle: latest.role,
+      employerName: latest.employer,
+      isOwnerHint: list.some((s) => s.owner),
+      ...top,
+      notes: notes.slice(0, 1000),
+      versions: versions.slice(-36),
+    };
+  });
+};
+
+export const MAX_YEAR_PAYSLIPS = 36;
+
+export const buildYearContracts = async (deps: {
+  readonly drive: FinhubDrive;
+  readonly llm: LlmCall;
+  readonly entity: string;
+  readonly year: number;
+  readonly id: string;
+  readonly signal?: AbortSignal;
+  readonly log?: Logger;
+}): Promise<Result<ImportPlan, string>> => {
+  const { drive, llm, entity, year, signal } = deps;
+  const lib = await libraryFiles(drive, signal);
+  if (!lib.ok) return lib;
+  if (!lib.value) return err("the year pass needs the Atlas folder (payslips by entity), not month folders");
+  const warnings: string[] = [];
+  let files = lib.value
+    .filter((f) => f.kind === "payslip" && f.entity === entity && f.month?.startsWith(`${year}-`))
+    .sort((a, b) => (a.month ?? "").localeCompare(b.month ?? ""));
+  if (files.length === 0) return err(`no ${year} payslips for ${entity} in the Atlas folder`);
+  if (files.length > MAX_YEAR_PAYSLIPS) {
+    warnings.push(`only the first ${MAX_YEAR_PAYSLIPS} of ${files.length} payslips`);
+    files = files.slice(0, MAX_YEAR_PAYSLIPS);
+  }
+  const seen: Seen[] = [];
+  const sources: Source[] = [];
+  for (const f of files) {
+    const month = f.month ?? "";
+    const read = await drive.client.read({ account: drive.account, id: f.file.id }, signal);
+    if (!read.ok) {
+      warnings.push(`${f.file.name}: couldn't read it (${read.error.message})`);
+      continue;
+    }
+    if (read.value.text.trim().length < 40) {
+      warnings.push(`${f.file.name}: no text in it (a scan?), left out`);
+      continue;
+    }
+    const got = await llm({ system: payslipPrompt(entity, month), messages: [{ role: "user", text: `<document name="${f.file.name.replace(/"/g, "'")}">\n${read.value.text.slice(0, MAX_TEXT)}\n</document>` }], outputSchema: PAYSLIP_SCHEMA, maxTokens: 6_000 });
+    if (!got.ok || got.value.kind !== "json") {
+      const why = got.ok ? "not in the expected shape" : `${got.error.kind}: ${got.error.message.slice(0, 120)}`;
+      deps.log?.warn("finhub year pass: payslip not extracted", { month, why });
+      warnings.push(`${f.file.name}: not extracted (${why})`);
+      continue;
+    }
+    sources.push({ kind: "drive", name: f.file.name.slice(0, 200), id: f.file.id, link: `https://drive.google.com/file/d/${encodeURIComponent(f.file.id)}/view` });
+    const p = payslipsOf(got.value.value, f.file.name);
+    for (const c of p.contracts) {
+      const name = str(c.workerName, 120);
+      if (!name) continue;
+      // Each payslip is one month of each person on it: the same person twice in a file is a second slip (P2), skipped.
+      if (seen.some((x) => x.month === month && personKey(x.name) === personKey(name))) continue;
+      seen.push({ month, name, role: str(c.roleTitle, 120), employer: str(c.employerName, 120), owner: c.isOwnerHint === true, terms: termsOfContract(c), notes: str(c.notes, 300) });
+    }
+  }
+  if (seen.length === 0) return err(`nothing could be extracted from ${entity}'s ${year} payslips${warnings.length > 0 ? `: ${warnings.join("; ")}` : ""}`);
+  const contracts = contractsFromSeen(seen);
+  const versionsCount = contracts.reduce((n, c) => n + (Array.isArray(c.versions) ? c.versions.length : 0), 0);
+  const first = [...seen].sort((a, b) => a.month.localeCompare(b.month))[0]?.month ?? `${year}-01`;
+  const doc: ImportDoc = {
+    entityHint: entity,
+    month: first,
+    summary: [
+      `Contracts for ${year}, worked out by Atlas from ${sources.length} payslip${sources.length === 1 ? "" : "s"}: ${contracts.length} contract${contracts.length === 1 ? "" : "s"}, ${versionsCount} version${versionsCount === 1 ? "" : "s"}.`,
+      ...contracts.map((c) => `${String(c.workerName)}: ${String(c.notes)}`),
+      ...warnings.map((w) => `⚠ ${w}`),
+    ].join("\n").slice(0, 4000),
+    sources,
+    statements: [],
+    payslips: [],
+    contracts,
+    subscriptions: [],
+    facilities: [],
+  };
+  deps.log?.info("finhub year contracts built", { year, payslips: sources.length, contracts: contracts.length });
+  return ok({
+    id: deps.id,
+    doc,
+    label: `Send ${entity}'s ${year} contracts to FinHub for review: ${contracts.map((c) => `${String(c.workerName).split(" ")[0]} (${Array.isArray(c.versions) ? c.versions.length : 0} version${Array.isArray(c.versions) && c.versions.length === 1 ? "" : "s"})`).join(", ")}${warnings.length > 0 ? ` (${warnings.length} warning${warnings.length === 1 ? "" : "s"})` : ""}`,
+    warnings,
+    what: `${entity}'s ${year} contracts`,
+  });
+};
+
 // ── Writing the import, after his OK ──────────────────────────────────────────
 
 /** FinHub's project as Atlas (domotics.ts's client, with FinHub's own user). */
@@ -754,6 +971,18 @@ export type FinhubDb = {
 export type FinhubImports = {
   readonly propose: (input: unknown, now: Date, signal?: AbortSignal) => Promise<Result<{ readonly id: string; readonly label: string; readonly warnings: readonly string[] }, string>>;
   readonly decide: (id: string, decision: "yes" | "no") => Promise<{ readonly ok: boolean; readonly text: string; readonly tool?: string }>;
+  /** The year pass: one entity's contracts from all its payslips of a year. */
+  readonly proposeContracts: (input: unknown, now: Date, signal?: AbortSignal) => Promise<Result<{ readonly id: string; readonly label: string; readonly warnings: readonly string[] }, string>>;
+};
+
+export const checkContracts = (input: unknown, today: Date): Result<{ entity: string; year: number; again: boolean }, string> => {
+  const i = obj(input);
+  const entity = (ENTITIES as readonly string[]).includes(String(i.entity)) ? String(i.entity) : "";
+  if (!entity) return err(`entity: one of ${ENTITIES.join(", ")}`);
+  const thisYear = today.getUTCFullYear();
+  const year = i.year === undefined ? thisYear : typeof i.year === "number" && Number.isInteger(i.year) ? i.year : NaN;
+  if (!(year >= 2000 && year <= thisYear)) return err(`year: a whole year up to ${thisYear}`);
+  return ok({ entity, year, again: i.again === true });
 };
 
 export const checkImport = (input: unknown): Result<{ entity: string; month: string; again: boolean; files?: { id: string; kind: "payslip" | "statement" }[] }, string> => {
@@ -810,6 +1039,25 @@ export const makeFinhubImports = (deps: {
       pending.set(card, { plan: plan.value, until: now() + 60 * 60_000 });
       return ok({ id: card, label: plan.value.label, warnings: plan.value.warnings });
     },
+    proposeContracts: async (input, today, signal) => {
+      const c = checkContracts(input, today);
+      if (!c.ok) return c;
+      while (built.length > 0 && (built[0] ?? 0) <= now() - 86_400_000) built.shift();
+      if (built.length >= cap) return err(`I've built ${cap} imports today, my limit; try tomorrow`);
+      const id = importId(c.value.entity, `${c.value.year}-contracts`, c.value.again ? now() : undefined);
+      const existing = await deps.db.get([...IMPORTS_PATH, id], signal);
+      if (!existing.ok) return err(`FinHub couldn't be read: ${existing.error.message}`);
+      const status = existing.value?.fields.status;
+      if (status === "applied" || status === "dismissed")
+        return err(`${c.value.entity}'s ${c.value.year} contracts were already ${status === "applied" ? "committed in FinHub" : "set aside"}; work them out again only if he asks (again: true)`);
+      built.push(now());
+      const plan = await buildYearContracts({ drive: deps.drive, llm: deps.llm, entity: c.value.entity, year: c.value.year, id, ...(signal ? { signal } : {}), ...(deps.log ? { log: deps.log } : {}) });
+      if (!plan.ok) return plan;
+      for (const [k, v] of pending) if (v.until <= now()) pending.delete(k);
+      const card = newId();
+      pending.set(card, { plan: plan.value, until: now() + 60 * 60_000 });
+      return ok({ id: card, label: plan.value.label, warnings: plan.value.warnings });
+    },
     decide: async (id, decision) => {
       const got = pending.get(id);
       pending.delete(id);
@@ -822,7 +1070,7 @@ export const makeFinhubImports = (deps: {
         return { ok: false, text: `Nothing was sent: ${written.error.message}.` };
       }
       deps.log?.info("finhub import sent", { month: plan.doc.month });
-      return { ok: true, text: `Sent: ${plan.doc.entityHint} · ${plan.doc.month} is in FinHub's "From Atlas" tab (${countsOf(plan.doc)}). Review it in the workbench and commit it there.`, tool: FINHUB_IMPORT_TOOL.name };
+      return { ok: true, text: `Sent: ${plan.what ?? `${plan.doc.entityHint} · ${plan.doc.month}`} ${plan.what ? "are" : "is"} in FinHub's "From Atlas" tab (${countsOf(plan.doc)}). Review ${plan.what ? "them" : "it"} in the workbench and commit there.`, tool: plan.what ? FINHUB_CONTRACTS_TOOL.name : FINHUB_IMPORT_TOOL.name };
     },
   };
 };
