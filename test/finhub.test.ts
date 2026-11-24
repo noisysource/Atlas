@@ -403,10 +403,8 @@ describe("contract versions from a year of payslips", () => {
     const list = [...months(1, 6, terms({ paySchedule: "14_months" })), ...months(7, 7, terms({ paySchedule: "12_months" })), ...months(8, 10, terms({ paySchedule: "14_months" }))];
     expect(versionsFrom(list).versions).toHaveLength(1);
     expect(versionsFrom(list).exceptions).toEqual([]);
-    const twelve = months(1, 10, terms({ paySchedule: "12_months" }));
-    expect(contractsFromSeen(twelve)[0]).toMatchObject({ paySchedule: "12_months" });
-    // On a second run (a subsidy slip): 14 payments, whatever the guesses.
-    expect(contractsFromSeen(twelve, new Set(["renato lopes"]))[0]).toMatchObject({ paySchedule: "14_months" });
+    // 14 payments, whatever the guesses (Portugal's subsidies; a payslip doesn't say).
+    expect(contractsFromSeen(months(1, 10, terms({ paySchedule: "12_months" })))[0]).toMatchObject({ paySchedule: "14_months" });
   });
 
   it("checks the year asked for", () => {
