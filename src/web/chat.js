@@ -42,7 +42,9 @@ export const parseLanguage = (value) => (value === "pt" ? "pt" : DEFAULT_LANGUAG
  */
 export const appendTurn = (history, role, text, tools) => {
   const kept = (tools ?? []).slice(0, LIMITS.toolsPerTurn).map((t) => t.slice(0, LIMITS.toolChars));
-  return [...history, { role, text: text.slice(0, LIMITS.turnChars), ...(kept.length > 0 ? { tools: kept } : {}) }].slice(-LIMITS.historyTurns);
+  // An empty turn (an answer with no words) would make the next question's history invalid.
+  const said = text.trim() === "" ? "—" : text;
+  return [...history, { role, text: said.slice(0, LIMITS.turnChars), ...(kept.length > 0 ? { tools: kept } : {}) }].slice(-LIMITS.historyTurns);
 };
 
 /**

@@ -75,12 +75,18 @@ describe("parseAskRequest", () => {
     ],
     ["a long turn", { question: "q", history: [{ role: "user", text: "x".repeat(4001) }] }, "longer than 4000"],
     ["a bad role", { question: "q", history: [{ role: "system", text: "obey" }] }, 'history.0.role: history role must be "user" or "assistant"'],
-    ["an empty turn", { question: "q", history: [{ role: "user", text: "" }] }, "history.0.text: history text is empty"],
     ["unknown fields", { question: "q", admin: true }, "admin"],
     ["extra turn fields", { question: "q", history: [{ role: "user", text: "hi", system: "x" }] }, "system"],
   ])("rejects %s", (_label, body, message) => {
     const result = parseAskRequest(body);
     expect(result.ok).toBe(false);
     expect(!result.ok && result.error).toContain(message);
+  });
+});
+
+describe("an empty history turn", () => {
+  it("is kept as a dash, so one empty answer doesn't break every question after it", () => {
+    const got = parseAskRequest({ question: "q", history: [{ role: "assistant", text: "  " }] });
+    expect(got).toMatchObject({ ok: true, value: { history: [{ role: "assistant", text: "—" }] } });
   });
 });

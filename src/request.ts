@@ -30,10 +30,15 @@ const AskRequestSchema = z
         z
           .object({
             role: z.enum(["user", "assistant"], { error: 'history role must be "user" or "assistant"' }),
-            text: z
-              .string()
-              .min(1, { error: "history text is empty" })
-              .max(LIMITS.turnChars, { error: `a history turn is longer than ${LIMITS.turnChars} characters` }),
+            // An empty turn (an answer that came back with no words, saved before this was caught)
+            // is kept as a dash, so one bad answer doesn't break every question after it.
+            text: z.preprocess(
+              (v) => (typeof v === "string" && v.trim() === "" ? "—" : v),
+              z
+                .string()
+                .min(1, { error: "history text is empty" })
+                .max(LIMITS.turnChars, { error: `a history turn is longer than ${LIMITS.turnChars} characters` }),
+            ),
             // The tool calls that really ran for that answer (#104), as the page's path line shows them.
             tools: z
               .array(z.string().min(1).max(LIMITS.toolChars, { error: `a tool entry is longer than ${LIMITS.toolChars} characters` }), { error: "tools must be a list" })

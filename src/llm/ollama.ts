@@ -64,11 +64,21 @@ export const ollamaBody = (model: string, request: LlmRequest, think?: boolean) 
   ...(request.tools && request.tools.length > 0 ? { tools: request.tools.map((t) => ({ type: "function", function: { name: t.name, description: t.description, parameters: t.inputSchema } })) } : {}),
   // Structured output (#100): Ollama keeps the reply to this JSON schema.
   ...(request.outputSchema ? { format: request.outputSchema } : {}),
-  // A document to extract is long: Ollama's default context (a few thousand tokens) would cut it
-  // without saying so. Structured requests get a context sized to them (chat keeps the default,
-  // since changing it reloads the model).
-  options: { num_predict: request.maxTokens, ...(request.outputSchema ? { num_ctx: contextFor(request) } : {}) },
+  // Ollama's default context (a few thousand tokens) cuts a long request without saying so: a
+  // document to extract, or a chat with every tool described (then the reply came back empty).
+  // Structured requests get a context sized to them; chat one of two fixed sizes, so the model
+  // isn't reloaded between turns.
+  options: { num_predict: request.maxTokens, num_ctx: request.outputSchema ? contextFor(request) : chatContextFor(request) },
 });
+
+/** A chat's context: 16k, or 32k when the prompt, tools and answer need more (about 3 characters a token). */
+export const OLLAMA_CHAT_CTX = 16_384;
+export const chatContextFor = (request: LlmRequest): number => {
+  const tools = request.tools ? JSON.stringify(request.tools).length : 0;
+  const chars = (request.system?.length ?? 0) + (request.systemSuffix?.length ?? 0) + tools + request.messages.reduce((n, m) => n + ("text" in m && typeof m.text === "string" ? m.text.length : 0) + ("toolResults" in m ? m.toolResults.reduce((k, r) => k + r.content.length, 0) : 0), 0);
+  const need = Math.ceil(chars / 3) + (request.maxTokens ?? 2000) + 512;
+  return need <= OLLAMA_CHAT_CTX ? OLLAMA_CHAT_CTX : 2 * OLLAMA_CHAT_CTX;
+};
 
 /** A context for the request: its text (about 3 characters a token) plus the answer, as a power of two, 8k to 32k. */
 export const contextFor = (request: LlmRequest): number => {
@@ -114,6 +124,8 @@ export const makeOllamaLlm = (deps: {
 
   const stream = (request: LlmRequest, signal?: AbortSignal): LlmStreamed => {
     let full = "";
+    let thought = 0;
+    let doneReason = "";
     const calls: LlmToolCall[] = [];
     let settle: (r: Result<LlmResponse, LlmError>) => void = () => {};
     const result = new Promise<Result<LlmResponse, LlmError>>((resolve) => (settle = resolve));
@@ -171,7 +183,7 @@ export const makeOllamaLlm = (deps: {
             settle(err({ kind: "server", message: "Ollama reported an error", retryable: false }));
             return;
           }
-          const message = line.message as { content?: unknown; tool_calls?: unknown } | undefined;
+          const message = line.message as { content?: unknown; tool_calls?: unknown; thinking?: unknown } | undefined;
           if (Array.isArray(message?.tool_calls))
             for (const c of message.tool_calls as { function?: { name?: unknown; arguments?: unknown } }[]) {
               const name = c.function?.name;
@@ -192,7 +204,9 @@ export const makeOllamaLlm = (deps: {
             full += delta;
             yield delta;
           }
+          if (typeof message?.thinking === "string") thought += message.thinking.length;
           if (line.done === true) {
+            if (typeof line.done_reason === "string") doneReason = line.done_reason;
             inputTokens = typeof line.prompt_eval_count === "number" ? line.prompt_eval_count : 0;
             outputTokens = typeof line.eval_count === "number" ? line.eval_count : 0;
           }
@@ -211,6 +225,13 @@ export const makeOllamaLlm = (deps: {
           return;
         }
         settle(ok({ kind: "json", value, servedBy: `ollama:${deps.model}`, usage, payload: { provider: "ollama", data: null } }));
+        return;
+      }
+      // No words and no tool calls is no answer: say so, rather than an empty reply that then
+      // breaks the conversation's history.
+      if (calls.length === 0 && full.trim() === "") {
+        const why = doneReason === "length" ? (thought > 0 ? "it spent its whole answer thinking" : "it ran out of room") : thought > 0 ? "it only thought" : "it said nothing";
+        settle(err({ kind: "invalid_output", message: `Ollama gave an empty answer (${why}, done: ${doneReason || "?"})`, retryable: false, userMessage: `The local brain gave an empty answer (${why}). Ask again, or switch to Claude.` }));
         return;
       }
       if (calls.length > 0) {
@@ -268,7 +289,8 @@ export const warmOllama = async (deps: { readonly model: string; readonly baseUr
     const res = await (deps.fetch ?? fetch)(new URL("/api/generate", deps.baseUrl), {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ model: deps.model, keep_alive: OLLAMA_KEEP_ALIVE }),
+      // Loaded with the chat's context, so the first turn doesn't reload it.
+      body: JSON.stringify({ model: deps.model, keep_alive: OLLAMA_KEEP_ALIVE, options: { num_ctx: OLLAMA_CHAT_CTX } }),
       signal: AbortSignal.timeout(120_000),
     });
     await res.text();
