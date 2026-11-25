@@ -1115,6 +1115,11 @@ Confirmed (2026-11-12):
   seen only in the last month is kept and flagged). Same card and OK; one
   document `{entity}-{year}-contracts`, whose contract drafts carry `versions`
   (FinHub merges them into the worker's contract, the import's months winning).
+  `finhub_setup` (2026-11-25) comes first on an empty book: each entity's first
+  statement of the year gives its account (product, bank, 1 January balance) and the
+  loans it shows; the companies' NIPCs come from BOOK_ENTITIES. One proposal
+  `setup-{year}` with a `setup` block; FinHub's "Create these" makes them after his
+  OK. Never account numbers (stripped from names too): he adds the IBANs.
   FINHUB_MODEL picks who reads the documents (default the answer model;
   `ollama:<model>` keeps them on this Mac, with a context sized to the document
   and thinking off).
