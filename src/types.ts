@@ -24,6 +24,7 @@ import type { Gaps } from "./gaps/gaps.js";
 import type { Reminders } from "./reminders/reminders.js";
 import type { TalkStore } from "./talk.js";
 import type { AnswerEvent, CostDetail, CostSummary } from "./costs.js";
+import type { Panel } from "./home-panels.js";
 import type { LiveSessions } from "./live/routes.js";
 import type { CalendarChanges } from "./calendar/change.js";
 import type { InboxTidy } from "./gmail/tidy.js";
@@ -415,6 +416,8 @@ export type Deps = {
   readonly talk?: TalkStore;
   /** #250: Gemini Live sessions, one per page, when ✦ Google may talk by voice. */
   readonly live?: LiveSessions;
+  /** The House Brain's domain panels (House, FinHub, Dev, KidClub, Comms): GET /home/panels. */
+  readonly homePanels?: () => Promise<readonly Panel[]>;
   /** #247: what Atlas costs, per service: GET /costs. */
   readonly costs?: { readonly summary: () => Promise<CostSummary>; /** #299 */ readonly detail?: () => Promise<CostDetail>; readonly answer?: (a: AnswerEvent) => void };
   /** #138: his answer to opening an issue for a gap (POST /gaps/issue). Only "yes" opens it. */

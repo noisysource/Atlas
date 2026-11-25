@@ -483,6 +483,13 @@ export const makeServer = (
     });
   }
 
+  // The House Brain's domain panels: read-only, kept a minute.
+  const homePanels = deps.homePanels;
+  if (homePanels)
+    app.get("/home/panels", async (c) => {
+      c.header("Cache-Control", "no-store");
+      return c.json({ panels: await homePanels() });
+    });
   // #247: what Atlas costs, per service, for the costs panel.
   const costs = deps.costs;
   if (costs) {

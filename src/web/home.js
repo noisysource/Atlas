@@ -13,7 +13,81 @@ const el = (tag, className, text) => {
 };
 
 /** Lines that happen all the time and say nothing he'd want on the dashboard. */
-const ROUTINE = new Set(["request", "speak", "brain set", "memories listed", "settings", "transcribed", "tts", "stt", "warm", "notices", "reach", "costs"]);
+/** @param {unknown} v */
+const str = (v) => (typeof v === "string" ? v : "");
+/** @param {unknown} v */
+const list = (v) => (Array.isArray(v) ? v.filter((x) => typeof x === "string") : []);
+/** A number or year then a space, or nothing. @param {unknown} v */
+const lead = (v) => (typeof v === "number" || (typeof v === "string" && v !== "") ? `${v} ` : "");
+/** @param {string} t */
+const title = (t) => t.replace(/_/g, " ");
+
+/**
+ * What Atlas did, from one log line, in a few words; undefined for start-up, reads
+ * and the other housekeeping a person doesn't need to see.
+ * @param {{ message: string, severity?: string, [k: string]: unknown }} e
+ * @returns {string | undefined}
+ */
+export const activityLine = (e) => {
+  const m = e.message;
+  switch (m) {
+    case "ask": {
+      const outcome = str(e.outcome);
+      if (outcome === "answer") return `Answered a question${str(e.brain) ? ` (${str(e.brain)})` : ""}`;
+      if (outcome === "handoff") return "Handed a question to Kiro";
+      if (outcome === "clarify") return "Asked you to say more";
+      if (outcome === "error") return "Couldn't answer a question";
+      return undefined;
+    }
+    case "tools used": {
+      const used = list(e.used);
+      return used.length > 0 ? `Used ${used.join(", ")}` : undefined;
+    }
+    case "finhub import sent":
+      return `Sent ${str(e.month) || "a month"} to FinHub for review`;
+    case "finhub setup built":
+      return `Proposed FinHub's ${lead(e.year)}setup`;
+    case "finhub year contracts built":
+      return `Proposed ${lead(e.year)}contracts for FinHub`;
+    case "house changed":
+      return `Changed the house (${title(str(e.tool)) || "a device"})`;
+    case "blinds moved":
+      return `Moved ${lead(e.count)}blind${e.count === 1 ? "" : "s"}`;
+    case "lights changed":
+      return `Turned ${e.on === false ? "off" : "on"} ${lead(e.count)}light${e.count === 1 ? "" : "s"}`;
+    case "kanban changed":
+      return `Updated the kanban (${title(str(e.tool)) || "a card"})`;
+    case "calendar create": {
+      const outcome = str(e.outcome);
+      if (outcome === "declined") return "You declined a calendar event";
+      if (outcome === "undone") return "Undid a calendar event";
+      return "Added a calendar event";
+    }
+    case "gmail send":
+      return str(e.outcome) === "kept as draft" ? "Kept an email as a draft" : "Sent an email";
+    case "gmail draft delete":
+      return str(e.outcome) === "deleted" ? "Deleted a draft" : undefined;
+    case "task started":
+      return `Started a code task${str(e.repo) ? ` in ${str(e.repo)}` : ""}`;
+    case "task pull request opened":
+      return "Opened a pull request";
+    case "task pushed":
+      return "Pushed a code change";
+    case "task merged":
+      return "Merged a pull request";
+    case "skill approved":
+      return "You approved a skill";
+    case "skill proposed":
+      return "Proposed a new skill";
+    case "whatsapp answered":
+      return `Answered ${str(e.who) || "someone"} on WhatsApp`;
+    case "proactive notice":
+      return `Told you about ${title(str(e.kind)) || "something"}`;
+    default:
+      // A failure is worth seeing; anything else isn't news.
+      return e.severity === "ERROR" || (e.severity === "WARNING" && / failed$/.test(m)) ? m[0]?.toUpperCase() + m.slice(1) : undefined;
+  }
+};
 
 /** @param {number} n */
 const usd = (n) => `$${(Math.round(n * 100) / 100).toFixed(2)}`;
@@ -125,7 +199,9 @@ export const makeHomeView = (host, deps = {}) => {
   left.append(needs.card, activity.card);
   const grid = el("div", "hb-grid");
   grid.append(left, centre, tools.card);
-  root.append(header, grid);
+  // The domains, under the core: House, FinHub, Dev, KidClub, Today.
+  const panels = el("div", "hb-panels");
+  root.append(header, grid, panels);
   host.replaceChildren(root);
 
   const sourcesNum = el("b", "", "–");
@@ -133,7 +209,25 @@ export const makeHomeView = (host, deps = {}) => {
   const monthNum = el("b", "", "–");
   stats.append(stat("sources connected", sourcesNum), stat("today", todayNum), stat("this month", monthNum));
 
+  /** The domain panels; slower than the rest, so they fill in on their own. */
+  const loadPanels = async () => {
+    const got = await get("/home/panels", { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : undefined))
+      .catch(() => undefined);
+    /** @type {{ id: string, title: string, note: string, lines: string[], off?: string }[]} */
+    const shown = Array.isArray(got?.panels) ? got.panels : [];
+    panels.replaceChildren(
+      ...shown.map((p) => {
+        const c = card(p.title, p.note, `domain hb-domain-${p.id}`);
+        c.card.dataset.panel = p.id;
+        c.body.append(...(p.off ? [el("p", "hb-note", `Nothing to show: ${p.off}.`)] : p.lines.map((line) => el("div", "hb-row hb-line", line))));
+        return c.card;
+      }),
+    );
+  };
+
   const load = async () => {
+    void loadPanels();
     kicker.textContent = `NOISY SOURCE · ATLAS · ${new Date().toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" }).toUpperCase()}`;
     const [reach, costs, logs] = await Promise.all(
       ["/reach", "/costs", "/logs?after=0"].map((u) =>
@@ -145,7 +239,8 @@ export const makeHomeView = (host, deps = {}) => {
     /** @type {{ id: string, status: string, about: string }[]} */
     const nodes = Array.isArray(reach?.nodes) ? reach.nodes : [];
     const built = nodes.filter((n) => n.status !== "soon");
-    sourcesNum.textContent = nodes.length > 0 ? `${built.filter((n) => n.status === "on").length} / ${built.length}` : "–";
+    // Counted as the system panel counts them: on, of every node.
+    sourcesNum.textContent = nodes.length > 0 ? `${nodes.filter((n) => n.status === "on").length} / ${nodes.length}` : "–";
     tools.setNote(nodes.length > 0 ? `${built.filter((n) => n.status === "on").length} on` : "");
     tools.body.replaceChildren(
       ...(built.length > 0
@@ -160,20 +255,24 @@ export const makeHomeView = (host, deps = {}) => {
     const rows = Array.isArray(costs?.rows) ? costs.rows : [];
     todayNum.textContent = rows.length > 0 ? usd(rows.reduce((n, r) => n + (Number(r.usd?.today) || 0), 0)) : "–";
     monthNum.textContent = typeof costs?.monthTotalUsd === "number" ? usd(costs.monthTotalUsd) : "–";
-    /** @type {{ time: string, message: string, path?: string, severity: string }[]} */
+    /** @type {{ time: string, message: string, path?: string, severity: string, [k: string]: unknown }[]} */
     const entries = Array.isArray(logs?.entries) ? logs.entries : [];
     const today = new Date().toDateString();
     const recent = entries
-      .filter((e) => !e.path && !ROUTINE.has(e.message) && new Date(e.time).toDateString() === today)
+      .filter((e) => !e.path && new Date(e.time).toDateString() === today)
+      .flatMap((e) => {
+        const text = activityLine(e);
+        return text ? [{ ...e, text }] : [];
+      })
       // The same thing several times in a row is one line.
-      .filter((e, i, all) => all[i + 1]?.message !== e.message)
+      .filter((e, i, all) => all[i + 1]?.text !== e.text)
       .slice(-8)
       .reverse();
     activity.body.replaceChildren(
       ...(recent.length > 0
         ? recent.map((e) => {
             const row = el("div", `hb-row hb-event${e.severity === "ERROR" ? " hb-error" : ""}`);
-            row.append(el("span", "hb-time", new Date(e.time).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })), el("span", "", e.message));
+            row.append(el("span", "hb-time", new Date(e.time).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })), el("span", "", e.text));
             return row;
           })
         : [el("p", "hb-note", "Nothing yet today.")]),

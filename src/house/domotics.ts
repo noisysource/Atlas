@@ -36,6 +36,8 @@ export type Domotics = {
   readonly add: (collection: string, fields: Record<string, unknown>) => Promise<Result<string, DomoticsError>>;
   /** Writes a whole document at a path (creating or replacing it), the named fields set to the server's time. */
   readonly put: (path: readonly string[], fields: Record<string, unknown>, serverTimes: readonly string[]) => Promise<Result<true, DomoticsError>>;
+  /** Up to `limit` documents of a subcollection under a document (FinHub's book), in no set order. */
+  readonly list?: (parent: readonly string[], collection: string, limit: number, signal?: AbortSignal) => Promise<Result<DbDoc[], DomoticsError>>;
 };
 
 /** A plain value as Firestore's REST value. Integers stay integers; dates are timestamps. */
@@ -144,15 +146,18 @@ export const makeDomotics = (deps: { readonly user: () => Promise<FirebaseUser |
 
   const base = (u: FirebaseUser) => `https://firestore.googleapis.com/v1/projects/${u.project}/databases/(default)/documents`;
 
-  const runQuery = async (collection: string, structured: Record<string, unknown>, what: string, signal?: AbortSignal): Promise<Result<DbDoc[], DomoticsError>> => {
+  const runQuery = async (collection: string, structured: Record<string, unknown>, what: string, signal?: AbortSignal, parent: readonly string[] = []): Promise<Result<DbDoc[], DomoticsError>> => {
     if (!SEGMENT.test(collection)) return err({ code: "failed", message: "not a collection name" });
-    const got = await request((u) => `${base(u)}:runQuery`, { method: "POST", body: { structuredQuery: { from: [{ collectionId: collection }], ...structured } } }, what, signal);
+    if (parent.length > 0 && (parent.length % 2 !== 0 || !safePath(parent))) return err({ code: "failed", message: "not a document path" });
+    const at = parent.length > 0 ? `/${parent.join("/")}` : "";
+    const got = await request((u) => `${base(u)}${at}:runQuery`, { method: "POST", body: { structuredQuery: { from: [{ collectionId: collection }], ...structured } } }, what, signal);
     if (!got.ok) return got;
     const rows = Array.isArray(got.value) ? got.value : [];
     return ok(rows.flatMap((r) => (typeof r === "object" && r !== null && "document" in r ? [docOf((r as { document: unknown }).document)].filter((d): d is DbDoc => d !== undefined) : [])));
   };
 
   return {
+    list: (parent, collection, limit, signal) => runQuery(collection, { limit: Math.max(1, Math.min(200, limit)) }, `read ${collection}`, signal, parent),
     call: async (name, data, signal) => {
       const got = await request((u) => `https://${u.region}-${u.project}.cloudfunctions.net/${name}`, { method: "POST", body: { data } }, `call ${name}`, signal);
       return got.ok ? ok((got.value as { result?: unknown }).result) : got;
