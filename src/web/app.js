@@ -506,6 +506,14 @@ const refreshPending = () => {
     if (node && node !== "skills") counts[node] = (counts[node] ?? 0) + 1;
   }
   brainView.setPending(counts);
+  // The House Brain lists them all; its buttons answer through the card in the chat.
+  homeView.setNeeds(
+    [...document.querySelectorAll('.confirm[data-pending="true"]')].flatMap((card) => {
+      const [yes, no] = /** @type {HTMLButtonElement[]} */ ([...card.querySelectorAll(".choices button")]);
+      if (!yes || !no || yes.disabled) return [];
+      return [{ ask: card.querySelector("p")?.textContent ?? "", yes: yes.textContent ?? "Yes", no: no.textContent ?? "No", onYes: () => yes.click(), onNo: () => no.click() }];
+    }),
+  );
 };
 
 // ---- rendering ----

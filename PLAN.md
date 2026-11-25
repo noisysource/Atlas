@@ -1576,3 +1576,18 @@ personal data tools (Gmail, Drive, calendar), phone access (#19), local speech
   status line. The answer's `brain`, the dataset and the costs dashboard count
   the brain that really answered.
 
+
+
+## The House Brain (the Dashboard, 2026-11-25)
+
+Mockup: claude.ai/artifact/GqiJQwzQyQzvzNDuaGzYAy. Done: step 1 (#362: Atlas's core and its
+frontier of light, the headline numbers, live activity, tools connected) and step 2 (#364:
+Needs your call, every waiting card in one list, answered through the card in the chat; the
+core turns amber).
+
+Next, step 3, the domain panels (House, FinHub, Dev, KidClub, Comms): one read-only GET
+per panel on the server (`/home/panel/:id`), each running that connector's own read tool
+with fixed input and no model (house_now, kanban_list, calendar_read for today, FinHub's
+book for cash per entity and imports waiting; KidClub through Vendus, read-only), cached
+for a minute, returned as a few labelled figures and lines for the card. EC/HRT never
+shows (Kiro's). A panel whose connector is off says so and links to Tools.

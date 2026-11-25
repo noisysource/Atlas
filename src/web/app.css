@@ -4353,3 +4353,11 @@ body[data-side="true"] .app .center .layout {
 @keyframes hb-globe { from { transform: rotateX(-18deg) rotateY(0deg); } to { transform: rotateX(-18deg) rotateY(360deg); } }
 @keyframes hb-pulse { 0%, 100% { opacity: 0.25; } 45% { opacity: 1; } }
 @media (prefers-reduced-motion: reduce) { .hb-core *, .hb-core { animation: none !important; } }
+.hb-column { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+.hb-card-amber { background: radial-gradient(ellipse 72% 68% at 50% 45%, rgba(70, 52, 16, 0.55) 0%, rgba(30, 24, 12, 0.35) 55%, rgba(3, 4, 10, 0) 100%); }
+.hb-card-amber .hb-card-head .hb-note { color: var(--wait, #e0b04a); }
+.hb-need { display: flex; flex-direction: column; gap: 6px; padding-bottom: 8px; }
+.hb-need-buttons { display: flex; gap: 8px; flex-wrap: wrap; }
+.hb-need button { min-height: 36px; padding: 6px 12px; border-radius: 8px; font: inherit; font-size: 11px; cursor: pointer; }
+.hb-yes { background: var(--accent, #4a7bff); color: #03040a; border: 0; }
+.hb-no { background: transparent; color: var(--text); border: 1px solid var(--border, #1d2438); }
