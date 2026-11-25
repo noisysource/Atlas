@@ -1124,7 +1124,7 @@ export const merchantKey = (description: string): string =>
     .slice(0, 3)
     .join(" ");
 
-const BANK_WORDS = new Set(["compra", "compras", "pag", "pagamento", "pagto", "trf", "transf", "transferencia", "deb", "debito", "dir", "dd", "mb", "way", "cartao", "card", "ref", "refa", "lev", "pt", "por", "de", "da", "do", "para", "sepa", "cdd", "cred", "credito", "op", "com", "www", "http", "https"]);
+const BANK_WORDS = new Set(["cr", "inst", "intrab", "aut", "compra", "compras", "pag", "pagamento", "pagto", "trf", "transf", "transferencia", "deb", "debito", "dir", "dd", "mb", "way", "cartao", "card", "ref", "refa", "lev", "pt", "por", "de", "da", "do", "para", "sepa", "cdd", "cred", "credito", "op", "com", "www", "http", "https"]);
 
 export type RecurringGroup = {
   readonly key: string;
@@ -1142,6 +1142,47 @@ export type RecurringGroup = {
 
 /** At least this many months with a charge to count as recurring. */
 export const RECURRING_MIN_MONTHS = 3;
+
+/** A subscription's amount is steady: most charges (60%) within 40% of the usual one. Electronics bought three times, or a transfer of €146 one month and €7,500 another, aren't. */
+export const isSteady = (amounts: readonly number[]): boolean => {
+  if (amounts.length === 0) return false;
+  const sorted = [...amounts].sort((a, b) => a - b);
+  const median = sorted[Math.floor(sorted.length / 2)] ?? 0;
+  const near = amounts.filter((a) => Math.abs(a - median) <= median * 0.4).length;
+  return near >= amounts.length * 0.6;
+};
+
+/** Paying off the credit card: the purchases on it are the expenses, not the settlement. */
+export const isCardSettlement = (description: string): boolean => /\bpag\.?\s*aut\.?\s*cart(a|ã)o\b/i.test(description);
+
+/**
+ * A transfer to someone on the payroll: a salary, not an expense. Banks cut names short
+ * ("BERNARDO MEN") or name the account ("MARISA CGD"), so it's their first name with their last
+ * name or its start, or, in a transfer, a first name no other worker has.
+ */
+export const payeeOf = (description: string, workers: readonly string[]): string | undefined => {
+  const words = merchantKeyWords(description);
+  const has = new Set(words);
+  const transfer = /\btrf\b|transf/i.test(description);
+  const firsts = workers.map((w) => merchantKeyWords(w)[0]);
+  return workers.find((w) => {
+    const parts = merchantKeyWords(w);
+    const first = parts[0];
+    const last = parts[parts.length - 1];
+    if (first === undefined || last === undefined || parts.length < 2 || !has.has(first)) return false;
+    if (words.some((x) => x === last || (x.length >= 3 && last.startsWith(x)))) return true;
+    return transfer && firsts.filter((f) => f === first).length === 1;
+  });
+};
+
+const merchantKeyWords = (t: string): string[] =>
+  t
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z ]+/g, " ")
+    .split(/\s+/)
+    .filter((w) => w.length > 1);
 
 /**
  * What a year of debits shows recurring: the same merchant charged about once a month in at
@@ -1162,6 +1203,7 @@ export const recurringFrom = (lines: readonly Pick<Line, "date" | "description" 
     if (months.length < RECURRING_MIN_MONTHS || charges.length > months.length * 1.5) continue;
     const sorted = [...charges].sort((a, b) => a.date.localeCompare(b.date));
     const amounts = sorted.map((c) => c.amount);
+    if (!isSteady(amounts)) continue;
     const days = sorted.map((c) => Number(c.date.slice(8, 10))).sort((a, b) => a - b);
     out.push({
       key: k,
@@ -1201,7 +1243,7 @@ export const NAMING_SCHEMA: JsonObjectSchema = closed({
 });
 
 export const namingPrompt = (entity: string): string =>
-  `You name recurring bank charges for FinHub, the bookkeeping of ${entity} (Portugal). Each line is one merchant charged about monthly: its index, a description as the bank wrote it, the usual amount and the months seen. For each give a short name, the vendor (short, clean), a category (e.g. Software & Subscriptions, Telecom, Utilities, Insurance, Vehicle & Charging, Bank Fees, Operating Expense), its kind (subscription; utility for electricity, water, gas; insurance; other_expense; loan for a credit instalment; payroll for salaries; tax for Finanças or Segurança Social; transfer for money moved between his own accounts) and the VAT it likely includes (23, 13, 6 or 0; 0 for loans, payroll, taxes, transfers, insurance and bank fees). Only from the description: when you can't tell, say other_expense and keep the bank's words as the vendor.`;
+  `You name recurring bank charges for FinHub, the bookkeeping of ${entity} (Portugal). A transfer (TRF) to a person is transfer or payroll, never a subscription; a transfer is an expense only when it plainly pays a service (an accountant, a landlord). Each line is one merchant charged about monthly: its index, a description as the bank wrote it, the usual amount and the months seen. For each give a short name, the vendor (short, clean), a category (e.g. Software & Subscriptions, Telecom, Utilities, Insurance, Vehicle & Charging, Bank Fees, Operating Expense), its kind (subscription; utility for electricity, water, gas; insurance; other_expense; loan for a credit instalment; payroll for salaries; tax for Finanças or Segurança Social; transfer for money moved between his own accounts) and the VAT it likely includes (23, 13, 6 or 0; 0 for loans, payroll, taxes, transfers, insurance and bank fees). Only from the description: when you can't tell, say other_expense and keep the bank's words as the vendor.`;
 
 /** Kinds that are FinHub subscriptions; the rest (loans, payroll, taxes, transfers) are left out. */
 const SUBSCRIPTION_KINDS = new Set(["subscription", "utility", "insurance", "other_expense"]);
@@ -1235,6 +1277,8 @@ export const buildYearRecurring = async (deps: {
   readonly entity: string;
   readonly year: number;
   readonly id: string;
+  /** Who's on the payroll (FinHub's contracts): transfers to them are salaries. */
+  readonly workers?: readonly string[];
   readonly signal?: AbortSignal;
   readonly log?: Logger;
   readonly progress?: (text: string) => void;
@@ -1279,7 +1323,22 @@ export const buildYearRecurring = async (deps: {
       if (!lines.some((x) => x.date === l.date && x.amount === l.amount && x.description === l.description && x.direction === l.direction)) lines.push(l);
   }
   if (sources.length === 0) return err(`nothing could be extracted from ${entity}'s ${year} statements${warnings.length > 0 ? `: ${warnings.join("; ")}` : ""}`);
-  const groups = recurringFrom(lines).slice(0, 200);
+  // What the code knows isn't an expense, before the model sees it: card settlements and salaries.
+  const left: string[] = [];
+  const groups = recurringFrom(lines)
+    .slice(0, 200)
+    .filter((g) => {
+      if (isCardSettlement(g.sample)) {
+        left.push("credit card payments (card)");
+        return false;
+      }
+      const payee = payeeOf(g.sample, deps.workers ?? []);
+      if (payee) {
+        left.push(`${payee} (salary)`);
+        return false;
+      }
+      return true;
+    });
   deps.progress?.(`Found ${groups.length} charges that repeat across months; naming them…`);
   const named = new Map<number, O>();
   for (let offset = 0; offset < groups.length; offset += NAMING_CHUNK) {
@@ -1294,7 +1353,6 @@ export const buildYearRecurring = async (deps: {
       if (i >= offset && i < offset + chunk.length) named.set(i, it);
     }
   }
-  const left: string[] = [];
   const subscriptions = groups.flatMap((g, i) => {
     const n = named.get(i);
     const kind = str(n?.kind, 20) || "other_expense";
@@ -1311,7 +1369,7 @@ export const buildYearRecurring = async (deps: {
     summary: [
       `Recurring expenses for ${year}, worked out by Atlas from ${sources.length} statement${sources.length === 1 ? "" : "s"} (${lines.length} lines): ${subscriptions.length} charged about monthly, about €${monthly.toFixed(2)} a month together.`,
       ...subscriptions.map((x) => `${String(x.name)} (${String(x.vendor)}): €${Number(x.amount).toFixed(2)} around day ${String(x.billingDay)}. ${String(x.notes)}`),
-      ...(left.length > 0 ? [`Left out (loans, salaries, taxes, transfers): ${left.join(", ")}.`] : []),
+      ...(left.length > 0 ? [`Left out (loans, salaries, card payments, taxes, transfers): ${[...new Set(left)].join(", ")}.`] : []),
       ...warnings.map((w) => `⚠ ${w}`),
     ].join("\n").slice(0, 4000),
     sources,
@@ -1441,6 +1499,8 @@ export type FinhubDb = {
   readonly get: (path: readonly string[], signal?: AbortSignal) => Promise<Result<{ readonly fields: O } | undefined, { readonly message: string }>>;
   /** Writes the whole document, its createdAt and updatedAt set by the server. */
   readonly put: (path: readonly string[], fields: O, serverTimes: readonly string[]) => Promise<Result<true, { readonly code: string; readonly message: string }>>;
+  /** Up to `limit` documents of one of the book's collections (e.g. its contracts), plain fields. */
+  readonly list?: (collection: string, limit: number) => Promise<Result<readonly O[], unknown>>;
 };
 
 export type FinhubImports = {
@@ -1570,7 +1630,10 @@ export const makeFinhubImports = (deps: {
       if (status === "applied" || status === "dismissed")
         return err(`${c.value.entity}'s ${c.value.year} recurring expenses were already ${status === "applied" ? "committed in FinHub" : "set aside"}; work them out again only if he asks (again: true)`);
       built.push(now());
-      const plan = await buildYearRecurring({ drive: deps.drive, llm: deps.llm, entity: c.value.entity, year: c.value.year, id, ...(signal ? { signal } : {}), ...(deps.log ? { log: deps.log } : {}), ...(progress ? { progress } : {}) });
+      // Who's on the payroll, from FinHub's contracts: transfers to them are salaries.
+      const contracts = deps.db.list ? await deps.db.list("employmentContracts", 100) : undefined;
+      const workers = contracts?.ok ? [...new Set(contracts.value.map((x) => str(x.workerName, 120)).filter(Boolean))] : [];
+      const plan = await buildYearRecurring({ drive: deps.drive, llm: deps.llm, entity: c.value.entity, year: c.value.year, id, workers, ...(signal ? { signal } : {}), ...(deps.log ? { log: deps.log } : {}), ...(progress ? { progress } : {}) });
       if (!plan.ok) return plan;
       for (const [k, v] of pending) if (v.until <= now()) pending.delete(k);
       const card = newId();

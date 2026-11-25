@@ -600,12 +600,13 @@ export const buildDeps = async (inputs: AppInputs): Promise<Result<Deps, string>
             put: fb.put,
           };
           const drive = { client: driveClient, account: config.finhub.account, folder: config.finhub.folder };
-          // The House Brain's FinHub panel: documents of the book's collections, plain fields.
+          // Documents of the book's collections, plain fields: the House Brain's FinHub panel, and
+          // the year passes (who's on the payroll).
           const list = async (collection: string, limit: number) => {
             const got = fb.list ? await fb.list(["finhub_books", "noisysource-group"], collection, limit) : err({ message: "can't list" });
             return got.ok ? ok(got.value.map((d) => ({ ...d.fields, id: d.path.split("/").pop() ?? "" }))) : err(got.error.message);
           };
-          return { drive, list, imports: makeFinhubImports({ drive, llm: finhubLlm.value, db, log }) };
+          return { drive, list, imports: makeFinhubImports({ drive, llm: finhubLlm.value, db: { ...db, list }, log }) };
         })()
       : undefined;
   // FINHUB=on but no tools: say why at start-up, rather than a FinHub question quietly getting none.

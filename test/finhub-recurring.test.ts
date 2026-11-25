@@ -3,7 +3,7 @@
 import { describe, expect, it } from "vitest";
 import { groupsByWords } from "../src/answer/tool-groups.js";
 import { finhubConnector } from "../src/connectors/finhub.js";
-import { buildYearRecurring, makeFinhubImports, merchantKey, recurringFrom, type FinhubDb } from "../src/finhub/finhub.js";
+import { buildYearRecurring, isCardSettlement, isSteady, makeFinhubImports, merchantKey, payeeOf, recurringFrom, type FinhubDb } from "../src/finhub/finhub.js";
 import type { LlmRequest } from "../src/llm/types.js";
 import { ok } from "../src/result.js";
 
@@ -93,6 +93,8 @@ const model = () => {
           { date: `2026-${m}-05`, description: `COMPRA 4653 ANTHROPIC* SAN FRANCISCO 05/${m}`, amount: 18.45, direction: "debit" },
           { date: `2026-${m}-20`, description: "DD EDP COMERCIAL", amount: 60, direction: "debit" },
           { date: `2026-${m}-01`, description: "PRESTACAO CREDITO HABITACAO 165003", amount: 439.34, direction: "debit" },
+          { date: `2026-${m}-28`, description: "TRF CR SEPA+ 357 P/ PT50000700000087557826123 BERNARDO MEN", amount: 1401.41, direction: "debit" },
+          { date: `2026-${m}-30`, description: "PAG.AUT.CARTAO BPI 0526319", amount: 200.95, direction: "debit" },
         ],
       },
       usage: { inputTokens: 1, outputTokens: 1 },
@@ -101,11 +103,38 @@ const model = () => {
   return { llm, asked };
 };
 
+describe("what isn't a subscription (from a real year of NoisySource's statements)", () => {
+  it("an amount that swings isn't one: electronics bought three times, transfers of €146 and €7,500", () => {
+    expect(isSteady([44.45, 310, 1012.99])).toBe(false);
+    expect(isSteady([146.5, 2126.68, 7500, 800, 2000, 300, 5000, 1200])).toBe(false);
+    // MEO with one small month, and electricity's seasons, still are.
+    expect(isSteady([126.08, 126.08, 22.39, 135.95, 126.08, 126.08, 126.08, 126.08, 126.08, 126.08])).toBe(true);
+    expect(isSteady([61.2, 74.9, 58.1, 66])).toBe(true);
+  });
+
+  it("paying the credit card off isn't an expense; the purchases on it are", () => {
+    expect(isCardSettlement("PAG.AUT.CARTAO BPI 0526319")).toBe(true);
+    expect(isCardSettlement("DD MEO, SA 47004329966")).toBe(false);
+  });
+
+  it("a transfer to someone on the payroll is a salary, whatever kind of transfer", () => {
+    const workers = ["Renato Lopes", "Marisa Lopes", "Bernardo Mendes"];
+    expect(payeeOf("TRF CR INTRAB 379 P/ PT50001000004653784000186 RENATO LOPES", workers)).toBe("Renato Lopes");
+    expect(payeeOf("TRF SEPA+ INST 377 P/ PT50000700000087557826123 BERNARDO MEN", workers)).toBe("Bernardo Mendes");
+    expect(payeeOf("TRF CR SEPA+ 356 P/ PT50003503390005980843060 MARISA CGD", workers)).toBe("Marisa Lopes");
+    // Not a transfer, and not their last name: someone else called Marisa.
+    expect(payeeOf("COMPRA CABELEIREIRO MARISA", workers)).toBeUndefined();
+    expect(payeeOf("TRF CR SEPA+ 340 P/ PT50003501100000372783056 TSE CONTABIL", workers)).toBeUndefined();
+    // The two kinds of transfer to the same person are one merchant.
+    expect(merchantKey("TRF CR SEPA+ 357 P/ PT50000700000087557826123 BERNARDO MEN")).toBe(merchantKey("TRF SEPA+ INST 377 P/ PT50000700000087557826123 BERNARDO MEN"));
+  });
+});
+
 describe("buildYearRecurring", () => {
   it("reads every statement of the year, keeps the subscriptions and leaves the loans out", async () => {
     const { llm, asked } = model();
     const said: string[] = [];
-    const got = await buildYearRecurring({ drive: library(["01", "02", "03", "04"]) as never, llm: llm as never, entity: "Household", year: 2026, id: "household-2026-recurring", progress: (t) => said.push(t) });
+    const got = await buildYearRecurring({ drive: library(["01", "02", "03", "04"]) as never, llm: llm as never, entity: "Household", year: 2026, id: "household-2026-recurring", workers: ["Bernardo Mendes"], progress: (t) => said.push(t) });
     if (!got.ok) throw new Error(got.error);
     expect(said[0]).toMatch(/^Reading Jan 2026's statement .* \(1\/4\)…$/);
     expect(said[said.length - 1]).toContain("naming them");
@@ -117,7 +146,7 @@ describe("buildYearRecurring", () => {
     expect(subs.map((x) => x.vendor)).toEqual(["EDP", "Anthropic"]);
     expect(subs.find((x) => x.vendor === "Anthropic")).toMatchObject({ name: "Claude subscription", amount: 18.45, frequency: "monthly", billingDay: 5, ivaRate: 23, matchCount: 4 });
     expect(got.value.doc.facilities).toEqual([]);
-    expect(got.value.doc.summary).toContain("Left out (loans, salaries, taxes, transfers): BPI (loan)");
+    expect(got.value.doc.summary).toContain("Left out (loans, salaries, card payments, taxes, transfers): Bernardo Mendes (salary), credit card payments (card), BPI (loan)");
     expect(got.value.label).toContain("2 subscriptions, about €78.45 a month");
   });
 
