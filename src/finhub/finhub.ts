@@ -704,6 +704,8 @@ export const inventory = async (d: FinhubDrive, range: { from: string; to: strin
 export const MAX_CALLS = 40;
 const CHUNK = 120;
 const MAX_TEXT = 60_000;
+/** The setup read's output budget: 3,000 was cut off on the household's integrated statement. */
+export const SETUP_MAX_TOKENS = 12_000;
 
 export type ImportPlan = { readonly id: string; readonly doc: ImportDoc; readonly label: string; readonly warnings: readonly string[]; /** For the sent message; default "{entity} · {month}". */ readonly what?: string };
 
@@ -1131,7 +1133,10 @@ export const buildSetup = async (deps: {
       system: `You read a Portuguese bank statement for FinHub's setup of ${entity} for ${year}: the account (product name and bank), its balance on 1 January ${year}, and every loan it shows with what's still owed. Never give account, IBAN or card numbers; for a loan's name use its kind and the contract's last digits only. Reply with the JSON only.`,
       messages: [{ role: "user", text: `<document name="${file.file.name.replace(/"/g, "'")}">\n${read.value.text.slice(0, MAX_TEXT)}\n</document>` }],
       outputSchema: SETUP_SCHEMA,
-      maxTokens: 3_000,
+      // An integrated statement (accounts and loans) is long: room for the answer, and no
+      // thinking, which shares that budget and adds nothing to copying figures.
+      maxTokens: SETUP_MAX_TOKENS,
+      thinking: "off",
     });
     if (!got.ok || got.value.kind !== "json") {
       const why = got.ok ? "not in the expected shape" : `${got.error.kind}: ${got.error.message.slice(0, 120)}`;
