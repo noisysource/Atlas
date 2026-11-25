@@ -181,7 +181,7 @@ export const PAYSLIP_SCHEMA: JsonObjectSchema = closed({
           workerName: text,
           roleTitle: text,
           employerName: text,
-          isOwnerHint: { type: "boolean", description: "The worker is the company's owner (Renato at Noisy Source)" },
+          isOwnerHint: { type: "boolean", description: "The worker is Renato Lopes or Marisa Lopes (their salaries are the household's income)" },
           paySchedule: { type: "string", enum: ["14_months", "12_months"] },
           baseGrossMonthly: num,
           irsRate: { type: "number", description: "Percent: the IRS withholding rate PRINTED on the slip (taxa de retenção / taxa IRS), never worked out from the amounts; 0 only when the slip shows none" },
@@ -273,7 +273,7 @@ export const statementPrompt = (entity: string, month: string): string =>
   `You extract a bank statement for FinHub, the bookkeeping of ${entity}, for ${month}. Return the statement period, the opening and closing balance, and EVERY movement line in order: its date, its description as written, the amount as a positive number, and the direction (credit: money in; debit: money out). ${RULES}`;
 
 export const payslipPrompt = (entity: string, month: string): string =>
-  `You extract Portuguese payslips (recibos de vencimento) for FinHub, the bookkeeping of ${entity}, for ${month}. Return one item per payslip in the document, and the employment contract each one implies (gross base salary, IRS withholding rate, Social Security rates, meal allowance and how it's paid, other benefits; 14 months when there are holiday and Christmas subsidies). The contract is what's agreed, not what this month paid (say reducedMonth when leave or an absence cut it): holiday and Christmas subsidies (or their twelfths), overtime, bonuses, absences and ajudas de custo (per diems, km: they vary) are not terms, only notes; the IRS rate is the one printed on the slip; when the month is reduced (leave, absence, a pro-rata start) still give the full base salary from the slip's base (vencimento base), and say in notes what was different this month. Renato Lopes is Noisy Source's owner. ${RULES}`;
+  `You extract Portuguese payslips (recibos de vencimento) for FinHub, the bookkeeping of ${entity}, for ${month}. Return one item per payslip in the document, and the employment contract each one implies (gross base salary, IRS withholding rate, Social Security rates, meal allowance and how it's paid, other benefits; 14 months when there are holiday and Christmas subsidies). The contract is what's agreed, not what this month paid (say reducedMonth when leave or an absence cut it): holiday and Christmas subsidies (or their twelfths), overtime, bonuses, absences and ajudas de custo (per diems, km: they vary) are not terms, only notes; the IRS rate is the one printed on the slip; when the month is reduced (leave, absence, a pro-rata start) still give the full base salary from the slip's base (vencimento base), and say in notes what was different this month. Renato Lopes owns Noisy Source; he and his wife Marisa Lopes are the household. ${RULES}`;
 
 export const discoveryPrompt = (entity: string): string =>
   `You categorise bank statement lines for FinHub, the bookkeeping of ${entity} (Portugal). For each line give the vendor (short, clean: "Anthropic", "MEO", "BPI"), a category (e.g. Revenue & Inflows, Payroll, Taxes & Social Security, Software & Subscriptions, Telecom, Vehicle & Charging, Meals, Bank Fees, Loan Payment, Transfer, Operating Expense), its type (income, expense, transfer, debt_payment for a loan instalment, payroll for salaries) and the VAT it likely includes (23, 13, 6 or 0; 0 for salaries, taxes, transfers, loans and bank fees). Then list the recurring subscriptions you can see (the same vendor and about the same amount, monthly or yearly) and the loans or credit facilities (instalments to a bank). Only what the lines show. ${RULES}`;
@@ -414,7 +414,7 @@ export const payslipsOf = (raw: unknown, filename: string): { payslips: O[]; con
       workerName: str(x.workerName, 120),
       roleTitle: str(x.roleTitle, 120),
       employerName: str(x.employerName, 120),
-      isOwnerHint: x.isOwnerHint === true,
+      isOwnerHint: isHouseholdEarner(str(x.workerName, 120)),
       paySchedule: x.paySchedule === "12_months" ? "12_months" : "14_months",
       baseGrossMonthly: money(x.baseGrossMonthly),
       irsRate: money(x.irsRate),
@@ -823,6 +823,18 @@ export const changedTerms = (a: Terms, b: Terms): string => {
   return parts.join(" · ");
 };
 
+/**
+ * Renato and Marisa Lopes: their salaries are the household's income (FinHub's "owner income",
+ * fed into the one Household entity). Decided by name, not by the model, which marked one and not
+ * the other. First and last name, so "Renato Simão dos Santos Lopes" counts.
+ */
+export const isHouseholdEarner = (name: string): boolean => {
+  const words = personKey(name).split(" ");
+  const first = words[0] ?? "";
+  const last = words[words.length - 1] ?? "";
+  return last === "lopes" && (first === "renato" || first === "marisa");
+};
+
 /** A person's name as a key: lower case, no accents, single spaces. */
 export const personKey = (name: string): string =>
   name.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/\s+/g, " ").trim();
@@ -928,7 +940,7 @@ export const contractsFromSeen = (seen: readonly Seen[]): O[] => {
       workerName: latest.name,
       roleTitle: latest.role,
       employerName: latest.employer,
-      isOwnerHint: list.some((s) => s.owner),
+      isOwnerHint: isHouseholdEarner(latest.name),
       ...top,
       notes: notes.slice(0, 1000),
       versions: versions.slice(-36),
