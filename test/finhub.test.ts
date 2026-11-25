@@ -479,7 +479,8 @@ describe("FinHub setup from the first statements", () => {
       { id: "lib", name: "Atlas", mimeType: "application/vnd.google-apps.folder" },
     ];
     void files;
-    const llm = async () => ({
+    const asked: { maxTokens?: number; thinking?: string }[] = [];
+    const llm = async (r: { maxTokens?: number; thinking?: string }) => (asked.push(r), {
       ok: true as const,
       value: {
         kind: "json" as const,
@@ -518,5 +519,7 @@ describe("FinHub setup from the first statements", () => {
     expect(setup?.accounts[0]).toMatchObject({ entityName: "Household (Renato & Marisa)", institution: "BPI", balance: 3291.39, balanceDate: "2026-01-01" });
     expect(String(setup?.accounts[0]?.name)).not.toMatch(/\d{4}/);
     expect(setup?.loans[0]).toMatchObject({ facilityType: "mortgage", currentBalance: 96865.41, apr: 3.1, maturityDate: "2054-04-01" });
+    // A long integrated statement isn't cut off: room to answer, no thinking sharing it.
+    expect(asked[0]).toMatchObject({ maxTokens: 12_000, thinking: "off" });
   });
 });
