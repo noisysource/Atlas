@@ -8,6 +8,7 @@ import { showMorningBrief } from "./morning.js";
 import { startTasksPanel, taskGlance } from "./tasks.js";
 import { startRemindersPanel } from "./reminders.js";
 import { makeCostsView } from "./costs.js";
+import { makeHomeView } from "./home.js";
 import { makeSourcesPage } from "./sources-page.js";
 import { makeLogsTab } from "./logs-tab.js";
 import { makeSystemPanel } from "./system-panel.js";
@@ -329,7 +330,9 @@ byId("codemaps").addEventListener("click", () => void codeMapView.open());
 
 // #247: what each service costs, per use or fixed.
 // #300: the costs live in the panel's Costs tab.
-const costsView = makeCostsView(byId("costs-panel"), { show: () => side.open("costs"), close: () => side.close() });
+const costsView = makeCostsView(byId("costs-view"), { show: () => side.open("costs"), close: () => side.close() });
+// The House Brain on top of the Dashboard: Atlas's core, its frontier, the numbers.
+const homeView = makeHomeView(byId("home-view"));
 
 // #143: how he got there, for the current answer, as a tree that grows while he works.
 // #309: in the System panel, under the session and cost cards.
@@ -410,7 +413,10 @@ const side = (() => {
       if (tab === "chat") api.close();
       else if (tab === "memory") void openMemories();
       else if (tab === "skills") void openSkills();
-      else if (tab === "costs") costsView.open();
+      else if (tab === "costs") {
+        costsView.open();
+        void homeView.load();
+      }
       else api.open(tab);
     });
   const api = {
@@ -875,6 +881,7 @@ const renderControls = () => {
   phaseBanner.hidden = state.phase === "idle";
   phaseText.textContent =
     state.phase === "thinking" && state.progress ? state.progress : phaseLabel(state.phase, state.language, session?.bargeIn ?? null);
+  homeView.setPhase(state.phase === "idle" ? "idle" : "thinking", state.phase === "idle" ? "" : phaseText.textContent ?? "");
   micButton.disabled = !listenAvailable() && session === null;
   if (!listenAvailable()) micButton.title = !micSupported ? "This browser can't record the microphone" : "Listening is English-only for now";
   micNote.hidden = listenAvailable();
