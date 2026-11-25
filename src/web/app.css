@@ -3771,6 +3771,11 @@ body[data-side="true"] .app .center .layout {
   padding: 1.4rem 1.2rem 2rem;
 }
 
+/* The Dashboard (the House Brain) uses the whole width: the other pages stay a reading column. */
+.app #side.pages:has(#costs-panel:not([hidden])) {
+  max-width: none;
+}
+
 /* The System panel on the right. */
 .system {
   width: 17rem;
@@ -4301,16 +4306,15 @@ body[data-side="true"] .app .center .layout {
 .hb-stat b { color: #cfe0ff; }
 .hb-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(320px, 1.3fr) minmax(0, 1fr); gap: 20px; align-items: center; }
 /* Narrower (the Dashboard beside the system panel): the core on top, the cards two by two under it. */
-@container (max-width: 1100px) {
+@container (max-width: 900px) {
   .hb-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; }
   .hb-centre { grid-column: 1 / -1; order: -1; }
 }
 @container (max-width: 640px) { .hb-grid { grid-template-columns: minmax(0, 1fr); } }
 /* The domains under the core: five across, then fewer as the page narrows. */
-.hb-panels { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 16px; }
+/* The domains under the core, side by side: as many across as fit (all five on a wide screen). */
+.hb-panels { display: grid; grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr)); gap: 16px; }
 .hb-panels:empty { display: none; }
-@container (max-width: 1100px) { .hb-panels { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-@container (max-width: 640px) { .hb-panels { grid-template-columns: minmax(0, 1fr); } }
 .hb-line { font-size: 12px; line-height: 1.45; color: var(--text); overflow-wrap: anywhere; }
 .hb-card { border-radius: 32px; padding: 20px 22px; background: radial-gradient(ellipse 72% 68% at 50% 45%, rgba(20, 30, 70, 0.8) 0%, rgba(10, 13, 24, 0.45) 55%, rgba(3, 4, 10, 0) 100%); display: flex; flex-direction: column; gap: 10px; min-width: 0; }
 .hb-card-head { display: flex; justify-content: space-between; gap: 8px; }
