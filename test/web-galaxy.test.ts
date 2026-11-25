@@ -105,3 +105,19 @@ describe("tool drift (#282)", () => {
       }
   });
 });
+
+describe("the House Brain's frontier", () => {
+  it("is the same on every load, with gaps, each piece outside the core", async () => {
+    const { ringPieces } = await import("../src/web/home.js");
+    const a = ringPieces({ count: 64, radius: 126, kind: "fragment", seed: 9 });
+    expect(ringPieces({ count: 64, radius: 126, kind: "fragment", seed: 9 })).toEqual(a);
+    expect(a.length).toBeGreaterThan(30);
+    expect(a.length).toBeLessThan(64);
+    for (const p of a) {
+      expect(p.radius).toBeGreaterThan(100);
+      expect(p.length).toBeGreaterThanOrEqual(6);
+      expect([0.4, 0.6, 0.8, 1]).toContain(p.bright);
+    }
+    expect(ringPieces({ count: 24, radius: 142, kind: "spark", seed: 5 }).every((p) => p.pulse)).toBe(true);
+  });
+});
