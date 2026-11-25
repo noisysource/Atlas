@@ -17,6 +17,7 @@ import {
   inventory,
   kindOfFile,
   makeFinhubImports,
+  isHouseholdEarner,
   checkContracts,
   contractsFromSeen,
   versionsFrom,
@@ -393,7 +394,7 @@ describe("contract versions from a year of payslips", () => {
   });
 
   it("one contract per person, whatever the accents; the latest terms on top", () => {
-    const got = contractsFromSeen([...months(1, 5, terms(), "Simão Lopes"), ...months(6, 10, terms({ baseGrossMonthly: 2100 }), "Simao  Lopes"), ...months(1, 10, terms({ baseGrossMonthly: 950 }), "Marisa")]);
+    const got = contractsFromSeen([...months(1, 5, terms(), "Renato Simão Lopes"), ...months(6, 10, terms({ baseGrossMonthly: 2100 }), "Renato Simao  Lopes"), ...months(1, 10, terms({ baseGrossMonthly: 950 }), "Marisa")]);
     expect(got).toHaveLength(2);
     expect(got[0]).toMatchObject({ baseGrossMonthly: 2100, isOwnerHint: true });
     expect((got[0]?.versions as unknown[]).length).toBe(2);
@@ -418,6 +419,13 @@ describe("contract versions from a year of payslips", () => {
     expect(got.versions.map((v) => [v.effectiveFrom, v.terms.irsRate])).toEqual([["2026-01", 15.35], ["2026-05", 17.75]]);
     expect(got.exceptions).toEqual(["2026-01", "2026-02"]);
     expect(got.differed["2026-02"]).toBe("pay cut by leave or absence");
+  });
+
+  it("Renato's and Marisa's salaries are the household's, nobody else's", () => {
+    expect(isHouseholdEarner("Renato Simão dos Santos Lopes")).toBe(true);
+    expect(isHouseholdEarner("MARISA RODRIGUES FOLHAS LOPES")).toBe(true);
+    expect(isHouseholdEarner("Bernardo José Andrade Mendonça")).toBe(false);
+    expect(isHouseholdEarner("Renato Mendonça")).toBe(false);
   });
 
   it("checks the year asked for", () => {
