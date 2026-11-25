@@ -42,6 +42,8 @@ export const signalsOf = (entries: readonly DatasetEntry[]): Signal[] => {
       if (e.decision !== "approved") out.push({ kind: "card", who: e.who, card: e.card, label: cut(e.label), decision: e.decision });
       continue;
     }
+    // FinHub's corrections are for training the local model (#379), not this review.
+    if (e.type !== "exchange") continue;
     // The Local brain's exchanges stayed on the Mac: they aren't sent to a cloud model.
     if (e.brain === "local") continue;
     const tools = e.tools.map((t) => `${t.tool}${t.ok ? "" : ` (failed: ${t.error ?? "?"})`}`);

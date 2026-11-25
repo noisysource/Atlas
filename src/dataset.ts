@@ -16,6 +16,7 @@
 import { appendFile, mkdir, readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import { containsSecret } from "./memory-rules.js";
+import type { FinhubEntry } from "./finhub/learning.js";
 import type { AskRequest, AskResponse, Logger, PathStep } from "./types.js";
 
 export const DATASET_DIR = "data/dataset";
@@ -58,7 +59,8 @@ export type OutcomeEntry = {
   readonly auto: boolean;
 };
 
-export type DatasetEntry = ExchangeEntry | OutcomeEntry;
+/** #379: FinHub imports he decided, with his corrections (finhub/learning.ts). */
+export type DatasetEntry = ExchangeEntry | OutcomeEntry | FinhubEntry;
 
 /** Text as kept: trimmed, capped, and left out whole when it looks like a secret. */
 export const keptText = (s: string): string => {
