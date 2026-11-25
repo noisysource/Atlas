@@ -1120,6 +1120,13 @@ Confirmed (2026-11-12):
   loans it shows; the companies' NIPCs come from BOOK_ENTITIES. One proposal
   `setup-{year}` with a `setup` block; FinHub's "Create these" makes them after his
   OK. Never account numbers (stripped from names too): he adds the IBANs.
+  `finhub_recurring` (2026-11-25), the year pass for expenses: ALL of an entity's
+  statements of a year (at most 24) are extracted, and the code (`recurringFrom`) keeps
+  each merchant (`merchantKey`: no card numbers, dates or bank words) charged about once
+  a month in at least three months; a supermarket, charged many times a month, isn't a
+  subscription. The model only names each one and says its kind; loans (the setup has
+  them), salaries, taxes and transfers are left out and listed. One proposal
+  `{entity}-{year}-recurring` with subscription drafts (usual amount, day, VAT).
   FINHUB_MODEL picks who reads the documents (default the answer model;
   `ollama:<model>` keeps them on this Mac, with a context sized to the document
   and thinking off).

@@ -109,6 +109,22 @@ export const FINHUB_CONTRACTS_TOOL: LlmTool = {
   },
 };
 
+export const FINHUB_RECURRING_TOOL: LlmTool = {
+  name: "finhub_recurring",
+  description:
+    "Work out one entity's subscriptions and recurring expenses for a year from ALL its bank statements at once: what's charged about once a month in several months (software, telecom, utilities, insurance, gym…), with its usual amount and day. The code finds what repeats; you only see the result. Loans are left out (the setup has them), and so are salaries, taxes and transfers. It takes several minutes and shows him a card; nothing is sent until his OK, and then it lands in FinHub's \"From Atlas\" tab to review and commit.",
+  inputSchema: {
+    type: "object",
+    properties: {
+      entity: { type: "string", enum: [...ENTITIES], description: "Whose statements" },
+      year: { type: "integer", description: "The year, e.g. 2026 (default this year)" },
+      again: { type: "boolean", description: "Work them out again after he committed or set aside the last ones" },
+    },
+    required: ["entity"],
+    additionalProperties: false,
+  },
+};
+
 export const FINHUB_SETUP_TOOL: LlmTool = {
   name: "finhub_setup",
   description:
@@ -1094,6 +1110,227 @@ export const buildYearContracts = async (deps: {
   });
 };
 
+// ── Subscriptions and recurring expenses from a year of statements ────────────
+
+/** A statement line's merchant, without card numbers, dates, references and bank words. */
+export const merchantKey = (description: string): string =>
+  description
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9 ]+/g, " ")
+    .split(/\s+/)
+    .filter((w) => w.length > 1 && !/\d/.test(w) && !BANK_WORDS.has(w))
+    .slice(0, 3)
+    .join(" ");
+
+const BANK_WORDS = new Set(["compra", "compras", "pag", "pagamento", "pagto", "trf", "transf", "transferencia", "deb", "debito", "dir", "dd", "mb", "way", "cartao", "card", "ref", "refa", "lev", "pt", "por", "de", "da", "do", "para", "sepa", "cdd", "cred", "credito", "op", "com", "www", "http", "https"]);
+
+export type RecurringGroup = {
+  readonly key: string;
+  /** One of its descriptions as written, for the model to name it. */
+  readonly sample: string;
+  readonly months: readonly string[];
+  readonly dates: readonly string[];
+  /** The latest charge's amount. */
+  readonly amount: number;
+  readonly min: number;
+  readonly max: number;
+  /** The day it's usually charged (the median). */
+  readonly day: number;
+};
+
+/** At least this many months with a charge to count as recurring. */
+export const RECURRING_MIN_MONTHS = 3;
+
+/**
+ * What a year of debits shows recurring: the same merchant charged about once a month in at
+ * least three months. A merchant charged many times a month (a supermarket) isn't a
+ * subscription, and is left out.
+ */
+export const recurringFrom = (lines: readonly Pick<Line, "date" | "description" | "amount" | "direction">[]): RecurringGroup[] => {
+  const by = new Map<string, Pick<Line, "date" | "description" | "amount">[]>();
+  for (const l of lines) {
+    if (l.direction !== "debit" || l.amount <= 0 || !isoDate(l.date)) continue;
+    const k = merchantKey(l.description);
+    if (k === "") continue;
+    by.set(k, [...(by.get(k) ?? []), l]);
+  }
+  const out: RecurringGroup[] = [];
+  for (const [k, charges] of by) {
+    const months = [...new Set(charges.map((c) => c.date.slice(0, 7)))].sort();
+    if (months.length < RECURRING_MIN_MONTHS || charges.length > months.length * 1.5) continue;
+    const sorted = [...charges].sort((a, b) => a.date.localeCompare(b.date));
+    const amounts = sorted.map((c) => c.amount);
+    const days = sorted.map((c) => Number(c.date.slice(8, 10))).sort((a, b) => a - b);
+    out.push({
+      key: k,
+      sample: (sorted[sorted.length - 1]?.description ?? k).slice(0, 120),
+      months,
+      dates: sorted.map((c) => c.date).slice(-24),
+      amount: amounts[amounts.length - 1] ?? 0,
+      min: Math.min(...amounts),
+      max: Math.max(...amounts),
+      day: days[Math.floor(days.length / 2)] ?? 1,
+    });
+  }
+  return out.sort((a, b) => b.months.length - a.months.length || b.amount - a.amount);
+};
+
+export const NAMING_SCHEMA: JsonObjectSchema = closed({
+  type: "object",
+  properties: {
+    items: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          index: { type: "integer" },
+          name: { type: "string", description: "What it is, short: \"Claude subscription\", \"Home internet\", \"Electricity\"" },
+          vendor: { type: "string", description: "Short and clean: \"Anthropic\", \"MEO\", \"EDP\"" },
+          category: text,
+          kind: { type: "string", enum: ["subscription", "utility", "insurance", "other_expense", "loan", "payroll", "tax", "transfer"] },
+          ivaRate: { type: "number", description: "VAT percent it likely includes: 23, 13, 6 or 0" },
+          ivaDeductible: { type: "boolean" },
+        },
+        required: ["index", "name", "vendor", "category", "kind", "ivaRate", "ivaDeductible"],
+      },
+    },
+  },
+  required: ["items"],
+});
+
+export const namingPrompt = (entity: string): string =>
+  `You name recurring bank charges for FinHub, the bookkeeping of ${entity} (Portugal). Each line is one merchant charged about monthly: its index, a description as the bank wrote it, the usual amount and the months seen. For each give a short name, the vendor (short, clean), a category (e.g. Software & Subscriptions, Telecom, Utilities, Insurance, Vehicle & Charging, Bank Fees, Operating Expense), its kind (subscription; utility for electricity, water, gas; insurance; other_expense; loan for a credit instalment; payroll for salaries; tax for Finanças or Segurança Social; transfer for money moved between his own accounts) and the VAT it likely includes (23, 13, 6 or 0; 0 for loans, payroll, taxes, transfers, insurance and bank fees). Only from the description: when you can't tell, say other_expense and keep the bank's words as the vendor.`;
+
+/** Kinds that are FinHub subscriptions; the rest (loans, payroll, taxes, transfers) are left out. */
+const SUBSCRIPTION_KINDS = new Set(["subscription", "utility", "insurance", "other_expense"]);
+export const MAX_YEAR_STATEMENTS = 24;
+const NAMING_CHUNK = 60;
+
+/** One group as a FinHub subscription draft, named (or, unnamed, from the bank's words). */
+export const subscriptionOf = (g: RecurringGroup, named: O | undefined): O => {
+  const varies = g.max - g.min > Math.max(1, g.min * 0.1);
+  const span = `${monthName(g.months[0] ?? "")}–${monthName(g.months[g.months.length - 1] ?? "")}`;
+  return {
+    name: str(named?.name, 120) || g.sample,
+    vendor: str(named?.vendor, 120) || g.key,
+    category: str(named?.category, 80) || "Operating Expense",
+    amount: money(g.amount),
+    frequency: "monthly",
+    billingDay: intIn(g.day, 1, 31, 1),
+    billingMonth: intIn(Number((g.months[0] ?? "").slice(5, 7)), 1, 12, 1),
+    ivaRate: intIn(Math.round(money(named?.ivaRate)), 0, 23, 0),
+    ivaDeductible: named?.ivaDeductible === true,
+    hasInvoice: false,
+    matchCount: g.months.length,
+    sampleDates: [...g.dates],
+    notes: `Seen in ${g.months.length} months (${span})${varies ? `, €${g.min.toFixed(2)} to €${g.max.toFixed(2)}` : ""}. Bank: "${g.sample}".`.slice(0, 1000),
+  };
+};
+
+export const buildYearRecurring = async (deps: {
+  readonly drive: FinhubDrive;
+  readonly llm: LlmCall;
+  readonly entity: string;
+  readonly year: number;
+  readonly id: string;
+  readonly signal?: AbortSignal;
+  readonly log?: Logger;
+  readonly progress?: (text: string) => void;
+}): Promise<Result<ImportPlan, string>> => {
+  const { drive, llm, entity, year, signal } = deps;
+  const lib = await libraryFiles(drive, signal);
+  if (!lib.ok) return lib;
+  if (!lib.value) return err("the year pass needs the Atlas folder (statements by entity), not month folders");
+  const warnings: string[] = [];
+  let files = lib.value
+    .filter((f) => f.kind === "statement" && f.entity === entity && f.month?.startsWith(`${year}-`))
+    .sort((a, b) => (a.month ?? "").localeCompare(b.month ?? ""));
+  if (files.length === 0) return err(`no ${year} statements for ${entity} in the Atlas folder`);
+  if (files.length > MAX_YEAR_STATEMENTS) {
+    warnings.push(`only the first ${MAX_YEAR_STATEMENTS} of ${files.length} statements`);
+    files = files.slice(0, MAX_YEAR_STATEMENTS);
+  }
+  const lines: Line[] = [];
+  const sources: Source[] = [];
+  for (const [i, f] of files.entries()) {
+    const month = f.month ?? "";
+    deps.progress?.(`Reading ${monthName(month)}'s statement ${f.file.name} (${i + 1}/${files.length})…`);
+    const read = await drive.client.read({ account: drive.account, id: f.file.id }, signal);
+    if (!read.ok) {
+      warnings.push(`${f.file.name}: couldn't read it (${read.error.message})`);
+      continue;
+    }
+    if (read.value.text.trim().length < 40) {
+      warnings.push(`${f.file.name}: no text in it (a scan?), left out`);
+      continue;
+    }
+    const got = await llm({ system: statementPrompt(entity, month), messages: [{ role: "user", text: `<document name="${f.file.name.replace(/"/g, "'")}">\n${read.value.text.slice(0, MAX_TEXT)}\n</document>` }], outputSchema: STATEMENT_SCHEMA, maxTokens: 16_000, thinking: "off" });
+    if (!got.ok || got.value.kind !== "json") {
+      const why = got.ok ? "not in the expected shape" : `${got.error.kind}: ${got.error.message.slice(0, 120)}`;
+      deps.log?.warn("finhub recurring: statement not extracted", { month, why });
+      warnings.push(`${f.file.name}: not extracted (${why})`);
+      continue;
+    }
+    sources.push({ kind: "drive", name: f.file.name.slice(0, 200), id: f.file.id, link: `https://drive.google.com/file/d/${encodeURIComponent(f.file.id)}/view` });
+    // Statements overlap at their edges (9 Jan to 8 Feb…): a line seen twice counts once.
+    for (const l of statementOf(got.value.value, f.file.name).lines)
+      if (!lines.some((x) => x.date === l.date && x.amount === l.amount && x.description === l.description && x.direction === l.direction)) lines.push(l);
+  }
+  if (sources.length === 0) return err(`nothing could be extracted from ${entity}'s ${year} statements${warnings.length > 0 ? `: ${warnings.join("; ")}` : ""}`);
+  const groups = recurringFrom(lines).slice(0, 200);
+  deps.progress?.(`Found ${groups.length} charges that repeat across months; naming them…`);
+  const named = new Map<number, O>();
+  for (let offset = 0; offset < groups.length; offset += NAMING_CHUNK) {
+    const chunk = groups.slice(offset, offset + NAMING_CHUNK).map((g, i) => `${i}\t${g.sample}\t€${g.amount.toFixed(2)}\t${g.months.length} months`);
+    const got = await llm({ system: namingPrompt(entity), messages: [{ role: "user", text: `Recurring charges (index, description, amount, months):\n${chunk.join("\n")}` }], outputSchema: NAMING_SCHEMA, maxTokens: 8_000, thinking: "off" });
+    if (!got.ok || got.value.kind !== "json") {
+      warnings.push(`charges ${offset + 1}–${offset + chunk.length}: not named, kept with the bank's words`);
+      continue;
+    }
+    for (const it of arr(obj(got.value.value).items, NAMING_CHUNK).map(obj)) {
+      const i = typeof it.index === "number" && Number.isInteger(it.index) ? offset + it.index : -1;
+      if (i >= offset && i < offset + chunk.length) named.set(i, it);
+    }
+  }
+  const left: string[] = [];
+  const subscriptions = groups.flatMap((g, i) => {
+    const n = named.get(i);
+    const kind = str(n?.kind, 20) || "other_expense";
+    if (!SUBSCRIPTION_KINDS.has(kind)) {
+      left.push(`${str(n?.vendor, 60) || g.key} (${kind})`);
+      return [];
+    }
+    return [subscriptionOf(g, n)];
+  });
+  const monthly = subscriptions.reduce((n, x) => n + Number(x.amount), 0);
+  const doc: ImportDoc = {
+    entityHint: entity,
+    month: `${year}-01`,
+    summary: [
+      `Recurring expenses for ${year}, worked out by Atlas from ${sources.length} statement${sources.length === 1 ? "" : "s"} (${lines.length} lines): ${subscriptions.length} charged about monthly, about €${monthly.toFixed(2)} a month together.`,
+      ...subscriptions.map((x) => `${String(x.name)} (${String(x.vendor)}): €${Number(x.amount).toFixed(2)} around day ${String(x.billingDay)}. ${String(x.notes)}`),
+      ...(left.length > 0 ? [`Left out (loans, salaries, taxes, transfers): ${left.join(", ")}.`] : []),
+      ...warnings.map((w) => `⚠ ${w}`),
+    ].join("\n").slice(0, 4000),
+    sources,
+    statements: [],
+    payslips: [],
+    contracts: [],
+    subscriptions,
+    facilities: [],
+  };
+  deps.log?.info("finhub year recurring built", { year, statements: sources.length, subscriptions: subscriptions.length });
+  return ok({
+    id: deps.id,
+    doc,
+    label: `Send ${entity}'s ${year} recurring expenses to FinHub for review: ${subscriptions.length} subscription${subscriptions.length === 1 ? "" : "s"}, about €${monthly.toFixed(2)} a month${warnings.length > 0 ? ` (${warnings.length} warning${warnings.length === 1 ? "" : "s"})` : ""}`,
+    warnings,
+    what: `${entity}'s ${year} recurring expenses`,
+  });
+};
+
 // ── The book's setup, from the year's first statements ────────────────────────
 
 export const buildSetup = async (deps: {
@@ -1213,6 +1450,8 @@ export type FinhubImports = {
   readonly proposeSetup: (input: unknown, now: Date, signal?: AbortSignal, progress?: (text: string) => void) => Promise<Result<{ readonly id: string; readonly label: string; readonly warnings: readonly string[]; readonly summary: string }, string>>;
   /** The year pass: one entity's contracts from all its payslips of a year. */
   readonly proposeContracts: (input: unknown, now: Date, signal?: AbortSignal, progress?: (text: string) => void) => Promise<Result<{ readonly id: string; readonly label: string; readonly warnings: readonly string[]; /** Each person's versions and exceptions, for the model to tell him. */ readonly summary: string }, string>>;
+  /** The year pass for expenses: one entity's subscriptions and recurring charges from all its statements of a year. */
+  readonly proposeRecurring: (input: unknown, now: Date, signal?: AbortSignal, progress?: (text: string) => void) => Promise<Result<{ readonly id: string; readonly label: string; readonly warnings: readonly string[]; readonly summary: string }, string>>;
 };
 
 export const checkContracts = (input: unknown, today: Date): Result<{ entity: string; year: number; again: boolean }, string> => {
@@ -1319,6 +1558,25 @@ export const makeFinhubImports = (deps: {
       pending.set(card, { plan: plan.value, until: now() + 60 * 60_000 });
       return ok({ id: card, label: plan.value.label, warnings: plan.value.warnings, summary: plan.value.doc.summary });
     },
+    proposeRecurring: async (input, today, signal, progress) => {
+      const c = checkContracts(input, today);
+      if (!c.ok) return c;
+      while (built.length > 0 && (built[0] ?? 0) <= now() - 86_400_000) built.shift();
+      if (built.length >= cap) return err(`I've built ${cap} imports today, my limit; try tomorrow`);
+      const id = importId(c.value.entity, `${c.value.year}-recurring`, c.value.again ? now() : undefined);
+      const existing = await deps.db.get([...IMPORTS_PATH, id], signal);
+      if (!existing.ok) return err(`FinHub couldn't be read: ${existing.error.message}`);
+      const status = existing.value?.fields.status;
+      if (status === "applied" || status === "dismissed")
+        return err(`${c.value.entity}'s ${c.value.year} recurring expenses were already ${status === "applied" ? "committed in FinHub" : "set aside"}; work them out again only if he asks (again: true)`);
+      built.push(now());
+      const plan = await buildYearRecurring({ drive: deps.drive, llm: deps.llm, entity: c.value.entity, year: c.value.year, id, ...(signal ? { signal } : {}), ...(deps.log ? { log: deps.log } : {}), ...(progress ? { progress } : {}) });
+      if (!plan.ok) return plan;
+      for (const [k, v] of pending) if (v.until <= now()) pending.delete(k);
+      const card = newId();
+      pending.set(card, { plan: plan.value, until: now() + 60 * 60_000 });
+      return ok({ id: card, label: plan.value.label, warnings: plan.value.warnings, summary: plan.value.doc.summary });
+    },
     decide: async (id, decision) => {
       const got = pending.get(id);
       pending.delete(id);
@@ -1331,7 +1589,7 @@ export const makeFinhubImports = (deps: {
         return { ok: false, text: `Nothing was sent: ${written.error.message}.` };
       }
       deps.log?.info("finhub import sent", { month: plan.doc.month });
-      return { ok: true, text: `Sent: ${plan.what ?? `${plan.doc.entityHint} · ${plan.doc.month}`} ${plan.what ? "are" : "is"} in FinHub's "From Atlas" tab (${countsOf(plan.doc)}). Review ${plan.what ? "them" : "it"} in the workbench and commit there.`, tool: plan.doc.setup ? FINHUB_SETUP_TOOL.name : plan.what ? FINHUB_CONTRACTS_TOOL.name : FINHUB_IMPORT_TOOL.name };
+      return { ok: true, text: `Sent: ${plan.what ?? `${plan.doc.entityHint} · ${plan.doc.month}`} ${plan.what ? "are" : "is"} in FinHub's "From Atlas" tab (${countsOf(plan.doc)}). Review ${plan.what ? "them" : "it"} in the workbench and commit there.`, tool: plan.doc.setup ? FINHUB_SETUP_TOOL.name : plan.doc.contracts.length === 0 && plan.what ? FINHUB_RECURRING_TOOL.name : plan.what ? FINHUB_CONTRACTS_TOOL.name : FINHUB_IMPORT_TOOL.name };
     },
   };
 };
