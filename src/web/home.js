@@ -114,8 +114,12 @@ export const makeHomeView = (host, deps = {}) => {
   centre.append(theCore, now);
   const activity = card("Live activity", "today");
   const tools = card("Tools connected", "");
+  const needs = card("Needs your call", "", "amber");
+  needs.body.append(el("p", "hb-note", "Nothing waiting for you."));
+  const left = el("div", "hb-column");
+  left.append(needs.card, activity.card);
   const grid = el("div", "hb-grid");
-  grid.append(activity.card, centre, tools.card);
+  grid.append(left, centre, tools.card);
   root.append(header, grid);
   host.replaceChildren(root);
 
@@ -166,12 +170,46 @@ export const makeHomeView = (host, deps = {}) => {
     );
   };
 
+  let phase = /** @type {"idle" | "thinking" | "waiting" | "error"} */ ("idle");
+  let waiting = 0;
+  const paint = () => {
+    theCore.dataset.phase = phase === "idle" && waiting > 0 ? "waiting" : phase;
+  };
+
   return {
     load,
-    /** What Atlas is doing, for the core's light: idle, thinking, waiting (for his OK) or error. @param {"idle" | "thinking" | "waiting" | "error"} phase @param {string} [text] */
-    setPhase: (phase, text) => {
-      theCore.dataset.phase = phase;
+    /**
+     * Every card waiting for his OK, from the chat: approved here, the card in the chat
+     * answers (one place decides). The core goes amber while one waits.
+     * @param {{ ask: string, yes: string, no: string, onYes: () => void, onNo: () => void }[]} items
+     */
+    setNeeds: (items) => {
+      waiting = items.length;
+      needs.setNote(items.length > 0 ? `${items.length} waiting` : "");
+      needs.body.replaceChildren(
+        ...(items.length > 0
+          ? items.map((it) => {
+              const row = el("div", "hb-need");
+              const buttons = el("div", "hb-need-buttons");
+              const yes = /** @type {HTMLButtonElement} */ (el("button", "hb-yes", it.yes));
+              const no = /** @type {HTMLButtonElement} */ (el("button", "hb-no", it.no));
+              yes.type = "button";
+              no.type = "button";
+              yes.addEventListener("click", it.onYes);
+              no.addEventListener("click", it.onNo);
+              buttons.append(yes, no);
+              row.append(el("span", "", it.ask), buttons);
+              return row;
+            })
+          : [el("p", "hb-note", "Nothing waiting for you.")]),
+      );
+      paint();
+    },
+    /** What Atlas is doing, for the core's light: idle, thinking, waiting (for his OK) or error. @param {"idle" | "thinking" | "waiting" | "error"} next @param {string} [text] */
+    setPhase: (next, text) => {
+      phase = next;
       now.textContent = text ?? "";
+      paint();
     },
   };
 };
