@@ -12,6 +12,9 @@ const el = (tag, className, text) => {
   return e;
 };
 
+/** Lines that happen all the time and say nothing he'd want on the dashboard. */
+const ROUTINE = new Set(["request", "speak", "brain set", "memories listed", "settings", "transcribed", "tts", "stt", "warm", "notices", "reach", "costs"]);
+
 /** @param {number} n */
 const usd = (n) => `$${(Math.round(n * 100) / 100).toFixed(2)}`;
 
@@ -104,7 +107,8 @@ const card = (title, note, kind) => {
 export const makeHomeView = (host, deps = {}) => {
   const get = deps.fetch ?? fetch;
   const root = el("div", "hb");
-  const header = el("header", "hb-header");
+  // A div, not <header>: the page styles <header> as its own top bar.
+  const header = el("div", "hb-header");
   const kicker = el("div", "hb-kicker");
   const stats = el("div", "hb-stats");
   header.append(kicker, el("h2", "hb-title", "THE HOUSE BRAIN"), stats);
@@ -114,6 +118,7 @@ export const makeHomeView = (host, deps = {}) => {
   centre.append(theCore, now);
   const activity = card("Live activity", "today");
   const tools = card("Tools connected", "");
+  tools.body.classList.add("hb-tools");
   const needs = card("Needs your call", "", "amber");
   needs.body.append(el("p", "hb-note", "Nothing waiting for you."));
   const left = el("div", "hb-column");
@@ -158,11 +163,16 @@ export const makeHomeView = (host, deps = {}) => {
     /** @type {{ time: string, message: string, path?: string, severity: string }[]} */
     const entries = Array.isArray(logs?.entries) ? logs.entries : [];
     const today = new Date().toDateString();
-    const recent = entries.filter((e) => !e.path && e.message !== "request" && new Date(e.time).toDateString() === today).slice(-8).reverse();
+    const recent = entries
+      .filter((e) => !e.path && !ROUTINE.has(e.message) && new Date(e.time).toDateString() === today)
+      // The same thing several times in a row is one line.
+      .filter((e, i, all) => all[i + 1]?.message !== e.message)
+      .slice(-8)
+      .reverse();
     activity.body.replaceChildren(
       ...(recent.length > 0
         ? recent.map((e) => {
-            const row = el("div", `hb-row${e.severity === "ERROR" ? " hb-error" : ""}`);
+            const row = el("div", `hb-row hb-event${e.severity === "ERROR" ? " hb-error" : ""}`);
             row.append(el("span", "hb-time", new Date(e.time).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })), el("span", "", e.message));
             return row;
           })
