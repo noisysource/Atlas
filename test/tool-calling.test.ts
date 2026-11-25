@@ -294,6 +294,7 @@ describe("native tool calling (#104)", () => {
       ]);
       expect(tools).toEqual(["calendar_read Wed 11 Nov → 1 event"]);
       expect(appendTurn([], "assistant", "One meeting.", tools)).toEqual([{ role: "assistant", text: "One meeting.", tools }]);
+      expect(appendTurn([], "assistant", "", [])).toEqual([{ role: "assistant", text: "—" }]);
       expect(appendTurn([], "assistant", "Hi.", [])).toEqual([{ role: "assistant", text: "Hi." }]);
     });
 

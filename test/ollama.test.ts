@@ -2,7 +2,7 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import type { AddressInfo } from "node:net";
 import { afterEach, describe, expect, it } from "vitest";
 import { makeLlm } from "../src/llm/registry.js";
-import { makeOllamaLlm, OLLAMA_KEEP_ALIVE, ollamaBody, warmOllama } from "../src/llm/ollama.js";
+import { chatContextFor, makeOllamaLlm, OLLAMA_KEEP_ALIVE, ollamaBody, warmOllama } from "../src/llm/ollama.js";
 import { streamOrCall } from "../src/llm/stream.js";
 import type { LlmRequest } from "../src/llm/types.js";
 
@@ -74,7 +74,7 @@ describe("Ollama provider (#88)", () => {
       model: "llama3.1:8b",
       stream: true,
       keep_alive: OLLAMA_KEEP_ALIVE,
-      options: { num_predict: 500 },
+      options: { num_predict: 500, num_ctx: 16_384 },
       messages: [
         { role: "system", content: "You are Atlas.\n\nNow: Sunday" },
         { role: "user", content: "When does my passport expire?" },
@@ -83,6 +83,22 @@ describe("Ollama provider (#88)", () => {
       ],
     });
     expect(ollamaBody("m", request).keep_alive).toBe("30m");
+  });
+
+  it("an empty answer (no words, no tool calls) is an error, not an empty reply", async () => {
+    const base = await fakeOllama((_req, _body, res) => {
+      res.writeHead(200, { "content-type": "application/x-ndjson" });
+      res.end(`${JSON.stringify({ message: { role: "assistant", content: "", thinking: "Hmm, hello…" }, done: true, done_reason: "length" })}\n`);
+    });
+    const got = await makeOllamaLlm({ model: "qwen3.5:4b", baseUrl: base })(request);
+    expect(got).toMatchObject({ ok: false, error: { kind: "invalid_output" } });
+    if (!got.ok) expect(got.error.userMessage).toContain("spent its whole answer thinking");
+  });
+
+  it("gives a chat a fixed context big enough for its prompt and tools: 16k, or 32k for a big one", () => {
+    expect(chatContextFor(request)).toBe(16_384);
+    const tools = Array.from({ length: 80 }, (_, i) => ({ name: `tool_${i}`, description: "x".repeat(600), inputSchema: { type: "object" as const, properties: {} } }));
+    expect(chatContextFor({ ...request, tools })).toBe(32_768);
   });
 
   it("sends think: false when set, so a thinking model like qwen3 answers straight away; drops it if the model refuses it", async () => {
@@ -183,7 +199,7 @@ describe("Ollama provider (#88)", () => {
       res.end("{}");
     });
     expect(await warmOllama({ model: "llama3.1:8b", baseUrl: base })).toBe(true);
-    expect(body).toEqual({ url: "/api/generate", model: "llama3.1:8b", keep_alive: "30m" });
+    expect(body).toEqual({ url: "/api/generate", model: "llama3.1:8b", keep_alive: "30m", options: { num_ctx: 16_384 } });
     expect(await warmOllama({ model: "m", baseUrl: new URL("http://127.0.0.1:9") })).toBe(false);
     expect(makeLlm({ provider: "ollama", model: "llama3.1:8b" }, {}, { ollama: base }).ok).toBe(true);
   });
