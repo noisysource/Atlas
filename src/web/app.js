@@ -332,7 +332,16 @@ byId("codemaps").addEventListener("click", () => void codeMapView.open());
 // #300: the costs live in the panel's Costs tab.
 const costsView = makeCostsView(byId("costs-view"), { show: () => side.open("costs"), close: () => side.close() });
 // The House Brain on top of the Dashboard: Atlas's core, its frontier, the numbers.
-const homeView = makeHomeView(byId("home-view"));
+// Talking from the Dashboard goes through the chat (one conversation): typed words are sent as
+// if typed in the chat, the core opens the mic like 🎤, and the last exchange is mirrored back.
+const homeView = makeHomeView(byId("home-view"), {
+  onAsk: (text) => {
+    audio(); // a tap or Enter, so the browser lets Atlas's voice play
+    submit(text);
+  },
+  onTalk: () => micButton.click(),
+  onOpenChat: () => side.close(),
+});
 
 // #143: how he got there, for the current answer, as a tree that grows while he works.
 // #309: in the System panel, under the session and cost cards.
@@ -890,6 +899,7 @@ const renderControls = () => {
   phaseText.textContent =
     state.phase === "thinking" && state.progress ? state.progress : phaseLabel(state.phase, state.language, session?.bargeIn ?? null);
   homeView.setPhase(state.phase === "idle" ? "idle" : "thinking", state.phase === "idle" ? "" : phaseText.textContent ?? "");
+  homeView.setListening(session !== null);
   micButton.disabled = !listenAvailable() && session === null;
   if (!listenAvailable()) micButton.title = !micSupported ? "This browser can't record the microphone" : "Listening is English-only for now";
   micNote.hidden = listenAvailable();
@@ -2905,3 +2915,25 @@ var systemPanel = makeSystemPanel(byId("system"), {
   who: () => people.name(),
   sources: () => ({ on: reachNodes.filter((n) => n.status === "on" || n.status === "ready").length, all: reachNodes.filter((n) => n.status !== "kiro").length }),
 });
+
+// The Dashboard shows the last exchange of the chat under Atlas's core.
+{
+  let queued = false;
+  const mirror = () => {
+    queued = false;
+    const items = /** @type {HTMLElement[]} */ ([...transcript.querySelectorAll("li.message")]);
+    const lastYou = [...items].reverse().find((li) => li.classList.contains("user"));
+    const after = lastYou ? items.slice(items.indexOf(lastYou) + 1) : items;
+    const atlas = [...after].reverse().find((li) => !li.classList.contains("user"));
+    const text = (/** @type {HTMLElement | undefined} */ li) => li?.querySelector("p")?.textContent?.trim() ?? "";
+    homeView.setExchange({ you: text(lastYou), atlas: text(atlas), kind: atlas ? ([...atlas.classList].find((c) => c !== "message") ?? "answer") : "answer" });
+  };
+  new MutationObserver(() => {
+    if (queued) return;
+    queued = true;
+    requestAnimationFrame(mirror);
+  }).observe(transcript, { childList: true, subtree: true, characterData: true });
+}
+
+// Atlas opens on the Dashboard (the House Brain); the chat is a click away.
+/** @type {HTMLButtonElement | null} */ (document.querySelector('.rail [role="tab"][data-tab="costs"]'))?.click();

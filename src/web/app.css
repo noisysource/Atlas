@@ -4327,7 +4327,7 @@ body[data-side="true"] .app .center .layout {
 .hb-on { color: var(--reach, #9fb8ff); }
 .hb-off { color: var(--muted); }
 .hb-error { color: var(--fail, #ff6b6b); }
-.hb-centre { display: flex; flex-direction: column; align-items: center; gap: 30px; }
+.hb-centre { display: flex; flex-direction: column; align-items: center; gap: 18px; }
 .hb-now { margin: 0; min-height: 1.4em; font-size: 12px; color: #bfe4ff; text-align: center; }
 
 .hb-core { --hb: 140, 200, 255; --hb-glow: 74, 155, 255; position: relative; width: 320px; height: 320px; max-width: 100%; }
@@ -4364,6 +4364,23 @@ body[data-side="true"] .app .center .layout {
 .hb-core[data-phase="thinking"] .hb-haze { animation-duration: 9s; }
 .hb-core[data-phase="thinking"] .hb-fragments { animation-duration: 14s; }
 .hb-core[data-phase="thinking"] .hb-heart { animation: hb-pulse 1.6s ease-in-out infinite; }
+/* Tap the core to talk; listening, it glows a little brighter and its heart beats. */
+.hb-core[role="button"] { cursor: pointer; border-radius: 50%; }
+.hb-core[role="button"]:focus-visible { outline: 2px solid rgba(var(--hb), 0.6); outline-offset: 6px; }
+.hb-core[data-listening="true"] { --hb: 170, 225, 255; --hb-glow: 110, 190, 255; }
+.hb-core[data-listening="true"] .hb-heart { animation: hb-pulse 1.1s ease-in-out infinite; }
+/* The last exchange and the ask box, under the core. */
+.hb-exchange { width: min(100%, 34rem); display: flex; flex-direction: column; gap: 6px; text-align: center; }
+.hb-exchange[hidden] { display: none; }
+.hb-said { margin: 0; font-size: 11px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hb-reply { margin: 0; font-size: 13px; line-height: 1.5; color: #e6ecff; max-height: 9em; overflow-y: auto; white-space: pre-wrap; scrollbar-width: thin; }
+.hb-reply[data-kind="error"] { color: #ff9b9b; }
+.hb-ask { width: min(100%, 34rem); display: flex; gap: 8px; padding: 6px 6px 6px 16px; border-radius: 999px; background: radial-gradient(ellipse 80% 120% at 50% 50%, rgba(20, 30, 70, 0.75) 0%, rgba(10, 13, 24, 0.5) 70%, rgba(3, 4, 10, 0.2) 100%); box-shadow: 0 0 24px rgba(74, 155, 255, 0.12); }
+.hb-ask-input { flex: 1; min-width: 0; border: 0; background: none; color: var(--text); font: inherit; font-size: 13px; outline: none; }
+.hb-ask-send { border: 0; border-radius: 999px; padding: 6px 14px; background: rgba(74, 155, 255, 0.22); color: #cfe0ff; font: inherit; font-size: 12px; cursor: pointer; }
+.hb-ask-send:hover { background: rgba(74, 155, 255, 0.35); }
+.hb-open-chat { border: 0; background: none; color: var(--muted); font: inherit; font-size: 11px; cursor: pointer; text-decoration: underline; text-underline-offset: 3px; }
+.hb-open-chat:hover { color: #cfe0ff; }
 @keyframes hb-orbit { to { transform: rotate(360deg); } }
 @keyframes hb-globe { from { transform: rotateX(-18deg) rotateY(0deg); } to { transform: rotateX(-18deg) rotateY(360deg); } }
 @keyframes hb-pulse { 0%, 100% { opacity: 0.25; } 45% { opacity: 1; } }

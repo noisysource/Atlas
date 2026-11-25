@@ -176,7 +176,7 @@ const card = (title, note, kind) => {
 
 /**
  * @param {HTMLElement} host
- * @param {{ fetch?: typeof fetch }} [deps]
+ * @param {{ fetch?: typeof fetch, onAsk?: (text: string) => void, onTalk?: () => void, onOpenChat?: () => void }} [deps]
  */
 export const makeHomeView = (host, deps = {}) => {
   const get = deps.fetch ?? fetch;
@@ -188,8 +188,49 @@ export const makeHomeView = (host, deps = {}) => {
   header.append(kicker, el("h2", "hb-title", "THE HOUSE BRAIN"), stats);
   const theCore = core();
   const now = el("p", "hb-now", "");
+  // Talking to Atlas from here: the core is the mic, the box sends typed words, and
+  // the last exchange shows under the core; the full chat (history, longer answers) is a click away.
+  if (deps.onTalk) {
+    theCore.setAttribute("role", "button");
+    theCore.tabIndex = 0;
+    theCore.setAttribute("aria-label", "Talk to Atlas");
+    theCore.title = "Tap to talk";
+    const talk = deps.onTalk;
+    theCore.addEventListener("click", () => talk());
+    theCore.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        talk();
+      }
+    });
+  }
+  const said = el("p", "hb-said", "");
+  const reply = el("p", "hb-reply", "");
+  const exchange = el("div", "hb-exchange");
+  exchange.hidden = true;
+  exchange.append(said, reply);
+  const askForm = /** @type {HTMLFormElement} */ (el("form", "hb-ask"));
+  const askBox = /** @type {HTMLInputElement} */ (el("input", "hb-ask-input"));
+  askBox.type = "text";
+  askBox.maxLength = 2000;
+  askBox.placeholder = "Ask Atlas…";
+  askBox.setAttribute("aria-label", "Ask Atlas");
+  askBox.autocomplete = "off";
+  const askSend = /** @type {HTMLButtonElement} */ (el("button", "hb-ask-send", "Send"));
+  askSend.type = "submit";
+  askForm.append(askBox, askSend);
+  askForm.addEventListener("submit", (event) => {
+    event.preventDefault();
+    const text = askBox.value.trim();
+    if (text === "" || !deps.onAsk) return;
+    deps.onAsk(text);
+    askBox.value = "";
+  });
+  const openChat = /** @type {HTMLButtonElement} */ (el("button", "hb-open-chat", "Open the full chat"));
+  openChat.type = "button";
+  if (deps.onOpenChat) openChat.addEventListener("click", deps.onOpenChat);
   const centre = el("div", "hb-centre");
-  centre.append(theCore, now);
+  centre.append(theCore, now, ...(deps.onAsk ? [exchange, askForm] : []), ...(deps.onOpenChat ? [openChat] : []));
   const activity = card("Live activity", "today");
   const tools = card("Tools connected", "");
   tools.body.classList.add("hb-tools");
@@ -319,6 +360,18 @@ export const makeHomeView = (host, deps = {}) => {
       phase = next;
       now.textContent = text ?? "";
       paint();
+    },
+    /** The mic is open (a spoken conversation): the core shows it's listening. @param {boolean} on */
+    setListening: (on) => {
+      theCore.dataset.listening = String(on);
+      theCore.setAttribute("aria-pressed", String(on));
+    },
+    /** The last exchange, from the chat: what he said and Atlas's reply so far. @param {{ you: string, atlas: string, kind?: string }} x */
+    setExchange: (x) => {
+      exchange.hidden = x.you === "" && x.atlas === "";
+      said.textContent = x.you;
+      reply.textContent = x.atlas;
+      reply.dataset.kind = x.kind ?? "answer";
     },
   };
 };
