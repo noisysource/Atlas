@@ -463,3 +463,52 @@ describe("employer Social Security on contracts", () => {
     expect(String(got[1]?.notes)).not.toContain("assumed");
   });
 });
+
+describe("FinHub setup from the first statements", () => {
+  it("proposes each entity with its account's 1 January balance and its loans, no account numbers, after his OK", async () => {
+    const { buildSetup } = await import("../src/finhub/finhub.js");
+    const files = [
+      { id: "lib", name: "Atlas", mimeType: "application/vnd.google-apps.folder" },
+    ];
+    void files;
+    const llm = async () => ({
+      ok: true as const,
+      value: {
+        kind: "json" as const,
+        value: {
+          accountName: "Conta Valor BPI PT50 0010 0000 4653 7840 0018 6",
+          institution: "BPI",
+          accountType: "checking",
+          openingBalance: 3291.39,
+          loans: [{ name: "Mortgage …165-003", lender: "BPI", facilityType: "mortgage", currentBalance: 96865.41, apr: 3.102, monthlyPayment: 439.34, dueDay: 1, maturityDate: "2054-04-01" }],
+        },
+        usage: { inputTokens: 1, outputTokens: 1 },
+      },
+    });
+    const drive = {
+      account: "noisysource" as const,
+      folder: "root",
+      client: {
+        list: async ({ folder }: { folder?: string }) =>
+          ({
+            ok: true as const,
+            value: folder === "root"
+              ? [{ id: "bank", name: "bank statements", mimeType: "application/vnd.google-apps.folder" }]
+              : folder === "bank"
+                ? [{ id: "hh", name: "BPI - Personal", mimeType: "application/vnd.google-apps.folder" }]
+                : folder === "hh"
+                  ? [{ id: "s1", name: "20260109_Extrato_Integrado.pdf", mimeType: "application/pdf", size: 1 }]
+                  : [],
+          }) as never,
+        read: async () => ({ ok: true as const, value: { name: "x", text: "extrato ".repeat(20) } }) as never,
+      },
+    };
+    const got = await buildSetup({ drive: drive as never, llm: llm as never, year: 2026, id: "setup-2026" });
+    if (!got.ok) throw new Error(got.error);
+    const setup = got.value.doc.setup;
+    expect(setup?.entities).toEqual([{ name: "Household (Renato & Marisa)", entityType: "personal", registrationCode: "" }]);
+    expect(setup?.accounts[0]).toMatchObject({ entityName: "Household (Renato & Marisa)", institution: "BPI", balance: 3291.39, balanceDate: "2026-01-01" });
+    expect(String(setup?.accounts[0]?.name)).not.toMatch(/\d{4}/);
+    expect(setup?.loans[0]).toMatchObject({ facilityType: "mortgage", currentBalance: 96865.41, apr: 3.1, maturityDate: "2054-04-01" });
+  });
+});

@@ -109,6 +109,27 @@ export const FINHUB_CONTRACTS_TOOL: LlmTool = {
   },
 };
 
+export const FINHUB_SETUP_TOOL: LlmTool = {
+  name: "finhub_setup",
+  description:
+    "Propose FinHub's setup for a year from the documents: the companies and the household, each bank account with its balance on 1 January (from the year's first statement), and the loans the statements show (mortgages, personal credit). Run it once, on an empty or new book, before the contracts and the months. It shows him a card; after his OK it lands in FinHub's \"From Atlas\" tab, where he creates them (\"Create these\"). Never bank account numbers: he adds the IBANs.",
+  inputSchema: {
+    type: "object",
+    properties: {
+      year: { type: "integer", description: "The year, e.g. 2026 (default this year)" },
+      again: { type: "boolean", description: "Propose it again after he created or set aside the last one" },
+    },
+    additionalProperties: false,
+  },
+};
+
+/** The book's entity for each of Atlas's: name, kind, NIPC/NIF (FinHub matches names ignoring case and "Lda"). */
+export const BOOK_ENTITIES: Record<string, { readonly name: string; readonly entityType: "company" | "personal"; readonly registrationCode: string }> = {
+  "Noisy Source": { name: "NoisySource, Lda", entityType: "company", registrationCode: "517010585" },
+  "Noisy Phocus": { name: "Noisy Phocus, Lda", entityType: "company", registrationCode: "518942120" },
+  Household: { name: "Household (Renato & Marisa)", entityType: "personal", registrationCode: "" },
+};
+
 // ── What the brain extracts, and its schemas ──────────────────────────────────
 
 const num = { type: "number" } as const;
@@ -131,6 +152,35 @@ export const closed = (schema: JsonObjectSchema): JsonObjectSchema => {
   };
   return walk(schema) as JsonObjectSchema;
 };
+
+export const SETUP_SCHEMA: JsonObjectSchema = closed({
+  type: "object",
+  properties: {
+    accountName: { type: "string", description: "The account's product name, e.g. \"BPI Negócios\" or \"Conta Valor BPI\"" },
+    institution: { type: "string", description: "The bank, e.g. BPI" },
+    accountType: { type: "string", enum: ["checking", "savings"] },
+    openingBalance: { type: "number", description: "Euros on 1 January of the year asked: the balance after the last movement dated in December (or the statement's opening balance when it starts on 1 January)" },
+    loans: {
+      type: "array",
+      description: "Loans the statement shows (crédito habitação, crédito pessoal…), with what's still owed",
+      items: {
+        type: "object",
+        properties: {
+          name: { type: "string", description: "e.g. \"Mortgage …165-003\" (the contract's last digits only)" },
+          lender: text,
+          facilityType: { type: "string", enum: ["mortgage", "term_loan", "credit_line", "credit_card", "equipment_loan"] },
+          currentBalance: { type: "number", description: "Capital still owed (capital vincendo)" },
+          apr: { type: "number", description: "Percent: the nominal rate (TAN)" },
+          monthlyPayment: { type: "number", description: "The monthly instalment (prestação), 0 if not shown" },
+          dueDay: { type: "integer", description: "Day of the month it's paid" },
+          maturityDate: { type: "string", description: "YYYY-MM-DD the contract ends, or empty" },
+        },
+        required: ["name", "lender", "facilityType", "currentBalance", "apr", "monthlyPayment", "dueDay", "maturityDate"],
+      },
+    },
+  },
+  required: ["accountName", "institution", "accountType", "openingBalance", "loans"],
+});
 
 export const STATEMENT_SCHEMA: JsonObjectSchema = closed({
   type: "object",
@@ -304,6 +354,8 @@ export type ImportDoc = {
   contracts: O[];
   subscriptions: O[];
   facilities: O[];
+  /** The book's setup (entities, accounts, loans), from finhub_setup. */
+  setup?: { entities: O[]; accounts: O[]; loans: O[] };
 };
 
 export const statementOf = (raw: unknown, filename: string): Statement => {
@@ -438,9 +490,10 @@ export const importId = (entity: string, month: string, again?: number): string 
   `${entity.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")}-${month}${again ? `-${again.toString(36)}` : ""}`;
 
 /** What an import holds, in a line. */
-export const countsOf = (d: Pick<ImportDoc, "statements" | "payslips" | "contracts" | "subscriptions" | "facilities">): string => {
+export const countsOf = (d: Pick<ImportDoc, "statements" | "payslips" | "contracts" | "subscriptions" | "facilities" | "setup">): string => {
   const lines = d.statements.reduce((n, s) => n + s.lines.length, 0);
   const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
+  if (d.setup) return [plural(d.setup.entities.length, "entity", "entities"), plural(d.setup.accounts.length, "account"), plural(d.setup.loans.length, "loan")].join(", ");
   return (
     [
       d.statements.length > 0 ? `${plural(d.statements.length, "statement")} (${plural(lines, "line")})` : "",
@@ -1027,6 +1080,106 @@ export const buildYearContracts = async (deps: {
   });
 };
 
+// ── The book's setup, from the year's first statements ────────────────────────
+
+export const buildSetup = async (deps: {
+  readonly drive: FinhubDrive;
+  readonly llm: LlmCall;
+  readonly year: number;
+  readonly id: string;
+  readonly signal?: AbortSignal;
+  readonly log?: Logger;
+  readonly progress?: (text: string) => void;
+}): Promise<Result<ImportPlan, string>> => {
+  const { drive, llm, year, signal } = deps;
+  const lib = await libraryFiles(drive, signal);
+  if (!lib.ok) return lib;
+  if (!lib.value) return err("the setup needs the Atlas folder (bank statements by entity)");
+  const warnings: string[] = [];
+  const entities: O[] = [];
+  const accounts: O[] = [];
+  const loans: O[] = [];
+  const sources: Source[] = [];
+  const files = lib.value;
+  const firsts = ENTITIES.flatMap((entity) => {
+    const first = files
+      .filter((f) => f.kind === "statement" && f.entity === entity && f.month?.startsWith(`${year}-`))
+      .sort((a, b) => (a.month ?? "").localeCompare(b.month ?? ""))[0];
+    if (!first) warnings.push(`no ${year} statement for ${entity}`);
+    return first ? [{ entity, file: first }] : [];
+  });
+  for (const [i, { entity, file }] of firsts.entries()) {
+    deps.progress?.(`Reading ${entity}'s first statement of ${year}, ${file.file.name} (${i + 1}/${firsts.length})…`);
+    const read = await drive.client.read({ account: drive.account, id: file.file.id }, signal);
+    if (!read.ok) {
+      warnings.push(`${file.file.name}: couldn't read it (${read.error.message})`);
+      continue;
+    }
+    const got = await llm({
+      system: `You read a Portuguese bank statement for FinHub's setup of ${entity} for ${year}: the account (product name and bank), its balance on 1 January ${year}, and every loan it shows with what's still owed. Never give account, IBAN or card numbers; for a loan's name use its kind and the contract's last digits only. Reply with the JSON only.`,
+      messages: [{ role: "user", text: `<document name="${file.file.name.replace(/"/g, "'")}">\n${read.value.text.slice(0, MAX_TEXT)}\n</document>` }],
+      outputSchema: SETUP_SCHEMA,
+      maxTokens: 3_000,
+    });
+    if (!got.ok || got.value.kind !== "json") {
+      const why = got.ok ? "not in the expected shape" : `${got.error.kind}: ${got.error.message.slice(0, 120)}`;
+      warnings.push(`${file.file.name}: not read (${why})`);
+      continue;
+    }
+    const x = obj(got.value.value);
+    const book = BOOK_ENTITIES[entity] as (typeof BOOK_ENTITIES)[string];
+    sources.push({ kind: "drive", name: file.file.name.slice(0, 200), id: file.file.id, link: `https://drive.google.com/file/d/${encodeURIComponent(file.file.id)}/view` });
+    if (!entities.some((e) => e.name === book.name)) entities.push({ ...book });
+    const accountName = str(x.accountName, 100) || `${str(x.institution, 60) || "Bank"} account`;
+    // Never an account number, even if the model put one in a name.
+    const clean = (t: string) => t.replace(/\b(PT50)?[\d\s.-]{9,}\b/gi, "").replace(/\s+/g, " ").trim();
+    accounts.push({ entityName: book.name, name: clean(accountName) || "Bank account", institution: clean(str(x.institution, 100)) || "Bank", accountType: x.accountType === "savings" ? "savings" : "checking", balance: money(x.openingBalance), balanceDate: `${year}-01-01` });
+    for (const l of arr(x.loans, 10).map(obj)) {
+      const maturity = str(l.maturityDate, 10);
+      loans.push({
+        entityName: book.name,
+        accountName: clean(accountName) || "Bank account",
+        name: clean(str(l.name, 100)) || "Loan",
+        lender: str(l.lender, 100) || str(x.institution, 100),
+        facilityType: ["mortgage", "term_loan", "credit_line", "credit_card", "equipment_loan"].includes(String(l.facilityType)) ? l.facilityType : "term_loan",
+        principalOrLimit: money(l.currentBalance),
+        currentBalance: money(l.currentBalance),
+        apr: money(l.apr),
+        monthlyPayment: money(l.monthlyPayment),
+        dueDay: Math.min(28, Math.max(1, Math.round(money(l.dueDay)) || 1)),
+        maturityDate: /^20\d\d-\d\d-\d\d$/.test(maturity) ? maturity : "",
+      });
+    }
+  }
+  if (accounts.length === 0) return err(`nothing could be read for the ${year} setup${warnings.length > 0 ? `: ${warnings.join("; ")}` : ""}`);
+  const eur = (n: unknown) => `€${Number(n).toFixed(2)}`;
+  const doc: ImportDoc = {
+    entityHint: "All",
+    month: `${year}-01`,
+    summary: [
+      `FinHub's setup for ${year}, read by Atlas from each entity's first statement: ${entities.length} entities, ${accounts.length} accounts (balances on 1 January), ${loans.length} loans. Add each account's IBAN yourself in Accounts.`,
+      ...accounts.map((a) => `${String(a.entityName)}: ${String(a.name)} (${String(a.institution)}) ${eur(a.balance)} on ${year}-01-01`),
+      ...loans.map((l) => `${String(l.entityName)}: ${String(l.name)}, owed ${eur(l.currentBalance)} at ${String(l.apr)}%`),
+      ...warnings.map((w) => `⚠ ${w}`),
+    ].join("\n").slice(0, 4000),
+    sources,
+    statements: [],
+    payslips: [],
+    contracts: [],
+    subscriptions: [],
+    facilities: [],
+    setup: { entities, accounts, loans },
+  };
+  deps.log?.info("finhub setup built", { year, entities: entities.length, accounts: accounts.length, loans: loans.length });
+  return ok({
+    id: deps.id,
+    doc,
+    label: `Send FinHub's ${year} setup for review: ${entities.length} entities, ${accounts.length} accounts, ${loans.length} loans${warnings.length > 0 ? ` (${warnings.length} warning${warnings.length === 1 ? "" : "s"})` : ""}`,
+    warnings,
+    what: `FinHub's ${year} setup`,
+  });
+};
+
 // ── Writing the import, after his OK ──────────────────────────────────────────
 
 /** FinHub's project as Atlas (domotics.ts's client, with FinHub's own user). */
@@ -1039,6 +1192,8 @@ export type FinhubDb = {
 export type FinhubImports = {
   readonly propose: (input: unknown, now: Date, signal?: AbortSignal, progress?: (text: string) => void) => Promise<Result<{ readonly id: string; readonly label: string; readonly warnings: readonly string[] }, string>>;
   readonly decide: (id: string, decision: "yes" | "no") => Promise<{ readonly ok: boolean; readonly text: string; readonly tool?: string }>;
+  /** The book's setup: entities, accounts with their 1 January balances, loans. */
+  readonly proposeSetup: (input: unknown, now: Date, signal?: AbortSignal, progress?: (text: string) => void) => Promise<Result<{ readonly id: string; readonly label: string; readonly warnings: readonly string[]; readonly summary: string }, string>>;
   /** The year pass: one entity's contracts from all its payslips of a year. */
   readonly proposeContracts: (input: unknown, now: Date, signal?: AbortSignal, progress?: (text: string) => void) => Promise<Result<{ readonly id: string; readonly label: string; readonly warnings: readonly string[]; /** Each person's versions and exceptions, for the model to tell him. */ readonly summary: string }, string>>;
 };
@@ -1107,6 +1262,27 @@ export const makeFinhubImports = (deps: {
       pending.set(card, { plan: plan.value, until: now() + 60 * 60_000 });
       return ok({ id: card, label: plan.value.label, warnings: plan.value.warnings });
     },
+    proposeSetup: async (input, today, signal, progress) => {
+      const i = obj(input);
+      const thisYear = today.getUTCFullYear();
+      const year = i.year === undefined ? thisYear : typeof i.year === "number" && Number.isInteger(i.year) ? i.year : NaN;
+      if (!(year >= 2000 && year <= thisYear)) return err(`year: a whole year up to ${thisYear}`);
+      while (built.length > 0 && (built[0] ?? 0) <= now() - 86_400_000) built.shift();
+      if (built.length >= cap) return err(`I've built ${cap} imports today, my limit; try tomorrow`);
+      const id = importId("setup", String(year), i.again === true ? now() : undefined);
+      const existing = await deps.db.get([...IMPORTS_PATH, id], signal);
+      if (!existing.ok) return err(`FinHub couldn't be read: ${existing.error.message}`);
+      const status = existing.value?.fields.status;
+      if (status === "applied" || status === "dismissed")
+        return err(`the ${year} setup was already ${status === "applied" ? "created in FinHub" : "set aside"}; propose it again only if he asks (again: true)`);
+      built.push(now());
+      const plan = await buildSetup({ drive: deps.drive, llm: deps.llm, year, id, ...(signal ? { signal } : {}), ...(deps.log ? { log: deps.log } : {}), ...(progress ? { progress } : {}) });
+      if (!plan.ok) return plan;
+      for (const [k, v] of pending) if (v.until <= now()) pending.delete(k);
+      const card = newId();
+      pending.set(card, { plan: plan.value, until: now() + 60 * 60_000 });
+      return ok({ id: card, label: plan.value.label, warnings: plan.value.warnings, summary: plan.value.doc.summary });
+    },
     proposeContracts: async (input, today, signal, progress) => {
       const c = checkContracts(input, today);
       if (!c.ok) return c;
@@ -1138,7 +1314,7 @@ export const makeFinhubImports = (deps: {
         return { ok: false, text: `Nothing was sent: ${written.error.message}.` };
       }
       deps.log?.info("finhub import sent", { month: plan.doc.month });
-      return { ok: true, text: `Sent: ${plan.what ?? `${plan.doc.entityHint} · ${plan.doc.month}`} ${plan.what ? "are" : "is"} in FinHub's "From Atlas" tab (${countsOf(plan.doc)}). Review ${plan.what ? "them" : "it"} in the workbench and commit there.`, tool: plan.what ? FINHUB_CONTRACTS_TOOL.name : FINHUB_IMPORT_TOOL.name };
+      return { ok: true, text: `Sent: ${plan.what ?? `${plan.doc.entityHint} · ${plan.doc.month}`} ${plan.what ? "are" : "is"} in FinHub's "From Atlas" tab (${countsOf(plan.doc)}). Review ${plan.what ? "them" : "it"} in the workbench and commit there.`, tool: plan.doc.setup ? FINHUB_SETUP_TOOL.name : plan.what ? FINHUB_CONTRACTS_TOOL.name : FINHUB_IMPORT_TOOL.name };
     },
   };
 };
