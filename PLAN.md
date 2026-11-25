@@ -1585,9 +1585,11 @@ frontier of light, the headline numbers, live activity, tools connected) and ste
 Needs your call, every waiting card in one list, answered through the card in the chat; the
 core turns amber).
 
-Next, step 3, the domain panels (House, FinHub, Dev, KidClub, Comms): one read-only GET
-per panel on the server (`/home/panel/:id`), each running that connector's own read tool
-with fixed input and no model (house_now, kanban_list, calendar_read for today, FinHub's
-book for cash per entity and imports waiting; KidClub through Vendus, read-only), cached
-for a minute, returned as a few labelled figures and lines for the card. EC/HRT never
-shows (Kiro's). A panel whose connector is off says so and links to Tools.
+Step 3 (the domain panels, House, FinHub, Dev, KidClub, Today): one read-only GET,
+`/home/panels` (`src/home-panels.ts`), running each connector's own read tool with fixed
+input and no model (house_now, kanban_open, vendus_invoices for the month so far), today's
+calendar (EC events left out: Kiro's), and FinHub's book (cash per entity, imports waiting)
+through a subcollection list on the Firebase client. Kept a minute. A panel with no source
+says why. Live activity now shows what Atlas did (answers, tools used, changes, imports,
+cards answered, failures) from the log, not start-up lines, and "sources connected" counts
+like the system panel (on, of every node).
