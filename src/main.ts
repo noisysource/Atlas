@@ -90,7 +90,14 @@ const brainStore = makeBrainStore({ root: process.cwd() });
 const dataset =
   cfg.env !== "production" && cfg.dataset.enabled ? makeDataset({ root: process.cwd(), settings: parseDatasetSettings("on", cfg.dataset.off), timeZone: cfg.timeZone, log }) : undefined;
 
-const deps = await buildDeps({ config: cfg, env: process.env, log, background, memoryStore });
+const deps = await buildDeps({ config: cfg, env: process.env, log, background, memoryStore, ...(dataset ? { dataset } : {}) });
+// #379, capture now: FinHub imports he decided, with his corrections, into the dataset: shortly after start, then hourly.
+const finhubSettle = deps.ok ? deps.value.finhubSettle : undefined;
+if (finhubSettle) {
+  const settle = () => void finhubSettle().catch(() => log.warn("finhub corrections failed", { reason: "unexpected" }));
+  setTimeout(settle, 15_000).unref();
+  setInterval(settle, 60 * 60_000).unref();
+}
 if (!deps.ok) refuse(deps.error);
 // #108: every night at 03:30 their time, while Atlas runs (npm run memory:reflect runs it now).
 const introspect = deps.ok ? deps.value.introspect : undefined;

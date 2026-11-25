@@ -27,6 +27,7 @@ import { makeLights } from "./house/lights.js";
 import { makeVendusGet, type VendusGet } from "./vendus/vendus.js";
 import { forCountry } from "./connectors/types.js";
 import { makeHomePanels } from "./home-panels.js";
+import { makeFinhubSettle } from "./finhub/learning.js";
 import { vendusConnector } from "./connectors/vendus.js";
 import { houseConnector } from "./connectors/house.js";
 import { kanbanConnector } from "./connectors/kanban.js";
@@ -130,6 +131,8 @@ export type AppInputs = {
   readonly vendusGet?: VendusGet;
   /** #191: tests give their own tasks. */
   readonly codeTasks?: Tasks;
+  /** #295: the dataset, when kept: FinHub's decided imports are recorded in it (#379). */
+  readonly dataset?: Dataset;
   /** Tests: a conversation store that isn't on disk. */
   readonly conversation?: ConversationStore;
   /** #290 tests: a household that isn't on disk. */
@@ -606,7 +609,10 @@ export const buildDeps = async (inputs: AppInputs): Promise<Result<Deps, string>
             const got = fb.list ? await fb.list(["finhub_books", "noisysource-group"], collection, limit) : err({ message: "can't list" });
             return got.ok ? ok(got.value.map((d) => ({ ...d.fields, id: d.path.split("/").pop() ?? "" }))) : err(got.error.message);
           };
-          return { drive, list, imports: makeFinhubImports({ drive, llm: finhubLlm.value, db: { ...db, list }, log }) };
+          // #379, capture now: each import he decided in FinHub, with his corrections, into the dataset.
+          const dataset = inputs.dataset;
+          const settle = dataset ? makeFinhubSettle({ listImports: (limit) => list("atlas_imports", limit), record: (e) => dataset.record(e), who: "renato", root: process.cwd(), log }) : undefined;
+          return { drive, list, settle, imports: makeFinhubImports({ drive, llm: finhubLlm.value, db: { ...db, list }, log }) };
         })()
       : undefined;
   // FINHUB=on but no tools: say why at start-up, rather than a FinHub question quietly getting none.
@@ -947,6 +953,7 @@ export const buildDeps = async (inputs: AppInputs): Promise<Result<Deps, string>
     ...(studies ? { codeStudies: studies, codeMaps: async () => mapViews(await noteStore.all()) } : {}),
     ...(fixes ? { codeFixes: fixes } : {}),
     ...(tasks ? { codeTasks: tasks } : {}),
+    ...(finhubImports?.settle ? { finhubSettle: finhubImports.settle } : {}),
     ...(morningBrief ? { morningBrief } : {}),
     ...(codeRefresh ? { codeRefresh } : {}),
     ...(prs ? { prClose: prs } : {}),

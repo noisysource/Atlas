@@ -1127,6 +1127,12 @@ Confirmed (2026-11-12):
   subscription. The model only names each one and says its kind; loans (the setup has
   them), salaries, taxes and transfers are left out and listed. One proposal
   `{entity}-{year}-recurring` with subscription drafts (usual amount, day, VAT).
+  Capture now, train later (#379, 2026-11-25): on commit FinHub keeps what he committed
+  beside the proposal (`committed` on the import); `finhub/learning.ts` sweeps the book's
+  decided imports at start and hourly and records each once in the dataset (#295) as a
+  `finhub` entry: the proposal item by item (masked: no IBANs or long numbers) and his
+  corrections (removed, edited fields, unticked lines). The nightly review skips them;
+  they're for training the local model.
   FINHUB_MODEL picks who reads the documents (default the answer model;
   `ollama:<model>` keeps them on this Mac, with a context sized to the document
   and thinking off).
