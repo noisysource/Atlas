@@ -946,6 +946,18 @@ committed.
 
 ## Decisions
 
+**Local only (Renato, 2026-11-25; supersedes the cloud model choices below where they
+conflict):** Atlas answers and runs everything on his own machines; no data goes to a cloud
+AI. Every model role is an Ollama model; Gemini Live, Anthropic web search and the Claude
+Code agent are off; speech stays local (whisper.cpp, Kokoro/Piper). A hard case goes to a
+bigger local model or to him, never to Claude. Atlas still reads and writes his data where
+it lives (Gmail, Drive, Calendar, FinHub/Firebase, Vendus, GitHub); WhatsApp (Meta) is off
+unless he turns it on. Atlas moves to an always-on home Mac, reached from anywhere over a
+private connection (no open ports), and learns from his corrections by training there.
+Plan, in order: #382 (local-only switch) → #383 (home server) → #377 (routine) → #378
+(document inbox) → #384 (from anywhere, voice on the phone) → #379 (learning, local
+training).
+
 Confirmed in #1 (2026-11-05):
 
 - **Models:** Claude Haiku (`claude-haiku-5-5`) for the classifier, Claude
