@@ -26,7 +26,7 @@ import { randomBytes } from "node:crypto";
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import { makeGoogleCalendarReader } from "../src/calendar/google.js";
-import { authorizationUrl, CALENDAR_LIST_SCOPE, CALENDAR_SCOPE, CALENDAR_WRITE_SCOPE, exchangeCode, makeAccessTokens, makePkce, nodeTokenFiles, parseClientFile } from "../src/calendar/oauth.js";
+import { authorizationUrl, CALENDAR_APP_SCOPE, CALENDAR_LIST_SCOPE, CALENDAR_SCOPE, CALENDAR_WRITE_SCOPE, exchangeCode, makeAccessTokens, makePkce, nodeTokenFiles, parseClientFile } from "../src/calendar/oauth.js";
 import { localDate } from "../src/calendar/read.js";
 import { CALENDAR_ACCOUNTS, calendarTokensPath, isCalendarAccount } from "../src/calendar/accounts.js";
 import { loadConfig } from "../src/config.js";
@@ -60,7 +60,9 @@ await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
 const redirectUri = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
 const write = process.env.CALENDAR_WRITE === "on";
 // #263: plus the list of calendars it shows, so shared ones are read too.
-const scope = `${write ? CALENDAR_WRITE_SCOPE : CALENDAR_SCOPE} ${CALENDAR_LIST_SCOPE}`;
+// FinHub's calendar: Atlas's own "FinHub" calendar and its events, nothing else.
+const finhub = process.env.CALENDAR_FINHUB === "on";
+const scope = `${write ? CALENDAR_WRITE_SCOPE : CALENDAR_SCOPE} ${CALENDAR_LIST_SCOPE}${finhub ? ` ${CALENDAR_APP_SCOPE}` : ""}`;
 const url = authorizationUrl({ clientId: oauthClient.clientId, redirectUri, challenge, state, scope });
 console.log(`Connecting the "${account}" calendar. On Google's screen, pick that account.`);
 console.log(write ? "Asking for read and add access to its events (Atlas adds only after your OK), and to see which calendars it shows.\n" : "Asking for read-only access to its events, and to see which calendars it shows.\n");
@@ -104,6 +106,14 @@ if (write) {
     granted.includes(CALENDAR_WRITE_SCOPE)
       ? "✓ Write access granted: Atlas can add events, always after your OK."
       : "✗ Write access was NOT granted (the box for editing events was probably unticked on Google's screen). Run this again and tick it.",
+  );
+}
+
+if (finhub) {
+  console.log(
+    granted.includes(CALENDAR_APP_SCOPE)
+      ? '✓ FinHub calendar access granted: Atlas can keep its own "FinHub" calendar, and only that one.'
+      : "✗ FinHub calendar access was NOT granted (its box was probably unticked on Google's screen). Run this again and tick it.",
   );
 }
 

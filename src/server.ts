@@ -490,6 +490,25 @@ export const makeServer = (
       c.header("Cache-Control", "no-store");
       return c.json({ panels: await homePanels() });
     });
+  // The House Brain's unified calendar: read-only, kept a minute.
+  const homeCalendar = deps.homeCalendar;
+  if (homeCalendar)
+    app.get("/home/calendar", async (c) => {
+      c.header("Cache-Control", "no-store");
+      return c.json(await homeCalendar());
+    });
+  // FinHub's version back in Google, for a plan changed there: his click is the OK.
+  const finhubCalendar = deps.finhubCalendar;
+  if (finhubCalendar)
+    app.post("/finhub-calendar/put-back", bodyLimit({ maxSize: 4 * 1024, onError: (c) => c.json(errorBody("The request is too large."), 413) }), async (c) => {
+      if (!isJson(c.req.header("content-type"))) return c.json(errorBody("POST /finhub-calendar/put-back needs Content-Type: application/json."), 415);
+      const body = (await c.req.json().catch(() => ({}))) as { key?: unknown };
+      if (typeof body.key !== "string" || body.key.length > 200) return c.json(errorBody("No key."), 400);
+      const got = await finhubCalendar.putBack(body.key);
+      if (!got.ok) return c.json(errorBody(got.error), 409);
+      if (homeCalendar) await homeCalendar(true).catch(() => undefined);
+      return c.json({ ok: true });
+    });
   // #247: what Atlas costs, per service, for the costs panel.
   const costs = deps.costs;
   if (costs) {

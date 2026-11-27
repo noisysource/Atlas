@@ -51,6 +51,13 @@ export const activityLine = (e) => {
       return `Proposed ${lead(e.year)}recurring expenses for FinHub`;
     case "finhub client contracts built":
       return "Proposed client contracts for FinHub";
+    case "finhub calendar synced": {
+      const n = (typeof e.created === "number" ? e.created : 0) + (typeof e.updated === "number" ? e.updated : 0) + (typeof e.removed === "number" ? e.removed : 0);
+      const out = typeof e.drifts === "number" && e.drifts > 0 ? ` (${e.drifts} out of step)` : "";
+      return n > 0 ? `Updated ${n} FinHub event${n === 1 ? "" : "s"} in Google${out}` : out ? `FinHub's calendar${out}` : undefined;
+    }
+    case "finhub calendar put back":
+      return "Put FinHub's version back in Google";
     case "finhub year contracts built":
       return `Proposed ${lead(e.year)}contracts for FinHub`;
     case "house changed":
@@ -246,7 +253,10 @@ export const makeHomeView = (host, deps = {}) => {
   grid.append(left, centre, tools.card);
   // The domains, under the core: House, FinHub, Dev, KidClub, Today.
   const panels = el("div", "hb-panels");
-  root.append(header, grid, panels);
+  // The unified calendar: every calendar of his, one layer each, FinHub's among them.
+  const calendarCard = card("Calendar", "next two weeks", "calendar");
+  calendarCard.card.hidden = true;
+  root.append(header, grid, panels, calendarCard.card);
   host.replaceChildren(root);
 
   const sourcesNum = el("b", "", "–");
@@ -271,8 +281,109 @@ export const makeHomeView = (host, deps = {}) => {
     );
   };
 
+  /** Layers he switched off, remembered in this browser when it lets us. */
+  const HIDDEN_KEY = "atlas.calendar.hidden";
+  /** @type {Set<string>} */
+  let hiddenLayers = new Set();
+  try {
+    const saved = JSON.parse(localStorage.getItem(HIDDEN_KEY) ?? "[]");
+    if (Array.isArray(saved)) hiddenLayers = new Set(saved.filter((x) => typeof x === "string"));
+  } catch {
+    /* storage unavailable: all layers shown */
+  }
+  /** @type {{ from: string, to: string, layers: { id: string, label: string }[], entries: { key: string, layer: string, date: string, endDate?: string, time?: string, title: string, drift?: { key: string, what: "moved" | "deleted", finhub: { title: string, start: string, end: string }, google?: { title: string, start: string, end: string } } }[] } | undefined} */
+  let calendarData;
+  const dayName = (/** @type {string} */ d) => new Date(`${d}T00:00:00Z`).toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short", timeZone: "UTC" });
+  const span = (/** @type {{ start: string, end: string }} */ x) => (x.end > x.start ? `${dayName(x.start)} – ${dayName(x.end)}` : dayName(x.start));
+
+  const renderCalendar = () => {
+    const data = calendarData;
+    if (!data) return;
+    calendarCard.card.hidden = false;
+    const chips = el("div", "hb-cal-layers");
+    for (const layer of data.layers) {
+      const chip = /** @type {HTMLButtonElement} */ (el("button", "hb-cal-chip", layer.label));
+      chip.type = "button";
+      chip.dataset.layer = layer.id;
+      chip.setAttribute("aria-pressed", String(!hiddenLayers.has(layer.id)));
+      chip.addEventListener("click", () => {
+        if (hiddenLayers.has(layer.id)) hiddenLayers.delete(layer.id);
+        else hiddenLayers.add(layer.id);
+        try {
+          localStorage.setItem(HIDDEN_KEY, JSON.stringify([...hiddenLayers]));
+        } catch {
+          /* not remembered: fine */
+        }
+        renderCalendar();
+      });
+      chips.append(chip);
+    }
+    // FinHub plans changed in Google: his call, FinHub's version or a change in FinHub.
+    const drifts = data.entries.filter((e) => e.drift);
+    const driftBox = el("div", "hb-cal-drifts");
+    for (const e of drifts) {
+      const d = e.drift;
+      if (!d) continue;
+      const row = el("div", "hb-cal-drift");
+      row.append(
+        el(
+          "span",
+          "",
+          d.what === "moved" && d.google
+            ? `${d.finhub.title}: FinHub says ${span(d.finhub)}, Google says ${span(d.google)}.`
+            : `${d.finhub.title} (${span(d.finhub)}) was deleted in Google, not in FinHub.`,
+        ),
+      );
+      const back = /** @type {HTMLButtonElement} */ (el("button", "hb-cal-back", "Put FinHub's back"));
+      back.type = "button";
+      back.title = "Or change it in FinHub, which wins";
+      back.addEventListener("click", async () => {
+        back.disabled = true;
+        const res = await get("/finhub-calendar/put-back", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ key: d.key }) }).catch(() => undefined);
+        if (res?.ok) void loadCalendar();
+        else back.disabled = false;
+      });
+      row.append(back);
+      driftBox.append(row);
+    }
+    const days = el("div", "hb-cal-days");
+    const shown = data.entries.filter((e) => !hiddenLayers.has(e.layer) && (e.endDate ?? e.date) >= data.from && e.date <= data.to);
+    /** @type {Map<string, typeof shown>} */
+    const byDay = new Map();
+    for (const e of shown) {
+      const d = e.date < data.from ? data.from : e.date;
+      byDay.set(d, [...(byDay.get(d) ?? []), e]);
+    }
+    if (byDay.size === 0) days.append(el("p", "hb-note", "Nothing in the next two weeks."));
+    for (const [d, list] of byDay) {
+      const day = el("div", "hb-cal-day");
+      day.append(el("p", "hb-cal-date", d === data.from ? "Today" : dayName(d)));
+      const items = el("ul", "hb-cal-items");
+      for (const e of list) {
+        const li = el("li", `hb-cal-item${e.drift ? " hb-cal-item-drift" : ""}`);
+        li.dataset.layer = e.layer;
+        li.append(el("span", "hb-cal-time", e.time ?? (e.endDate ? "until" : "all day")), el("span", "hb-cal-title", e.endDate ? `${e.title} · until ${dayName(e.endDate)}` : e.title));
+        items.append(li);
+      }
+      day.append(items);
+      days.append(day);
+    }
+    calendarCard.setNote(`next two weeks${drifts.length > 0 ? ` · ${drifts.length} out of step` : ""}`);
+    calendarCard.body.replaceChildren(chips, ...(drifts.length > 0 ? [driftBox] : []), days);
+  };
+
+  const loadCalendar = async () => {
+    const got = await get("/home/calendar", { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : undefined))
+      .catch(() => undefined);
+    if (!got || !Array.isArray(got.entries)) return;
+    calendarData = got;
+    renderCalendar();
+  };
+
   const load = async () => {
     void loadPanels();
+    void loadCalendar();
     kicker.textContent = `NOISY SOURCE · ATLAS · ${new Date().toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" }).toUpperCase()}`;
     const [reach, costs, logs] = await Promise.all(
       ["/reach", "/costs", "/logs?after=0"].map((u) =>
