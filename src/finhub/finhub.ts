@@ -1591,18 +1591,30 @@ export const planDaysWorked = (deps: { readonly contracts: readonly O[]; readonl
     month.set(key, now);
     drafts.push({ contractId: String(c.id), reference: str(c.reference, 100), clientName: str(c.clientName, 100), month: m, days, mode });
   }
-  // One line per contract and month: what it had, what it'll have, and the days left on the contract.
-  const lines = [...month.entries()].map(([key, now]) => {
-    const [id, m] = key.split("|") as [string, string];
+  // Per contract, in month order: each month with the days left after it (every month the
+  // contract has, at its new total, up to and including that one), then one closing line.
+  const lines: string[] = [];
+  for (const id of [...new Set([...month.keys()].map((k) => k.split("|")[0] as string))]) {
     const c = contracts.find((x) => x.id === id) as O;
-    const had = deps.handovers.filter((h) => h.contractId === id && h.month === m).reduce((n, h) => n + money(h.days), 0);
-    // The contract's days after these: the months these touch at their new totals, the rest as they are.
-    const touched = [...month.entries()].filter(([k]) => k.startsWith(`${id}|`));
-    const untouched = deps.handovers.filter((h) => h.contractId === id && !month.has(`${id}|${String(h.month)}`)).reduce((n, h) => n + money(h.days), 0);
-    const left = allowedOf(c) - untouched - touched.reduce((n, [, v]) => n + v, 0);
+    const name = `${str(c.clientName, 100)} ${str(c.reference, 100)}`.replace(/\s+/g, " ").trim();
+    const allowed = allowedOf(c);
     const rate = money(c.dailyRate);
-    return `${str(c.clientName, 100)} ${str(c.reference, 100)} · ${monthLabel(m)}: ${had === now ? `${now} days (no change)` : `${had > 0 ? `${had} → ` : ""}${now} days`}${rate > 0 ? ` (€${(now * rate).toFixed(2)})` : ""}; ${left} of ${allowedOf(c)} days left${left < 0 ? " ⚠ more than the contract allows" : ""}.`.replace(/\s+/g, " ");
-  });
+    const byMonth = new Map<string, number>();
+    for (const h of deps.handovers) if (h.contractId === id) byMonth.set(String(h.month), (byMonth.get(String(h.month)) ?? 0) + money(h.days));
+    const before = new Map(byMonth);
+    for (const [k, v] of month) if (k.startsWith(`${id}|`)) byMonth.set(k.split("|")[1] as string, v);
+    const usedBy = (m: string) => [...byMonth].filter(([x]) => x <= m).reduce((n, [, v]) => n + v, 0);
+    const mine = [...month].filter(([k]) => k.startsWith(`${id}|`)).map(([k, v]) => [k.split("|")[1] as string, v] as const).sort(([x], [y]) => x.localeCompare(y));
+    for (const [m, now] of mine) {
+      const had = before.get(m) ?? 0;
+      const left = allowed - usedBy(m);
+      lines.push(`${name} · ${monthLabel(m)}: ${had === now ? `${now} days (no change)` : `${had > 0 ? `${had} → ` : ""}${now} days`}${rate > 0 ? ` (€${(now * rate).toFixed(2)})` : ""}, ${left} left${left < 0 ? " ⚠ more than the contract allows" : ""}.`);
+    }
+    const used = [...byMonth.values()].reduce((n, v) => n + v, 0);
+    const others = [...byMonth].filter(([m]) => !month.has(`${id}|${m}`)).reduce((n, [, v]) => n + v, 0);
+    const ours = used - others;
+    lines.push(`${name}: ${ours} days here${others > 0 ? ` + ${others} already in FinHub (other months)` : ""} = ${used} of ${allowed} used, ${allowed - used} left.`);
+  }
   return ok({ drafts, lines });
 };
 

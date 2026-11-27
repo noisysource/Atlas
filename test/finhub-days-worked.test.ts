@@ -19,12 +19,12 @@ describe("finhub_days_worked", () => {
   it("adds this week's days to the month of the one contract covering it, with the days left", () => {
     const got = planDaysWorked({ contracts, handovers, input: { entries: [{ month: "2026-11", days: 4 }] }, today });
     expect(got.ok && got.value.drafts).toEqual([{ contractId: "c30557", reference: "30557", clientName: "Malt", month: "2026-11", days: 4, mode: "add" }]);
-    expect(got.ok && got.value.lines).toEqual(["Malt 30557 · Nov 2026: 10 → 14 days (€8319.36); 50 of 189 days left."]);
+    expect(got.ok && got.value.lines).toEqual(["Malt 30557 · Nov 2026: 10 → 14 days (€8319.36), 50 left.", "Malt 30557: 14 days here + 125 already in FinHub (other months) = 139 of 189 used, 50 left."]);
   });
 
   it("sets past months, and a month with two contracts needs the reference", () => {
     const set = planDaysWorked({ contracts, handovers: [], input: { mode: "set", entries: [{ month: "2024-08", days: 4 }, { month: "2024-09", days: 21 }] }, today });
-    expect(set.ok && set.value.lines).toEqual(["Malt 017436 · Aug 2024: 4 days (€2274.32); 137 of 162 days left.", "Malt 017436 · Sep 2024: 21 days (€11940.18); 137 of 162 days left."]);
+    expect(set.ok && set.value.lines).toEqual(["Malt 017436 · Aug 2024: 4 days (€2274.32), 158 left.", "Malt 017436 · Sep 2024: 21 days (€11940.18), 137 left.", "Malt 017436: 25 days here = 25 of 162 used, 137 left."]);
     const both = planDaysWorked({ contracts, handovers: [], input: { mode: "set", entries: [{ month: "2026-03", days: 18 }] }, today });
     expect(!both.ok && both.error).toMatch(/2 contracts cover Mar 2026 \(26089, 30557\)/);
     const named = planDaysWorked({ contracts, handovers: [], input: { mode: "set", entries: [{ month: "2026-03", days: 18, reference: "26089" }] }, today });
