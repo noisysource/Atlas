@@ -400,6 +400,8 @@ export type Deps = {
   readonly codeTasks?: Pick<Tasks, "decide" | "list" | "stop" | "recover">;
   /** #379 (capture now): FinHub's decided imports into the dataset, his corrections included; run at start and hourly. */
   readonly finhubSettle?: () => Promise<number>;
+  /** FinHub's days off in step with his Google Calendar (client contracts); run at start and hourly. */
+  readonly finhubDaysOff?: () => Promise<{ readonly added: number; readonly removed: number }>;
   /** #214: his answer to tidying the inbox (POST /gmail/tidy). Only "yes" archives or labels. */
   readonly gmailTidy?: Pick<InboxTidy, "decide">;
   /** #270: his answer to a Drive change (POST /drive/confirm). Only "yes" creates the folder or saves the file. */

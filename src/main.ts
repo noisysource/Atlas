@@ -98,6 +98,13 @@ if (finhubSettle) {
   setTimeout(settle, 15_000).unref();
   setInterval(settle, 60 * 60_000).unref();
 }
+// FinHub's days off in step with his Google Calendar (client contracts): shortly after start, then hourly.
+const finhubDaysOff = deps.ok ? deps.value.finhubDaysOff : undefined;
+if (finhubDaysOff) {
+  const sync = () => void finhubDaysOff().catch(() => log.warn("finhub days off failed", { reason: "unexpected" }));
+  setTimeout(sync, 20_000).unref();
+  setInterval(sync, 60 * 60_000).unref();
+}
 if (!deps.ok) refuse(deps.error);
 // #108: every night at 03:30 their time, while Atlas runs (npm run memory:reflect runs it now).
 const introspect = deps.ok ? deps.value.introspect : undefined;

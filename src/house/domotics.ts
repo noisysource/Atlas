@@ -36,6 +36,8 @@ export type Domotics = {
   readonly add: (collection: string, fields: Record<string, unknown>) => Promise<Result<string, DomoticsError>>;
   /** Writes a whole document at a path (creating or replacing it), the named fields set to the server's time. */
   readonly put: (path: readonly string[], fields: Record<string, unknown>, serverTimes: readonly string[]) => Promise<Result<true, DomoticsError>>;
+  /** Deletes one document (FinHub's days off from his calendar, when they leave it). */
+  readonly remove?: (path: readonly string[], signal?: AbortSignal) => Promise<Result<true, DomoticsError>>;
   /** Up to `limit` documents of a subcollection under a document (FinHub's book), in no set order. */
   readonly list?: (parent: readonly string[], collection: string, limit: number, signal?: AbortSignal) => Promise<Result<DbDoc[], DomoticsError>>;
 };
@@ -198,6 +200,11 @@ export const makeDomotics = (deps: { readonly user: () => Promise<FirebaseUser |
         `read ${collection}`,
         signal,
       ),
+    remove: async (path, signal) => {
+      if (!safePath(path)) return err({ code: "failed", message: "not a document path" });
+      const got = await request((u) => `${base(u)}/${path.join("/")}`, { method: "DELETE" }, `delete ${path.join("/")}`, signal);
+      return got.ok ? ok(true) : got;
+    },
     patch: async (path, fields) => {
       if (!safePath(path)) return err({ code: "failed", message: "not a document path" });
       const mask = Object.keys(fields)

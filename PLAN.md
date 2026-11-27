@@ -1145,6 +1145,11 @@ Confirmed (2026-11-12):
   `finhub` entry: the proposal item by item (masked: no IBANs or long numbers) and his
   corrections (removed, edited fields, unticked lines). The nightly review skips them;
   they're for training the local model.
+  Client contracts (FinHub, 2026-11-27): a pot of days at a daily rate (the Malt contract);
+  FinHub projects when the days run out from `daysOff`. `finhub/days-off.ts` keeps the
+  `source: google` days in step with his own calendars (all-day events titled vacation,
+  férias, folga, day off, OOO…; never EC events), at start and hourly; the closures he enters
+  in FinHub are never touched (the rules hold Atlas to `google` days).
   FINHUB_MODEL picks who reads the documents (default the answer model;
   `ollama:<model>` keeps them on this Mac, with a context sized to the document
   and thinking off).

@@ -28,6 +28,7 @@ import { makeVendusGet, type VendusGet } from "./vendus/vendus.js";
 import { forCountry } from "./connectors/types.js";
 import { makeHomePanels } from "./home-panels.js";
 import { makeFinhubSettle } from "./finhub/learning.js";
+import { makeDaysOffSync } from "./finhub/days-off.js";
 import { vendusConnector } from "./connectors/vendus.js";
 import { houseConnector } from "./connectors/house.js";
 import { kanbanConnector } from "./connectors/kanban.js";
@@ -612,7 +613,8 @@ export const buildDeps = async (inputs: AppInputs): Promise<Result<Deps, string>
           // #379, capture now: each import he decided in FinHub, with his corrections, into the dataset.
           const dataset = inputs.dataset;
           const settle = dataset ? makeFinhubSettle({ listImports: (limit) => list("atlas_imports", limit), record: (e) => dataset.record(e), who: "renato", root: process.cwd(), log }) : undefined;
-          return { drive, list, settle, imports: makeFinhubImports({ drive, llm: finhubLlm.value, db: { ...db, list }, log }) };
+          const remove = async (path: readonly string[]) => (fb.remove ? fb.remove(path) : err({ message: "can't delete" }));
+          return { drive, list, settle, put: fb.put, remove, imports: makeFinhubImports({ drive, llm: finhubLlm.value, db: { ...db, list }, log }) };
         })()
       : undefined;
   // FINHUB=on but no tools: say why at start-up, rather than a FinHub question quietly getting none.
@@ -831,6 +833,22 @@ export const buildDeps = async (inputs: AppInputs): Promise<Result<Deps, string>
         config.country,
       )
     : [];
+  // FinHub's days off in step with his Google Calendar (client contracts' projection): his own
+  // calendars, never EC events.
+  const finhubDaysOff =
+    finhubImports && calendar
+      ? makeDaysOffSync({
+          events: async (range) => {
+            const got = await readAccounts(calendar.accounts ?? { personal: calendar.read }, range, undefined);
+            return got.ok ? ok(got.value.events) : got;
+          },
+          list: finhubImports.list,
+          put: finhubImports.put,
+          remove: finhubImports.remove,
+          book: ["finhub_books", "noisysource-group"],
+          log,
+        })
+      : undefined;
   // The House Brain's domain panels: fixed read-only reads, no model.
   const homePanels = makeHomePanels({
     connectors: plugged,
@@ -954,6 +972,7 @@ export const buildDeps = async (inputs: AppInputs): Promise<Result<Deps, string>
     ...(fixes ? { codeFixes: fixes } : {}),
     ...(tasks ? { codeTasks: tasks } : {}),
     ...(finhubImports?.settle ? { finhubSettle: finhubImports.settle } : {}),
+    ...(finhubDaysOff ? { finhubDaysOff } : {}),
     ...(morningBrief ? { morningBrief } : {}),
     ...(codeRefresh ? { codeRefresh } : {}),
     ...(prs ? { prClose: prs } : {}),
