@@ -49,6 +49,8 @@ export const activityLine = (e) => {
       return `Proposed FinHub's ${lead(e.year)}setup`;
     case "finhub year recurring built":
       return `Proposed ${lead(e.year)}recurring expenses for FinHub`;
+    case "finhub client contracts built":
+      return "Proposed client contracts for FinHub";
     case "finhub calendar synced": {
       const n = (typeof e.created === "number" ? e.created : 0) + (typeof e.updated === "number" ? e.updated : 0) + (typeof e.removed === "number" ? e.removed : 0);
       const out = typeof e.drifts === "number" && e.drifts > 0 ? ` (${e.drifts} out of step)` : "";
