@@ -1139,6 +1139,11 @@ Confirmed (2026-11-12):
   subscription. The model only names each one and says its kind; loans (the setup has
   them), salaries, taxes and transfers are left out and listed. One proposal
   `{entity}-{year}-recurring` with subscription drafts (usual amount, day, VAT).
+  `finhub_client_contracts` (2026-11-27): the contracts folder in the Atlas folder ("Malt
+  Contracts") holds one order per contract (a number of days at a daily rate over a period).
+  Each is read once (first 20,000 characters: the order summary; thinking off) into FinHub's
+  client contract shape (the supplier's NIF gives the entity); one proposal
+  `client-contracts-{year}` with `clientContracts`, created in FinHub's From Atlas tab.
   Capture now, train later (#379, 2026-11-25): on commit FinHub keeps what he committed
   beside the proposal (`committed` on the import); `finhub/learning.ts` sweeps the book's
   decided imports at start and hourly and records each once in the dataset (#295) as a

@@ -29,7 +29,7 @@ export const IMPORTS_PATH = ["finhub_books", FINHUB_BOOK, "atlas_imports"] as co
 /** The entities as FinHub names them; an import says which by name. */
 export const ENTITIES = ["Noisy Source", "Noisy Phocus", "Household"] as const;
 
-export type FileKind = "payslip" | "statement" | "invoice" | "other";
+export type FileKind = "payslip" | "statement" | "invoice" | "contract" | "other";
 
 /** What a file is, by its name (Portuguese and English). The brain can say otherwise. */
 export const kindOfFile = (name: string): FileKind => {
@@ -121,6 +121,17 @@ export const FINHUB_RECURRING_TOOL: LlmTool = {
       again: { type: "boolean", description: "Work them out again after he committed or set aside the last ones" },
     },
     required: ["entity"],
+    additionalProperties: false,
+  },
+};
+
+export const FINHUB_CLIENT_CONTRACTS_TOOL: LlmTool = {
+  name: "finhub_client_contracts",
+  description:
+    "Read the client contracts in the Atlas folder's contracts folder (the Malt orders: a number of days at a daily rate over a period) and propose them to FinHub as client contracts. Each order is its own contract (client, order number, period, days, daily rate, VAT, payment terms). It shows him a card; nothing is sent until his OK, then he creates them in FinHub's \"From Atlas\" tab. Handovers (days worked each month) aren't in these documents.",
+  inputSchema: {
+    type: "object",
+    properties: { again: { type: "boolean", description: "Propose them again after he created or set aside the last ones" } },
     additionalProperties: false,
   },
 };
@@ -372,6 +383,8 @@ export type ImportDoc = {
   facilities: O[];
   /** The book's setup (entities, accounts, loans), from finhub_setup. */
   setup?: { entities: O[]; accounts: O[]; loans: O[] };
+  /** Client contracts (the income side: a pot of days at a daily rate), from finhub_client_contracts. */
+  clientContracts?: O[];
 };
 
 export const statementOf = (raw: unknown, filename: string): Statement => {
@@ -506,9 +519,10 @@ export const importId = (entity: string, month: string, again?: number): string 
   `${entity.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")}-${month}${again ? `-${again.toString(36)}` : ""}`;
 
 /** What an import holds, in a line. */
-export const countsOf = (d: Pick<ImportDoc, "statements" | "payslips" | "contracts" | "subscriptions" | "facilities" | "setup">): string => {
+export const countsOf = (d: Pick<ImportDoc, "statements" | "payslips" | "contracts" | "subscriptions" | "facilities" | "setup" | "clientContracts">): string => {
   const lines = d.statements.reduce((n, s) => n + s.lines.length, 0);
   const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
+  if (d.clientContracts) return plural(d.clientContracts.length, "client contract");
   if (d.setup) return [plural(d.setup.entities.length, "entity", "entities"), plural(d.setup.accounts.length, "account"), plural(d.setup.loans.length, "loan")].join(", ");
   return (
     [
@@ -615,6 +629,8 @@ const KIND_FOLDERS: readonly { readonly match: RegExp; readonly kind: FileKind }
   { match: /bank|statement|extrato|extracto/i, kind: "statement" },
   { match: /payslip|recibo|vencimento|salar/i, kind: "payslip" },
   { match: /invoice|fatura|factura/i, kind: "invoice" },
+  // Client contracts (the Malt orders): "Malt Contracts", "Contratos".
+  { match: /contract|contrato/i, kind: "contract" },
 ];
 
 /** The library's files, if the folder is laid out by kind (bank statements, payslips, invoices); undefined if it isn't. */
@@ -1389,6 +1405,113 @@ export const buildYearRecurring = async (deps: {
   });
 };
 
+// ── Client contracts (the Malt orders) ──────────────────────────────────────────
+
+export const CLIENT_CONTRACT_SCHEMA: JsonObjectSchema = closed({
+  type: "object",
+  properties: {
+    isContract: { type: "boolean", description: "false if this isn't an order or contract for services at a daily rate" },
+    clientName: { type: "string", description: "Who pays: the platform or company named as the party issuing the order (e.g. \"Malt\")" },
+    reference: { type: "string", description: "The order or contract number, e.g. \"30557\"" },
+    title: { type: "string", description: "The assignment's name as written, short" },
+    supplierNif: { type: "string", description: "The supplier's (his company's) registration or VAT number, digits only, e.g. 517010585" },
+    startDate: { type: "string", description: "YYYY-MM-DD" },
+    endDate: { type: "string", description: "YYYY-MM-DD" },
+    daysAllowed: { type: "number", description: "Total work time in days" },
+    dailyRate: { type: "number", description: "Daily rate excluding taxes, in euros" },
+    vatRate: { type: "number", description: "VAT percent on the invoices: 0 when it says reverse charge" },
+    paymentTermsDays: { type: "integer", description: "Days from the approved timesheet or invoice to payment, if stated" },
+  },
+  required: ["isContract", "clientName", "reference", "title", "supplierNif", "startDate", "endDate", "daysAllowed", "dailyRate", "vatRate", "paymentTermsDays"],
+});
+
+const clientContractPrompt = () =>
+  "You read one order or contract for consulting services paid at a daily rate (e.g. a Malt order summary) and copy its terms into the given shape. Only what the document says: dates as YYYY-MM-DD, amounts as numbers in euros, the rate excluding taxes. VAT 0 when it says reverse charge. Payment terms: the days stated for paying after the timesheet or invoice (e.g. \"within ten (10) calendar days\" is 10); 0 if not stated.";
+
+/** One extracted order as FinHub's client contract draft (utils/clientContracts.ts in FinHub). */
+export const clientContractDraft = (raw: unknown, today: string): O | undefined => {
+  const x = obj(raw);
+  if (x.isContract === false) return undefined;
+  const startDate = isoDate(x.startDate);
+  const endDate = isoDate(x.endDate);
+  const daysAllowed = money(x.daysAllowed);
+  const dailyRate = money(x.dailyRate);
+  if (!startDate || !endDate || endDate < startDate || !(daysAllowed > 0) || !(dailyRate > 0)) return undefined;
+  const nif = str(x.supplierNif, 20).replace(/\D/g, "").replace(/^(\d{9}).*/, "$1");
+  const reference = str(x.reference, 100);
+  return {
+    entityHint: EMPLOYERS[nif] ?? "Noisy Source",
+    clientName: str(x.clientName, 100) || "Client",
+    reference,
+    startDate,
+    endDate,
+    daysAllowed: Math.min(2000, daysAllowed),
+    dailyRate: Math.min(100000, dailyRate),
+    vatRate: intIn(Math.round(money(x.vatRate)), 0, 23, 0),
+    paymentTermsDays: intIn(Number(x.paymentTermsDays), 0, 365, 10) || 10,
+    warnMonths: 3,
+    amendments: [],
+    active: endDate >= today,
+    notes: str(x.title, 200),
+  };
+};
+
+export const buildClientContracts = async (deps: {
+  readonly drive: FinhubDrive;
+  readonly llm: LlmCall;
+  readonly id: string;
+  readonly today: string;
+  readonly signal?: AbortSignal;
+  readonly log?: Logger;
+  readonly progress?: (text: string) => void;
+}): Promise<Result<ImportPlan, string>> => {
+  const lib = await libraryFiles(deps.drive, deps.signal);
+  if (!lib.ok) return lib;
+  const files = (lib.value ?? []).filter((f) => f.kind === "contract").slice(0, 30);
+  if (files.length === 0) return err("no contracts folder in the Atlas folder (a folder named like \"Malt Contracts\" or \"Contratos\")");
+  const warnings: string[] = [];
+  const drafts: O[] = [];
+  const sources: Source[] = [];
+  for (const [i, f] of files.entries()) {
+    deps.progress?.(`Reading ${f.file.name} (${i + 1}/${files.length})…`);
+    const read = await deps.drive.client.read({ account: deps.drive.account, id: f.file.id }, deps.signal);
+    if (!read.ok) {
+      warnings.push(`${f.file.name}: couldn't read it (${read.error.message})`);
+      continue;
+    }
+    // The order summary is on the first pages; the general terms after it don't change the figures.
+    const got = await deps.llm({ system: clientContractPrompt(), messages: [{ role: "user", text: `<document name="${f.file.name.replace(/"/g, "'")}">\n${read.value.text.slice(0, 20_000)}\n</document>` }], outputSchema: CLIENT_CONTRACT_SCHEMA, maxTokens: 2_000, thinking: "off" });
+    if (!got.ok || got.value.kind !== "json") {
+      warnings.push(`${f.file.name}: not extracted (${got.ok ? "not in the expected shape" : got.error.kind})`);
+      continue;
+    }
+    const draft = clientContractDraft(got.value.value, deps.today);
+    if (!draft) {
+      warnings.push(`${f.file.name}: not a contract at a daily rate, or its dates, days or rate are missing`);
+      continue;
+    }
+    drafts.push(draft);
+    sources.push({ kind: "drive", name: f.file.name.slice(0, 200), id: f.file.id, link: `https://drive.google.com/file/d/${encodeURIComponent(f.file.id)}/view` });
+  }
+  if (drafts.length === 0) return err(`no contract could be read${warnings.length > 0 ? `: ${warnings.join("; ")}` : ""}`);
+  drafts.sort((a, b) => String(a.startDate).localeCompare(String(b.startDate)));
+  const line = (d: O) => `${String(d.clientName)} ${String(d.reference)}: ${String(d.startDate)} to ${String(d.endDate)}, ${String(d.daysAllowed)} days at €${Number(d.dailyRate).toFixed(2)}/day (VAT ${String(d.vatRate)}%, paid ${String(d.paymentTermsDays)} days after), for ${String(d.entityHint)}${d.active ? "" : " (ended)"}.`;
+  const doc: ImportDoc = {
+    entityHint: String(drafts[0]?.entityHint ?? "Noisy Source"),
+    month: deps.today.slice(0, 7),
+    summary: [`Client contracts read by Atlas from ${drafts.length} document${drafts.length === 1 ? "" : "s"}:`, ...drafts.map(line), ...warnings.map((w) => `⚠ ${w}`)].join("\n").slice(0, 4000),
+    sources,
+    statements: [],
+    payslips: [],
+    contracts: [],
+    subscriptions: [],
+    facilities: [],
+    clientContracts: drafts,
+  };
+  deps.log?.info("finhub client contracts built", { contracts: drafts.length });
+  return ok({ id: deps.id, doc, label: `Send ${drafts.length} client contract${drafts.length === 1 ? "" : "s"} to FinHub for review${warnings.length > 0 ? ` (${warnings.length} warning${warnings.length === 1 ? "" : "s"})` : ""}`, warnings, what: "the client contracts" });
+};
+
 // ── The book's setup, from the year's first statements ────────────────────────
 
 export const buildSetup = async (deps: {
@@ -1510,6 +1633,8 @@ export type FinhubImports = {
   readonly proposeSetup: (input: unknown, now: Date, signal?: AbortSignal, progress?: (text: string) => void) => Promise<Result<{ readonly id: string; readonly label: string; readonly warnings: readonly string[]; readonly summary: string }, string>>;
   /** The year pass: one entity's contracts from all its payslips of a year. */
   readonly proposeContracts: (input: unknown, now: Date, signal?: AbortSignal, progress?: (text: string) => void) => Promise<Result<{ readonly id: string; readonly label: string; readonly warnings: readonly string[]; /** Each person's versions and exceptions, for the model to tell him. */ readonly summary: string }, string>>;
+  /** Client contracts from the contracts folder (the Malt orders). */
+  readonly proposeClientContracts: (input: unknown, now: Date, signal?: AbortSignal, progress?: (text: string) => void) => Promise<Result<{ readonly id: string; readonly label: string; readonly warnings: readonly string[]; readonly summary: string }, string>>;
   /** The year pass for expenses: one entity's subscriptions and recurring charges from all its statements of a year. */
   readonly proposeRecurring: (input: unknown, now: Date, signal?: AbortSignal, progress?: (text: string) => void) => Promise<Result<{ readonly id: string; readonly label: string; readonly warnings: readonly string[]; readonly summary: string }, string>>;
 };
@@ -1618,6 +1743,24 @@ export const makeFinhubImports = (deps: {
       pending.set(card, { plan: plan.value, until: now() + 60 * 60_000 });
       return ok({ id: card, label: plan.value.label, warnings: plan.value.warnings, summary: plan.value.doc.summary });
     },
+    proposeClientContracts: async (input, today, signal, progress) => {
+      const again = obj(input).again === true;
+      while (built.length > 0 && (built[0] ?? 0) <= now() - 86_400_000) built.shift();
+      if (built.length >= cap) return err(`I've built ${cap} imports today, my limit; try tomorrow`);
+      const id = importId("client-contracts", today.toISOString().slice(0, 4), again ? now() : undefined);
+      const existing = await deps.db.get([...IMPORTS_PATH, id], signal);
+      if (!existing.ok) return err(`FinHub couldn't be read: ${existing.error.message}`);
+      const status = existing.value?.fields.status;
+      if (status === "applied" || status === "dismissed")
+        return err(`the client contracts were already ${status === "applied" ? "created in FinHub" : "set aside"}; propose them again only if he asks (again: true)`);
+      built.push(now());
+      const plan = await buildClientContracts({ drive: deps.drive, llm: deps.llm, id, today: today.toISOString().slice(0, 10), ...(signal ? { signal } : {}), ...(deps.log ? { log: deps.log } : {}), ...(progress ? { progress } : {}) });
+      if (!plan.ok) return plan;
+      for (const [k, v] of pending) if (v.until <= now()) pending.delete(k);
+      const card = newId();
+      pending.set(card, { plan: plan.value, until: now() + 60 * 60_000 });
+      return ok({ id: card, label: plan.value.label, warnings: plan.value.warnings, summary: plan.value.doc.summary });
+    },
     proposeRecurring: async (input, today, signal, progress) => {
       const c = checkContracts(input, today);
       if (!c.ok) return c;
@@ -1652,7 +1795,7 @@ export const makeFinhubImports = (deps: {
         return { ok: false, text: `Nothing was sent: ${written.error.message}.` };
       }
       deps.log?.info("finhub import sent", { month: plan.doc.month });
-      return { ok: true, text: `Sent: ${plan.what ?? `${plan.doc.entityHint} · ${plan.doc.month}`} ${plan.what ? "are" : "is"} in FinHub's "From Atlas" tab (${countsOf(plan.doc)}). Review ${plan.what ? "them" : "it"} in the workbench and commit there.`, tool: plan.doc.setup ? FINHUB_SETUP_TOOL.name : plan.doc.contracts.length === 0 && plan.what ? FINHUB_RECURRING_TOOL.name : plan.what ? FINHUB_CONTRACTS_TOOL.name : FINHUB_IMPORT_TOOL.name };
+      return { ok: true, text: `Sent: ${plan.what ?? `${plan.doc.entityHint} · ${plan.doc.month}`} ${plan.what ? "are" : "is"} in FinHub's "From Atlas" tab (${countsOf(plan.doc)}). Review ${plan.what ? "them" : "it"} in the workbench and commit there.`, tool: plan.doc.setup ? FINHUB_SETUP_TOOL.name : plan.doc.clientContracts ? FINHUB_CLIENT_CONTRACTS_TOOL.name : plan.doc.contracts.length === 0 && plan.what ? FINHUB_RECURRING_TOOL.name : plan.what ? FINHUB_CONTRACTS_TOOL.name : FINHUB_IMPORT_TOOL.name };
     },
   };
 };

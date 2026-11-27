@@ -49,6 +49,8 @@ export const activityLine = (e) => {
       return `Proposed FinHub's ${lead(e.year)}setup`;
     case "finhub year recurring built":
       return `Proposed ${lead(e.year)}recurring expenses for FinHub`;
+    case "finhub client contracts built":
+      return "Proposed client contracts for FinHub";
     case "finhub year contracts built":
       return `Proposed ${lead(e.year)}contracts for FinHub`;
     case "house changed":
