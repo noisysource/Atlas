@@ -1610,6 +1610,18 @@ personal data tools (Gmail, Drive, calendar), phone access (#19), local speech
   status line. The answer's `brain`, the dataset and the costs dashboard count
   the brain that really answered.
 
+- **Easy questions to Local (#171, `LOCAL_EASY`, on by default):** on Claude,
+  a question that's short (≤ 280 characters), needs no tools by its words,
+  doesn't follow a tool answer and doesn't ask for careful work (write,
+  draft, plan, code, analyse…) is answered by Local when Ollama is there
+  (`src/answer/easy.ts`). It goes there **without tools**, with the
+  household's usual limits: it isn't Local mode. If Local then fails before
+  any words, Claude answers after all. The line under the answer says
+  *Local (easy question)*; the dataset keeps `routed`, so corrections after
+  those answers show whether the rules are right; the Dashboard shows how
+  many went to Local in 7 days and about what they'd have cost on Claude.
+  Rules only; a learned router can come once the dataset has enough.
+
 
 
 ## The House Brain (the Dashboard, 2026-11-25)

@@ -102,6 +102,17 @@ const daysChart = (days) => {
  * @returns {HTMLElement[]}
  */
 const detailOf = (d) => [
+  // #171: easy questions answered on this Mac instead of Claude.
+  section(
+    "Easy questions on Local (7 days)",
+    el(
+      "p",
+      "costs-note",
+      (d.easy?.answers ?? 0) > 0
+        ? `${count(d.easy.answers, "answer", "answers")} on Local instead of Claude, about ${money(d.easy.savedUsd)} saved (at Claude's ${money(d.easy.claudeAvgUsd)} an answer this week).`
+        : "None yet: short questions that need no tools go to Local when it's running (Tools → Brains → Easy questions to Local).",
+    ),
+  ),
   section("Spend per day, the last 30 days", daysChart(Array.isArray(d.days) ? d.days : [])),
   section(
     "How long answers take, by brain (7 days)",

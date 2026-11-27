@@ -183,6 +183,8 @@ const handleBare = async (deps: Deps, bare: Deps["answer"], request: AskRequest,
   const user = await answerUser(deps, request.user);
   // #323: Local wasn't there, so another brain answered.
   let fallback: { readonly to: "claude" | "google"; readonly why: string } | undefined;
+  // #171: an easy question sent to Local.
+  let routed: string | undefined;
   const answer = await bare({
     context: personal,
     ...(user ? { user } : {}),
@@ -195,7 +197,12 @@ const handleBare = async (deps: Deps, bare: Deps["answer"], request: AskRequest,
     ...(request.brain ? { brain: request.brain } : {}),
     onFallback: (f) => {
       fallback = { to: f.to, why: f.why };
+      routed = undefined;
       deps.log.info("brain fallback", { from: f.from, to: f.to, why: f.why });
+    },
+    onRouted: (r) => {
+      routed = r.why;
+      deps.log.info("brain routed", { to: r.to, why: r.why });
     },
     ...(request.spoken === true ? { spoken: true } : {}),
     ...(request.remember === false ? { remember: false } : {}),
@@ -217,8 +224,8 @@ const handleBare = async (deps: Deps, bare: Deps["answer"], request: AskRequest,
       if (step.kind === "tool" && step.name === "calendar_read") (step.ok ? guard.resultsKnown : guard.readFailed)();
     },
   });
-  const answered: Brain = fallback?.to ?? request.brain ?? "claude";
-  path.splice(1, 0, { kind: "brain", brain: answered, ...(fallback ? { instead: { asked: request.brain ?? "local", why: fallback.why } } : {}) });
+  const answered: Brain = routed ? "local" : (fallback?.to ?? request.brain ?? "claude");
+  path.splice(1, 0, { kind: "brain", brain: answered, ...(routed ? { routed } : {}), ...(fallback ? { instead: { asked: routed ? "local" : (request.brain ?? "local"), why: fallback.why } } : {}) });
   if (!answer.ok) {
     deps.log.info("ask", { outcome: answer.error.code === "cancelled" ? "cancelled" : "error", bare: true, brain: answered });
     return { type: "error", message: answer.error.message };
@@ -227,7 +234,7 @@ const handleBare = async (deps: Deps, bare: Deps["answer"], request: AskRequest,
   const checked = guard.finish(answer.value.text);
   path.push(guardStep(checked));
   deps.log.info("ask", { outcome: "answer", bare: true, brain: answered });
-  return { type: "answer", context: personal.id, answer: checked.text, ...(request.brain || fallback ? { brain: answered } : {}), path };
+  return { type: "answer", context: personal.id, answer: checked.text, ...(request.brain || fallback || routed ? { brain: answered } : {}), path };
 };
 
 type HonestyGuard = ReturnType<typeof makeHonestyGuard>;

@@ -94,6 +94,8 @@ export type AnswerEvent = {
   readonly ms: number;
   readonly outcome: string;
   readonly channel: string;
+  /** #171: an easy question sent to Local from Claude. */
+  readonly routed?: boolean;
 };
 
 export type Usage = LlmUsage & { readonly audioInputTokens?: number; readonly audioOutputTokens?: number };
@@ -337,13 +339,18 @@ export type AnswerCost = {
   readonly cacheReadTokens: number;
   readonly cacheWriteTokens: number;
   readonly usd: number;
+  readonly routed?: boolean;
 };
 
 export type ModelRow = { readonly service: Service; readonly model: string; readonly calls: number; readonly inputTokens: number; readonly outputTokens: number; readonly cacheReadTokens: number; readonly cacheWriteTokens: number; readonly cacheHitPct: number; readonly usd: number };
 export type LatencyRow = { readonly brain: string; readonly answers: number; readonly medianMs: number; readonly p90Ms: number; readonly avgUsd: number };
 export type DayRow = { readonly day: string; readonly usd: number; readonly calls: number; readonly answers: number };
 
+/** #171: easy questions answered on Local over 7 days, and about what they'd have cost on Claude. */
+export type EasyRow = { readonly answers: number; readonly savedUsd: number; readonly claudeAvgUsd: number };
+
 export type CostDetail = {
+  readonly easy: EasyRow;
   readonly answers: readonly AnswerCost[];
   readonly days: readonly DayRow[];
   readonly models: readonly ModelRow[];
@@ -375,6 +382,7 @@ export const costDetail = (events: readonly CostEvent[], answers: readonly Answe
       cacheReadTokens: sum(list, "cacheReadTokens"),
       cacheWriteTokens: sum(list, "cacheWriteTokens"),
       usd: sum(list, "usd"),
+      ...(a.routed ? { routed: true } : {}),
     };
   });
   const days: DayRow[] = [];
@@ -403,6 +411,10 @@ export const costDetail = (events: readonly CostEvent[], answers: readonly Answe
     const ms = list.map((a) => a.ms).sort((x, y) => x - y);
     return { brain, answers: list.length, medianMs: pct(ms, 0.5), p90Ms: pct(ms, 0.9), avgUsd: list.length === 0 ? 0 : list.reduce((t, a) => t + a.usd, 0) / list.length };
   });
-  return { answers: [...priced].sort((a, b) => a.at.localeCompare(b.at)).slice(-30).reverse(), days, models: modelRows, latency };
+  const onClaude = week.filter((a) => a.brain === "claude" && a.calls > 0);
+  const claudeAvgUsd = onClaude.length === 0 ? 0 : onClaude.reduce((t, a) => t + a.usd, 0) / onClaude.length;
+  const easyCount = week.filter((a) => a.routed === true).length;
+  const easy = { answers: easyCount, claudeAvgUsd, savedUsd: easyCount * claudeAvgUsd };
+  return { easy, answers: [...priced].sort((a, b) => a.at.localeCompare(b.at)).slice(-30).reverse(), days, models: modelRows, latency };
 };
 

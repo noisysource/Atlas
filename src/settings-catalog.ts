@@ -100,6 +100,14 @@ export const SECTIONS: readonly Section[] = [
         defaultOn: true,
       },
       {
+        ...on(
+          "LOCAL_EASY",
+          "Easy questions to Local",
+          "On Claude, a short question that needs no tools (a chat, a quick fact) is answered on this Mac when Local is there: cheaper and private. The line under the answer says so.",
+        ),
+        defaultOn: true,
+      },
+      {
         key: "OLLAMA_MODEL",
         label: "Local model (Ollama)",
         kind: "text",

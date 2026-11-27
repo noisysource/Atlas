@@ -277,6 +277,8 @@ export type Config = {
   readonly country: string;
   /** LOCAL_MODE (#312, default on): the Local brain gets every tool, the household's limits off, and undoable changes done at once. Off: Local has no tools, as before. */
   readonly localMode: boolean;
+  /** LOCAL_EASY (#171, default on): easy questions asked of Claude (no tools needed, short) go to Local when it's there. */
+  readonly localEasy: boolean;
   /**
    * TOOL_ROUTER (#175, default model): which tools Claude gets per question.
    * "model": the question's words, the last answers' tools and a one-word
@@ -582,6 +584,7 @@ const EnvSchema = z.object({
   GEMINI_SECRET_NAME: z.string().regex(/^[A-Za-z0-9_-]{1,255}$/).default("gemini-api-key"),
   GEMINI_LIVE: z.enum(["on", "off"]).default("on"),
   LOCAL_MODE: z.enum(["on", "off"]).default("on"),
+  LOCAL_EASY: z.enum(["on", "off"]).default("on"),
   DATASET: z.enum(["on", "off"]).default("off"),
   LEARNING: z.enum(["on", "off"]).default("off"),
   ATLAS_COUNTRY: z.string().regex(/^[A-Za-z]{2}$/, { error: "must be a two-letter country code, like PT" }).default("PT"),
@@ -730,6 +733,7 @@ export const loadConfig = (given: Env): Result<Config, string> => {
     },
     toolCalling: e.TOOL_CALLING !== "off",
     localMode: e.LOCAL_MODE === "on",
+    localEasy: e.LOCAL_EASY === "on",
     learning: e.LEARNING === "on" && e.DATASET === "on",
     country: e.ATLAS_COUNTRY.toUpperCase(),
     dataset: { enabled: e.DATASET === "on", off: e.DATASET_OFF ?? "", drive: e.DATASET_DRIVE ?? "noisysource:Atlas/dataset" },
