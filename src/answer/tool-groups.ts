@@ -155,9 +155,15 @@ const RULES: readonly { readonly pattern: RegExp; readonly groups: readonly Tool
       import*, opening balance, loan, loans, bpi, social security, irs, cash flow, forecast,
       recurring, recurring expense*, subscription*, standing charge*, client contract*, malt, daily rate, order summary,
       days worked, day worked, worked days, handover*, timesheet*, dias trabalhados, trabalhei,
+      day off, days off, vacation*, holiday*, closure*, trip*, per diem, ferias, folga*, viagem, viagens,
       contabilidade, contrato*, employment contract*, payroll, recibo*, vencimento*, salario*, extrato*, saldo*, importa*, emprestimo*, seguranca social, tesouraria, previsao, recorrente*, assinatura*, subscric*`),
     // FinHub's tools read the Drive folder themselves; with drive_list beside them,
     // the model browsed the folders and miscounted what was there.
+    groups: ["finhub"],
+  },
+  {
+    // "I'm off from 22 December": his days off, for FinHub's financial calendar.
+    pattern: /\boff\s+(?:from|on|between|until|till|next|this)\b/,
     groups: ["finhub"],
   },
   {
