@@ -136,6 +136,52 @@ export const FINHUB_CLIENT_CONTRACTS_TOOL: LlmTool = {
   },
 };
 
+export const FINHUB_CALENDAR_PLANS_TOOL: LlmTool = {
+  name: "finhub_calendar_plans",
+  description:
+    "Put his days off and trips in FinHub's financial calendar (FinHub is their master; Atlas shows them in his calendars from there) when he tells you: \"I'm off 22 December to 2 January\", \"the Commission closes 24 Dec to 1 Jan\", \"a trip to Brussels 9 to 11 December\". Days off as spans (FinHub keeps the weekdays): kind vacation (his holidays), day_off (a single day), client_closure (the client is closed), public_holiday. Trips: title, dates, destination, who travels, the company that pays (Noisy Source unless he says otherwise), and the per diem only if he gives it. Only what he said: no dates he didn't give. It shows him a card; after his OK it lands in FinHub's \"From Atlas\" tab, where he adds it to the calendar.",
+  inputSchema: {
+    type: "object",
+    properties: {
+      daysOff: {
+        type: "array",
+        maxItems: 20,
+        items: {
+          type: "object",
+          properties: {
+            from: { type: "string", description: "YYYY-MM-DD, the first day off" },
+            to: { type: "string", description: "YYYY-MM-DD, the last day off (the same day for one day)" },
+            kind: { type: "string", enum: ["vacation", "day_off", "client_closure", "public_holiday"] },
+            label: { type: "string", description: "A short name, e.g. Christmas holidays" },
+          },
+          required: ["from", "to", "kind"],
+          additionalProperties: false,
+        },
+      },
+      trips: {
+        type: "array",
+        maxItems: 20,
+        items: {
+          type: "object",
+          properties: {
+            title: { type: "string" },
+            destination: { type: "string" },
+            startDate: { type: "string", description: "YYYY-MM-DD" },
+            endDate: { type: "string", description: "YYYY-MM-DD" },
+            traveller: { type: "string" },
+            company: { type: "string", description: "Who pays; Noisy Source unless he says otherwise" },
+            perDiemDaily: { type: "number", description: "Only if he gave it" },
+            perDiemDays: { type: "number", description: "Only if he gave it" },
+          },
+          required: ["title", "startDate", "endDate"],
+          additionalProperties: false,
+        },
+      },
+    },
+    additionalProperties: false,
+  },
+};
+
 export const FINHUB_DAYS_WORKED_TOOL: LlmTool = {
   name: "finhub_days_worked",
   description:
@@ -416,6 +462,9 @@ export type ImportDoc = {
   clientContracts?: O[];
   /** Days worked on a client contract, from finhub_days_worked (FinHub's DaysWorked). */
   daysWorked?: O[];
+  /** Plans for FinHub's financial calendar, from finhub_calendar_plans (FinHub's DaysOffDraft, TripDraft). */
+  daysOff?: O[];
+  trips?: O[];
 };
 
 export const statementOf = (raw: unknown, filename: string): Statement => {
@@ -550,9 +599,10 @@ export const importId = (entity: string, month: string, again?: number): string 
   `${entity.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")}-${month}${again ? `-${again.toString(36)}` : ""}`;
 
 /** What an import holds, in a line. */
-export const countsOf = (d: Pick<ImportDoc, "statements" | "payslips" | "contracts" | "subscriptions" | "facilities" | "setup" | "clientContracts" | "daysWorked">): string => {
+export const countsOf = (d: Pick<ImportDoc, "statements" | "payslips" | "contracts" | "subscriptions" | "facilities" | "setup" | "clientContracts" | "daysWorked" | "daysOff" | "trips">): string => {
   const lines = d.statements.reduce((n, s) => n + s.lines.length, 0);
   const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
+  if (d.daysOff || d.trips) return [d.daysOff?.length ? plural(d.daysOff.length, "days-off span") : "", d.trips?.length ? plural(d.trips.length, "trip") : ""].filter(Boolean).join(", ");
   if (d.daysWorked) return `${plural(d.daysWorked.reduce((n, x) => n + Number(x.days ?? 0), 0), "day")} worked`;
   if (d.clientContracts) return plural(d.clientContracts.length, "client contract");
   if (d.setup) return [plural(d.setup.entities.length, "entity", "entities"), plural(d.setup.accounts.length, "account"), plural(d.setup.loans.length, "loan")].join(", ");
@@ -1551,6 +1601,46 @@ export const buildClientContracts = async (deps: {
  */
 export const bookFilterOf = (collection: string): { readonly field: string; readonly value: string } | undefined => (collection === "atlas_imports" ? undefined : { field: "userId", value: FINHUB_BOOK });
 
+// ── Days off and trips, from what he says ─────────────────────────────────────
+
+const DAY = /^20\d{2}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/;
+const DAY_OFF_KINDS = ["vacation", "day_off", "client_closure", "public_holiday"] as const;
+const DAY_OFF_NAMES: Record<(typeof DAY_OFF_KINDS)[number], string> = { vacation: "Vacation", day_off: "Day off", client_closure: "Client closure", public_holiday: "Public holiday" };
+const dayLabel = (d: string) => `${Number(d.slice(8, 10))} ${MONTH_NAMES[Number(d.slice(5, 7)) - 1] ?? ""} ${d.slice(0, 4)}`;
+
+/** His days off and trips, checked, as FinHub's drafts and the card's lines. FinHub keeps the weekdays. */
+export const planCalendar = (input: unknown, today: string): Result<{ readonly daysOff: O[]; readonly trips: O[]; readonly lines: readonly string[] }, string> => {
+  const i = obj(input);
+  const daysOff: O[] = [];
+  const trips: O[] = [];
+  const lines: string[] = [];
+  for (const raw of arr(i.daysOff, 20).map(obj)) {
+    const from = String(raw.from ?? "");
+    const to = String(raw.to ?? from);
+    if (!DAY.test(from) || !DAY.test(to) || to < from) return err(`days off ${from} to ${to}: dates as YYYY-MM-DD, the last on or after the first`);
+    if ((Date.parse(to) - Date.parse(from)) / 86_400_000 > 120) return err(`days off ${from} to ${to}: more than four months; ask him`);
+    const kind = DAY_OFF_KINDS.find((k) => k === raw.kind) ?? "day_off";
+    const label = str(raw.label, 120).trim();
+    daysOff.push({ from, to, kind, label });
+    lines.push(`${label || DAY_OFF_NAMES[kind]}: ${dayLabel(from)}${to !== from ? ` to ${dayLabel(to)}` : ""} (${DAY_OFF_NAMES[kind].toLowerCase()}${from < today ? ", in the past" : ""})`);
+  }
+  for (const raw of arr(i.trips, 20).map(obj)) {
+    const title = str(raw.title, 120).trim();
+    const startDate = String(raw.startDate ?? "");
+    const endDate = String(raw.endDate ?? startDate);
+    if (!title) return err("a trip needs a title");
+    if (!DAY.test(startDate) || !DAY.test(endDate) || endDate < startDate) return err(`trip ${title}: dates as YYYY-MM-DD, the end on or after the start`);
+    const company = str(raw.company, 120).trim() || "Noisy Source";
+    const perDiemDaily = Math.max(0, Math.min(10000, money(raw.perDiemDaily)));
+    const perDiemDays = Math.max(0, Math.min(366, Math.round(money(raw.perDiemDays))));
+    const destination = str(raw.destination, 120).trim();
+    trips.push({ title, destination, startDate, endDate, traveller: str(raw.traveller, 120).trim(), entityHint: company, perDiemDaily, perDiemDays });
+    lines.push(`Trip ${title}${destination ? ` (${destination})` : ""}: ${dayLabel(startDate)} to ${dayLabel(endDate)}, paid by ${company}${perDiemDaily > 0 ? `, per diem ${perDiemDays} × €${perDiemDaily}` : ""}`);
+  }
+  if (daysOff.length + trips.length === 0) return err("nothing to plan: give daysOff or trips");
+  return ok({ daysOff, trips, lines });
+};
+
 // ── Days worked on a client contract, from what he says ───────────────────────
 
 const monthOf = (date: unknown) => (typeof date === "string" ? date.slice(0, 7) : "");
@@ -1741,6 +1831,8 @@ export type FinhubImports = {
   readonly proposeContracts: (input: unknown, now: Date, signal?: AbortSignal, progress?: (text: string) => void) => Promise<Result<{ readonly id: string; readonly label: string; readonly warnings: readonly string[]; /** Each person's versions and exceptions, for the model to tell him. */ readonly summary: string }, string>>;
   /** Client contracts from the contracts folder (the Malt orders). */
   readonly proposeClientContracts: (input: unknown, now: Date, signal?: AbortSignal, progress?: (text: string) => void) => Promise<Result<{ readonly id: string; readonly label: string; readonly warnings: readonly string[]; readonly summary: string }, string>>;
+  /** Days off and trips for FinHub's calendar, from what he said: no documents, no model. */
+  readonly proposeCalendarPlans: (input: unknown, now: Date) => Result<{ readonly id: string; readonly label: string; readonly summary: string }, string>;
   /** Days worked on a client contract, from what he said: no documents, no model. */
   readonly proposeDaysWorked: (input: unknown, now: Date, signal?: AbortSignal) => Promise<Result<{ readonly id: string; readonly label: string; readonly warnings: readonly string[]; readonly summary: string }, string>>;
   /** The year pass for expenses: one entity's subscriptions and recurring charges from all its statements of a year. */
@@ -1869,6 +1961,31 @@ export const makeFinhubImports = (deps: {
       pending.set(card, { plan: plan.value, until: now() + 60 * 60_000 });
       return ok({ id: card, label: plan.value.label, warnings: plan.value.warnings, summary: plan.value.doc.summary });
     },
+    proposeCalendarPlans: (input, today) => {
+      const planned = planCalendar(input, today.toISOString().slice(0, 10));
+      if (!planned.ok) return planned;
+      const { daysOff, trips, lines } = planned.value;
+      const first = [...daysOff.map((d) => String(d.from)), ...trips.map((t) => String(t.startDate))].sort()[0] ?? today.toISOString().slice(0, 10);
+      const doc: ImportDoc = {
+        entityHint: "Noisy Source",
+        month: first.slice(0, 7),
+        summary: ["For the financial calendar, as he told Atlas:", ...lines].join("\n").slice(0, 4000),
+        sources: [],
+        statements: [],
+        payslips: [],
+        contracts: [],
+        subscriptions: [],
+        facilities: [],
+        ...(daysOff.length ? { daysOff } : {}),
+        ...(trips.length ? { trips } : {}),
+      };
+      const what = [daysOff.length ? `${daysOff.length} days-off span${daysOff.length === 1 ? "" : "s"}` : "", trips.length ? `${trips.length} trip${trips.length === 1 ? "" : "s"}` : ""].filter(Boolean).join(" and ");
+      const plan: ImportPlan = { id: importId("calendar", today.toISOString().slice(0, 10), now()), doc, label: `Send ${what} to FinHub's calendar`, warnings: [], what: "the calendar plans" };
+      for (const [k, v] of pending) if (v.until <= now()) pending.delete(k);
+      const card = newId();
+      pending.set(card, { plan, until: now() + 60 * 60_000 });
+      return ok({ id: card, label: plan.label, summary: doc.summary });
+    },
     proposeDaysWorked: async (input, today) => {
       if (!deps.db.list) return err("FinHub's client contracts can't be read here");
       const [contracts, handovers] = await Promise.all([deps.db.list("clientContracts", 50), deps.db.list("contractHandovers", 500)]);
@@ -1931,7 +2048,7 @@ export const makeFinhubImports = (deps: {
         return { ok: false, text: `Nothing was sent: ${written.error.message}.` };
       }
       deps.log?.info("finhub import sent", { month: plan.doc.month });
-      return { ok: true, text: `Sent: ${plan.what ?? `${plan.doc.entityHint} · ${plan.doc.month}`} ${plan.what ? "are" : "is"} in FinHub's "From Atlas" tab (${countsOf(plan.doc)}). Review ${plan.what ? "them" : "it"} in the workbench and commit there.`, tool: plan.doc.daysWorked ? FINHUB_DAYS_WORKED_TOOL.name : plan.doc.setup ? FINHUB_SETUP_TOOL.name : plan.doc.clientContracts ? FINHUB_CLIENT_CONTRACTS_TOOL.name : plan.doc.contracts.length === 0 && plan.what ? FINHUB_RECURRING_TOOL.name : plan.what ? FINHUB_CONTRACTS_TOOL.name : FINHUB_IMPORT_TOOL.name };
+      return { ok: true, text: `Sent: ${plan.what ?? `${plan.doc.entityHint} · ${plan.doc.month}`} ${plan.what ? "are" : "is"} in FinHub's "From Atlas" tab (${countsOf(plan.doc)}). Review ${plan.what ? "them" : "it"} in the workbench and commit there.`, tool: plan.doc.daysOff || plan.doc.trips ? FINHUB_CALENDAR_PLANS_TOOL.name : plan.doc.daysWorked ? FINHUB_DAYS_WORKED_TOOL.name : plan.doc.setup ? FINHUB_SETUP_TOOL.name : plan.doc.clientContracts ? FINHUB_CLIENT_CONTRACTS_TOOL.name : plan.doc.contracts.length === 0 && plan.what ? FINHUB_RECURRING_TOOL.name : plan.what ? FINHUB_CONTRACTS_TOOL.name : FINHUB_IMPORT_TOOL.name };
     },
   };
 };

@@ -1150,6 +1150,10 @@ Confirmed (2026-11-12):
   and more than 31 days, and says the days left. Mode `add` (a week) or `set` (a month's total,
   past months). One proposal per message, `days-worked-{date}-{time}`, with `daysWorked`;
   FinHub's "Add these days" merges it into the month's handover (noisysource#188).
+  `finhub_calendar_plans` (2026-11-27): "I'm off 22 Dec to 2 Jan", "a trip to Brussels".
+  No model: the dates he gave, checked, as `daysOff[{from, to, kind, label}]` and
+  `trips[{..., entityHint}]` on an import; FinHub's "Add to the calendar" keeps the weekdays and
+  matches the company (noisysource#189). FinHub stays the calendar's master.
   Capture now, train later (#379, 2026-11-25): on commit FinHub keeps what he committed
   beside the proposal (`committed` on the import); `finhub/learning.ts` sweeps the book's
   decided imports at start and hourly and records each once in the dataset (#295) as a
