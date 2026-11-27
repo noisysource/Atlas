@@ -1145,6 +1145,15 @@ Confirmed (2026-11-12):
   `finhub` entry: the proposal item by item (masked: no IBANs or long numbers) and his
   corrections (removed, edited fields, unticked lines). The nightly review skips them;
   they're for training the local model.
+  The financial calendar (decided 2026-11-27): FinHub is its master (days off, trips, money
+  dates). `finhub/calendar-sync.ts` writes FinHub's plans to Atlas's own "FinHub" Google
+  calendar (`calendar/finhub-calendar.ts`, scope `calendar.app.created`: only calendars Atlas
+  made; FINHUB_CALENDAR=on, connect with CALENDAR_FINHUB=on), every 15 minutes. A change in
+  FinHub always goes to Google; a FinHub event moved or deleted in Google is never overwritten
+  silently: it's listed as out of step until he changes FinHub or clicks "Put FinHub's back".
+  The Dashboard's unified calendar (`home-calendar.ts`, GET /home/calendar) shows two weeks of
+  every Google calendar (one layer each, EC only as "Busy", the FinHub calendar skipped) plus
+  FinHub's layer from the book (plans and client payments), with the out-of-step ones.
   FINHUB_MODEL picks who reads the documents (default the answer model;
   `ollama:<model>` keeps them on this Mac, with a context sized to the document
   and thinking off).

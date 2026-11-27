@@ -188,7 +188,15 @@ export type Config = {
    * user in FinHub's project (npm run finhub:connect, data/finhub/firebase.json).
    * Needs DRIVE=on. Local only for now.
    */
-  readonly finhub: { readonly enabled: boolean; readonly folder: string; readonly account: string; readonly userPath: string; /** FINHUB_MODEL: who reads the documents; default the answer model. */ readonly model?: ModelRef };
+  readonly finhub: {
+    readonly enabled: boolean;
+    readonly folder: string;
+    readonly account: string;
+    readonly userPath: string;
+    /** FINHUB_MODEL: who reads the documents; default the answer model. */ readonly model?: ModelRef;
+    /** FINHUB_CALENDAR=on: FinHub's plans in Atlas's own "FinHub" Google calendar (needs CALENDAR_FINHUB=on npm run calendar:connect). */
+    readonly calendar: boolean;
+  };
   /**
    * CODE_AGENT=on (#126): Claude can ask a code agent (Claude Code, read-only,
    * on a local copy in data/repos/) about one of the repos GITHUB=on reaches.
@@ -429,6 +437,8 @@ const EnvSchema = z.object({
   HOUSE: onOff,
   HOUSE_CONTROL: onOff,
   FINHUB: onOff,
+  // FinHub's plans in Atlas's own "FinHub" Google calendar (needs CALENDAR_FINHUB=on npm run calendar:connect).
+  FINHUB_CALENDAR: onOff,
   FINHUB_DRIVE_FOLDER: z.preprocess((v) => (typeof v === "string" && v.trim() === "" ? undefined : v), z.string().regex(/^[A-Za-z0-9_-]{10,100}$/, { error: "must be a Drive folder id (the part after folders/ in its link)" }).optional()),
   FINHUB_MODEL: optionalString,
   FINHUB_DRIVE_ACCOUNT: z.preprocess((v) => (typeof v === "string" && v.trim() === "" ? undefined : v), z.enum(["personal", "noisysource", "kidclub", "marisa"]).default("noisysource")),
@@ -749,7 +759,7 @@ export const loadConfig = (given: Env): Result<Config, string> => {
       env: e.HOUSE_ENV,
       control: { enabled: e.HOUSE === "on" && e.HOUSE_CONTROL === "on", userPath: "data/house/firebase.json" },
     },
-    finhub: { enabled: e.FINHUB === "on" && e.DRIVE === "on" && e.FINHUB_DRIVE_FOLDER !== undefined, folder: e.FINHUB_DRIVE_FOLDER ?? "", account: e.FINHUB_DRIVE_ACCOUNT, userPath: "data/finhub/firebase.json", ...(finhubModel ? { model: finhubModel } : {}) },
+    finhub: { enabled: e.FINHUB === "on" && e.DRIVE === "on" && e.FINHUB_DRIVE_FOLDER !== undefined, folder: e.FINHUB_DRIVE_FOLDER ?? "", account: e.FINHUB_DRIVE_ACCOUNT, userPath: "data/finhub/firebase.json", calendar: e.FINHUB_CALENDAR === "on" && e.CALENDAR === "on", ...(finhubModel ? { model: finhubModel } : {}) },
     codeAgent: { enabled: e.GITHUB === "on" && e.CODE_AGENT === "on", maxUsd: e.CODE_AGENT_MAX_USD, maxTurns: e.CODE_AGENT_MAX_TURNS, reposPath: "data/repos", auth: e.CODE_AGENT_AUTH, model: e.CODE_AGENT_MODEL, study: { maxUsd: e.CODE_STUDY_MAX_USD, maxTurns: e.CODE_STUDY_MAX_TURNS, notesPath: "data/code" }, refresh: { mode: e.CODE_REFRESH, maxStudies: e.CODE_REFRESH_MAX }, tasks: { enabled: e.GITHUB === "on" && e.CODE_AGENT === "on" && e.CODE_TASKS === "on", maxUsd: e.CODE_TASK_MAX_USD, maxTurns: e.CODE_TASK_MAX_TURNS, path: "data/tasks" }, fix: { enabled: e.GITHUB === "on" && e.CODE_AGENT === "on" && e.CODE_FIX === "on", maxUsd: e.CODE_FIX_MAX_USD, maxTurns: e.CODE_FIX_MAX_TURNS, writeTokensPath: "data/github-write-tokens.json", fixesPath: "data/fixes" } },
     ollamaThink: e.OLLAMA_THINK === "on",
     userName: e.ATLAS_USER_NAME,

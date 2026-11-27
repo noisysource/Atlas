@@ -27,7 +27,10 @@ import { makeLights } from "./house/lights.js";
 import { makeVendusGet, type VendusGet } from "./vendus/vendus.js";
 import { forCountry } from "./connectors/types.js";
 import { makeHomePanels } from "./home-panels.js";
+import { makeHomeCalendar } from "./home-calendar.js";
 import { makeFinhubSettle } from "./finhub/learning.js";
+import { makeCalendarSync } from "./finhub/calendar-sync.js";
+import { makeFinhubCalendar } from "./calendar/finhub-calendar.js";
 import { vendusConnector } from "./connectors/vendus.js";
 import { houseConnector } from "./connectors/house.js";
 import { kanbanConnector } from "./connectors/kanban.js";
@@ -831,6 +834,26 @@ export const buildDeps = async (inputs: AppInputs): Promise<Result<Deps, string>
         config.country,
       )
     : [];
+  // FinHub's plans (days off, trips) in Atlas's own "FinHub" Google calendar; FinHub is the
+  // master, a change made in Google waits for him (FINHUB_CALENDAR=on).
+  const finhubCalendar =
+    finhubImports && config.finhub.calendar
+      ? makeCalendarSync({ calendar: makeFinhubCalendar({ accessToken: () => calendarToken("personal") }), list: finhubImports.list, root: process.cwd(), log })
+      : undefined;
+  // The House Brain's unified calendar: every Google calendar (EC as busy) and FinHub's layer.
+  const homeCalendar = makeHomeCalendar({
+    timeZone: config.timeZone,
+    ...(calendar
+      ? {
+          events: async (range: DayRange) => {
+            const got = await readAccounts(calendar.accounts ?? { personal: calendar.read }, range, undefined);
+            return got.ok ? ok(got.value.events) : got;
+          },
+        }
+      : {}),
+    ...(finhubImports ? { finhub: finhubImports.list } : {}),
+    ...(finhubCalendar ? { drifts: finhubCalendar.drifts } : {}),
+  });
   // The House Brain's domain panels: fixed read-only reads, no model.
   const homePanels = makeHomePanels({
     connectors: plugged,
@@ -954,6 +977,7 @@ export const buildDeps = async (inputs: AppInputs): Promise<Result<Deps, string>
     ...(fixes ? { codeFixes: fixes } : {}),
     ...(tasks ? { codeTasks: tasks } : {}),
     ...(finhubImports?.settle ? { finhubSettle: finhubImports.settle } : {}),
+    ...(finhubCalendar ? { finhubCalendar } : {}),
     ...(morningBrief ? { morningBrief } : {}),
     ...(codeRefresh ? { codeRefresh } : {}),
     ...(prs ? { prClose: prs } : {}),
@@ -967,6 +991,7 @@ export const buildDeps = async (inputs: AppInputs): Promise<Result<Deps, string>
     ...(reminders ? { reminders } : {}),
     talk,
     homePanels,
+    homeCalendar,
     costs: {
       summary: async () => summarize(await costLog.all(), { now: new Date(), timeZone: config.timeZone, subscriptions: config.costs.subscriptions }),
       // #299: per answer, day, model and brain.

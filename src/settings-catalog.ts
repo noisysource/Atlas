@@ -235,6 +235,7 @@ export const SECTIONS: readonly Section[] = [
       { key: "FINHUB_DRIVE_FOLDER", label: "FinHub's folder in Drive", kind: "text", hint: "The Atlas folder (bank statements, payslips, invoices) or a year folder with one subfolder per month: the part after folders/ in its link", placeholder: "11WH0PSSVyRp8sTdVgCQ55aMpGfrgTldK" },
       { key: "FINHUB_DRIVE_ACCOUNT", label: "Whose Drive", kind: "select", options: ["noisysource", "personal", "kidclub", "marisa"] },
       { key: "FINHUB_MODEL", label: "Who reads the documents", kind: "text", hint: "Empty: the answer model (Claude). ollama:<model> reads them on this Mac (start Ollama first), e.g. ollama:qwen3.5:4b", placeholder: "ollama:qwen3.5:4b" },
+      on("FINHUB_CALENDAR", "FinHub's calendar in Google", "Days off and trips in a \"FinHub\" calendar Atlas keeps; needs CALENDAR_FINHUB=on npm run calendar:connect"),
     ],
     command: "npm run finhub:connect",
   },

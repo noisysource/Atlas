@@ -91,6 +91,13 @@ const dataset =
   cfg.env !== "production" && cfg.dataset.enabled ? makeDataset({ root: process.cwd(), settings: parseDatasetSettings("on", cfg.dataset.off), timeZone: cfg.timeZone, log }) : undefined;
 
 const deps = await buildDeps({ config: cfg, env: process.env, log, background, memoryStore, ...(dataset ? { dataset } : {}) });
+// FinHub's plans in his Google Calendar: shortly after start, then every 15 minutes.
+const finhubCalendar = deps.ok ? deps.value.finhubCalendar : undefined;
+if (finhubCalendar) {
+  const sync = () => void finhubCalendar.sync().catch(() => log.warn("finhub calendar failed", { reason: "unexpected" }));
+  setTimeout(sync, 25_000).unref();
+  setInterval(sync, 15 * 60_000).unref();
+}
 // #379, capture now: FinHub imports he decided, with his corrections, into the dataset: shortly after start, then hourly.
 const finhubSettle = deps.ok ? deps.value.finhubSettle : undefined;
 if (finhubSettle) {
