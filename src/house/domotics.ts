@@ -37,7 +37,8 @@ export type Domotics = {
   /** Writes a whole document at a path (creating or replacing it), the named fields set to the server's time. */
   readonly put: (path: readonly string[], fields: Record<string, unknown>, serverTimes: readonly string[]) => Promise<Result<true, DomoticsError>>;
   /** Up to `limit` documents of a subcollection under a document (FinHub's book), in no set order. */
-  readonly list?: (parent: readonly string[], collection: string, limit: number, signal?: AbortSignal) => Promise<Result<DbDoc[], DomoticsError>>;
+  /** A collection's documents; `where` keeps those whose field equals the value (rules can require it). */
+  readonly list?: (parent: readonly string[], collection: string, limit: number, signal?: AbortSignal, where?: { readonly field: string; readonly value: string }) => Promise<Result<DbDoc[], DomoticsError>>;
 };
 
 /** A plain value as Firestore's REST value. Integers stay integers; dates are timestamps. */
@@ -157,7 +158,14 @@ export const makeDomotics = (deps: { readonly user: () => Promise<FirebaseUser |
   };
 
   return {
-    list: (parent, collection, limit, signal) => runQuery(collection, { limit: Math.max(1, Math.min(200, limit)) }, `read ${collection}`, signal, parent),
+    list: (parent, collection, limit, signal, where) =>
+      runQuery(
+        collection,
+        { ...(where && SEGMENT.test(where.field) ? { where: { fieldFilter: { field: { fieldPath: where.field }, op: "EQUAL", value: { stringValue: where.value } } } } : {}), limit: Math.max(1, Math.min(200, limit)) },
+        `read ${collection}`,
+        signal,
+        parent,
+      ),
     call: async (name, data, signal) => {
       const got = await request((u) => `https://${u.region}-${u.project}.cloudfunctions.net/${name}`, { method: "POST", body: { data } }, `call ${name}`, signal);
       return got.ok ? ok((got.value as { result?: unknown }).result) : got;
