@@ -1544,6 +1544,13 @@ export const buildClientContracts = async (deps: {
   return ok({ id: deps.id, doc, label: `Send ${drafts.length} client contract${drafts.length === 1 ? "" : "s"} to FinHub for review${warnings.length > 0 ? ` (${warnings.length} warning${warnings.length === 1 ? "" : "s"})` : ""}`, warnings, what: "the client contracts" });
 };
 
+/**
+ * FinHub's rules let a book reader list a collection only with a query on `userId == the book`
+ * (as FinHub's own queries do); without it the whole list is refused. Atlas's imports are the
+ * exception: Atlas writes them, without a userId.
+ */
+export const bookFilterOf = (collection: string): { readonly field: string; readonly value: string } | undefined => (collection === "atlas_imports" ? undefined : { field: "userId", value: FINHUB_BOOK });
+
 // ── Days worked on a client contract, from what he says ───────────────────────
 
 const monthOf = (date: unknown) => (typeof date === "string" ? date.slice(0, 7) : "");
@@ -1853,7 +1860,7 @@ export const makeFinhubImports = (deps: {
     proposeDaysWorked: async (input, today) => {
       if (!deps.db.list) return err("FinHub's client contracts can't be read here");
       const [contracts, handovers] = await Promise.all([deps.db.list("clientContracts", 50), deps.db.list("contractHandovers", 500)]);
-      if (!contracts.ok || !handovers.ok) return err("FinHub's client contracts couldn't be read");
+      if (!contracts.ok || !handovers.ok) return err(`FinHub's client contracts couldn't be read (${!contracts.ok ? contracts.error : !handovers.ok ? handovers.error : ""}). That's on Atlas's side, not the contract: say so, and don't ask him which contract`);
       const planned = planDaysWorked({ contracts: contracts.value, handovers: handovers.value, input, today: today.toISOString().slice(0, 10) });
       if (!planned.ok) return planned;
       const { drafts, lines } = planned.value;

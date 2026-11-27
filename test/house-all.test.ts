@@ -264,3 +264,24 @@ describe("a refused sign-in says why", () => {
     expect(!got.ok && got.error.message).not.toContain(USER.password);
   });
 });
+
+describe("listing FinHub's book", () => {
+  it("asks only for the book's documents, as FinHub's rules require; Atlas's imports have no book filter", async () => {
+    const { bookFilterOf } = await import("../src/finhub/finhub.js");
+    const seen: { url: string; body: unknown }[] = [];
+    const d = makeDomotics({
+      user: async () => USER,
+      fetch: (async (url: string, init?: RequestInit) => {
+        if (String(url).includes("signInWithPassword")) return new Response(JSON.stringify({ idToken: "tok", expiresIn: "3600" }));
+        seen.push({ url: String(url), body: init?.body ? JSON.parse(String(init.body)) : undefined });
+        return new Response(JSON.stringify([{ document: { name: "projects/p/databases/(default)/documents/finhub_books/noisysource-group/clientContracts/c1", fields: { reference: { stringValue: "30557" } } } }]));
+      }) as typeof fetch,
+    });
+    const got = await d.list?.(["finhub_books", "noisysource-group"], "clientContracts", 50, undefined, bookFilterOf("clientContracts"));
+    expect(got?.ok && got.value.map((x) => x.fields.reference)).toEqual(["30557"]);
+    expect(seen[0]?.url).toContain("/documents/finhub_books/noisysource-group:runQuery");
+    expect((seen[0]?.body as { structuredQuery: unknown }).structuredQuery).toEqual({ from: [{ collectionId: "clientContracts" }], where: { fieldFilter: { field: { fieldPath: "userId" }, op: "EQUAL", value: { stringValue: "noisysource-group" } } }, limit: 50 });
+    expect(bookFilterOf("atlas_imports")).toBeUndefined();
+    expect(bookFilterOf("trips")).toEqual({ field: "userId", value: "noisysource-group" });
+  });
+});

@@ -36,7 +36,7 @@ import { vendusConnector } from "./connectors/vendus.js";
 import { houseConnector } from "./connectors/house.js";
 import { kanbanConnector } from "./connectors/kanban.js";
 import { finhubConnector } from "./connectors/finhub.js";
-import { makeFinhubImports, type FinhubDb } from "./finhub/finhub.js";
+import { bookFilterOf, FINHUB_BOOK, makeFinhubImports, type FinhubDb } from "./finhub/finhub.js";
 import { isGoogleAccount } from "./google-accounts.js";
 import { makeKanbanChanges, makeKanbanRead } from "./kanban/kanban.js";
 import { makeCodeRefresh } from "./code/freshness.js";
@@ -612,7 +612,7 @@ export const buildDeps = async (inputs: AppInputs): Promise<Result<Deps, string>
           // Documents of the book's collections, plain fields: the House Brain's FinHub panel, and
           // the year passes (who's on the payroll).
           const list = async (collection: string, limit: number) => {
-            const got = fb.list ? await fb.list(["finhub_books", "noisysource-group"], collection, limit) : err({ message: "can't list" });
+            const got = fb.list ? await fb.list(["finhub_books", FINHUB_BOOK], collection, limit, undefined, bookFilterOf(collection)) : err({ message: "can't list" });
             return got.ok ? ok(got.value.map((d) => ({ ...d.fields, id: d.path.split("/").pop() ?? "" }))) : err(got.error.message);
           };
           // #379, capture now: each import he decided in FinHub, with his corrections, into the dataset.
