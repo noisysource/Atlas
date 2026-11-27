@@ -25,6 +25,8 @@ import type { Reminders } from "./reminders/reminders.js";
 import type { TalkStore } from "./talk.js";
 import type { AnswerEvent, CostDetail, CostSummary } from "./costs.js";
 import type { Panel } from "./home-panels.js";
+import type { HomeCalendar } from "./home-calendar.js";
+import type { CalendarSync } from "./finhub/calendar-sync.js";
 import type { LiveSessions } from "./live/routes.js";
 import type { CalendarChanges } from "./calendar/change.js";
 import type { InboxTidy } from "./gmail/tidy.js";
@@ -400,6 +402,8 @@ export type Deps = {
   readonly codeTasks?: Pick<Tasks, "decide" | "list" | "stop" | "recover">;
   /** #379 (capture now): FinHub's decided imports into the dataset, his corrections included; run at start and hourly. */
   readonly finhubSettle?: () => Promise<number>;
+  /** FinHub's plans in Atlas's "FinHub" Google calendar, and what's out of step (FINHUB_CALENDAR=on). */
+  readonly finhubCalendar?: CalendarSync;
   /** #214: his answer to tidying the inbox (POST /gmail/tidy). Only "yes" archives or labels. */
   readonly gmailTidy?: Pick<InboxTidy, "decide">;
   /** #270: his answer to a Drive change (POST /drive/confirm). Only "yes" creates the folder or saves the file. */
@@ -420,6 +424,8 @@ export type Deps = {
   readonly live?: LiveSessions;
   /** The House Brain's domain panels (House, FinHub, Dev, KidClub, Comms): GET /home/panels. */
   readonly homePanels?: () => Promise<readonly Panel[]>;
+  /** The House Brain's unified calendar: GET /home/calendar (fresh after a put-back). */
+  readonly homeCalendar?: (fresh?: boolean) => Promise<HomeCalendar>;
   /** #247: what Atlas costs, per service: GET /costs. */
   readonly costs?: { readonly summary: () => Promise<CostSummary>; /** #299 */ readonly detail?: () => Promise<CostDetail>; readonly answer?: (a: AnswerEvent) => void };
   /** #138: his answer to opening an issue for a gap (POST /gaps/issue). Only "yes" opens it. */

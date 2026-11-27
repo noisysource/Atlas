@@ -200,6 +200,8 @@ describe("Live activity", () => {
         severity: "WARNING",
       }),
     ).toBe("Finhub import write failed");
+    expect(activityLine({ message: "finhub calendar synced", created: 2, updated: 1, removed: 0, drifts: 1 })).toBe("Updated 3 FinHub events in Google (1 out of step)");
+    expect(activityLine({ message: "finhub calendar synced", created: 0, updated: 0, removed: 0, drifts: 0 })).toBeUndefined();
     for (const m of ["request", "speak", "listening", "vendus read", "reach"])
       expect(activityLine({ message: m, severity: "INFO" })).toBeUndefined();
   });
