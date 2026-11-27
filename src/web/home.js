@@ -451,7 +451,19 @@ export const makeHomeView = (host, deps = {}) => {
     setNeeds: (items) => {
       waiting = items.length;
       needs.setNote(items.length > 0 ? `${items.length} waiting` : "");
+      // Several waiting: one click for all of them (each still answered through its own card).
+      const all = el("div", "hb-need-all");
+      if (items.length > 1) {
+        const yes = /** @type {HTMLButtonElement} */ (el("button", "hb-yes", `Approve all ${items.length}`));
+        const no = /** @type {HTMLButtonElement} */ (el("button", "hb-no", "Decline all"));
+        yes.type = "button";
+        no.type = "button";
+        yes.addEventListener("click", () => items.forEach((it) => it.onYes()));
+        no.addEventListener("click", () => items.forEach((it) => it.onNo()));
+        all.append(yes, no);
+      }
       needs.body.replaceChildren(
+        ...(items.length > 1 ? [all] : []),
         ...(items.length > 0
           ? items.map((it) => {
               const row = el("div", "hb-need");

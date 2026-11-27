@@ -505,7 +505,51 @@ const refreshReach = async () => {
 
 /** Cards still waiting for an OK, counted per node for the badges (#133). */
 const NODE_OF_CARD = { calendar: "calendar", email: "gmail", "draft-delete": "gmail", skill: "skills", fix: "code", "pr-close": "github", "task-start": "code", "task-publish": "code", "task-merge": "code", "task-close": "code", house: "house", lights: "house", "house-change": "house", "gap-issue": "github", "gmail-tidy": "gmail", "calendar-change": "calendar", drive: "drive", "db-change": "cloud", kanban: "github", finhub: "drive" };
+/** Answers a card as its own button would: "yes" its first button, "no" its second. @param {Element} card @param {"yes" | "no"} decision */
+const answerCard = (card, decision) => /** @type {HTMLButtonElement | undefined} */ (card.querySelectorAll(".choices button")[decision === "yes" ? 0 : 1])?.click();
+
+/**
+ * One answer waiting on several OKs gets one bar under its cards: Approve all, Decline all.
+ * Each card is answered as if its own button was pressed (so each still says what happened);
+ * the cards above the bar are the list being approved.
+ */
+const refreshApproveAll = () => {
+  for (const li of transcript.querySelectorAll("li")) {
+    const waiting = [...li.querySelectorAll('.confirm[data-pending="true"]')];
+    let bar = /** @type {HTMLElement | null} */ (li.querySelector(".confirm-all"));
+    if (waiting.length < 2) {
+      bar?.remove();
+      continue;
+    }
+    if (!bar) {
+      bar = document.createElement("div");
+      bar.className = "confirm-all";
+      const count = document.createElement("span");
+      const all = document.createElement("button");
+      all.type = "button";
+      all.className = "confirm-all-yes";
+      const none = document.createElement("button");
+      none.type = "button";
+      none.textContent = "Decline all";
+      /** @param {"yes" | "no"} decision */
+      const answer = (decision) => {
+        all.disabled = true;
+        none.disabled = true;
+        for (const card of li.querySelectorAll('.confirm[data-pending="true"]')) answerCard(card, decision);
+      };
+      all.addEventListener("click", () => answer("yes"));
+      none.addEventListener("click", () => answer("no"));
+      bar.append(count, all, none);
+      li.append(bar);
+    }
+    const [count, all] = /** @type {HTMLElement[]} */ ([...bar.children]);
+    if (count) count.textContent = `${waiting.length} waiting for your OK`;
+    if (all) all.textContent = `Approve all ${waiting.length}`;
+  }
+};
+
 const refreshPending = () => {
+  refreshApproveAll();
   /** @type {Record<string, number>} */
   const counts = {};
   for (const card of document.querySelectorAll('.confirm[data-pending="true"]')) {
@@ -1673,7 +1717,7 @@ const submit = (raw, how = {}) => {
     state.history = appendTurn(state.history, "user", text, []);
     // #269: one "yes" answers every card his last answer is waiting on (nine concerts, one yes).
     const together = [...(card.closest("li")?.querySelectorAll('.confirm[data-pending="true"]') ?? [card])];
-    for (const each of together) /** @type {HTMLButtonElement | undefined} */ (each.querySelectorAll(".choices button")[said === "yes" ? 0 : 1])?.click();
+    for (const each of together) answerCard(each, said);
     return;
   }
   const chosen = state.pending ? matchContextOption(text, state.pending.options) : undefined;

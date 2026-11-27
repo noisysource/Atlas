@@ -4415,3 +4415,11 @@ body[data-side="true"] .app .center .layout {
 .hb-event { justify-content: flex-start; }
 .hb-event > span:last-child { text-align: left; }
 .hb-tools { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px 20px; }
+
+/* One answer waiting on several OKs: approve or decline them all at once. */
+.confirm-all { display: flex; align-items: center; gap: 0.6rem; margin-top: 0.5rem; padding: 0.5rem 0.75rem; border-radius: 10px; background: rgba(74, 155, 255, 0.08); font-size: 0.85rem; }
+.confirm-all span { flex: 1; color: var(--muted); }
+.confirm-all button { border: 1px solid rgba(120, 170, 255, 0.35); background: none; color: var(--text); border-radius: 999px; padding: 0.3rem 0.8rem; font: inherit; cursor: pointer; }
+.confirm-all .confirm-all-yes { background: rgba(74, 155, 255, 0.25); color: #e6efff; }
+.confirm-all button:disabled { opacity: 0.5; cursor: default; }
+.hb-need-all { display: flex; gap: 8px; justify-content: flex-end; padding-bottom: 6px; border-bottom: 1px solid rgba(255, 176, 64, 0.15); }
