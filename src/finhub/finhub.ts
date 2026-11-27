@@ -136,6 +136,35 @@ export const FINHUB_CLIENT_CONTRACTS_TOOL: LlmTool = {
   },
 };
 
+export const FINHUB_DAYS_WORKED_TOOL: LlmTool = {
+  name: "finhub_days_worked",
+  description:
+    "Log the days he worked for a client (his client contracts in FinHub, e.g. the Malt order) when he tells you: \"this week I worked 4 days\", \"3 days in December\", or a list of past months. One entry per month worked, in the month the days were worked (a week that spans two months: split it by the weekdays in each). mode \"add\" (the default, for a week or a few days) adds to what that month already has; \"set\" gives a month's whole total (a list of past months, or a correction). Give the order reference only if he names one or two contracts cover the month. Nothing is read from documents: only what he said. It shows him a card; after his OK it lands in FinHub's \"From Atlas\" tab, where he adds the days to the month's handover.",
+  inputSchema: {
+    type: "object",
+    properties: {
+      entries: {
+        type: "array",
+        minItems: 1,
+        maxItems: 40,
+        items: {
+          type: "object",
+          properties: {
+            month: { type: "string", description: "YYYY-MM, the month the days were worked" },
+            days: { type: "number", description: "Days worked (half days as 0.5)" },
+            reference: { type: "string", description: "The contract's order reference, e.g. 30557, if he named it" },
+          },
+          required: ["month", "days"],
+          additionalProperties: false,
+        },
+      },
+      mode: { type: "string", enum: ["add", "set"], description: "add: on top of the month's days (default); set: the month's total" },
+    },
+    required: ["entries"],
+    additionalProperties: false,
+  },
+};
+
 export const FINHUB_SETUP_TOOL: LlmTool = {
   name: "finhub_setup",
   description:
@@ -385,6 +414,8 @@ export type ImportDoc = {
   setup?: { entities: O[]; accounts: O[]; loans: O[] };
   /** Client contracts (the income side: a pot of days at a daily rate), from finhub_client_contracts. */
   clientContracts?: O[];
+  /** Days worked on a client contract, from finhub_days_worked (FinHub's DaysWorked). */
+  daysWorked?: O[];
 };
 
 export const statementOf = (raw: unknown, filename: string): Statement => {
@@ -519,9 +550,10 @@ export const importId = (entity: string, month: string, again?: number): string 
   `${entity.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")}-${month}${again ? `-${again.toString(36)}` : ""}`;
 
 /** What an import holds, in a line. */
-export const countsOf = (d: Pick<ImportDoc, "statements" | "payslips" | "contracts" | "subscriptions" | "facilities" | "setup" | "clientContracts">): string => {
+export const countsOf = (d: Pick<ImportDoc, "statements" | "payslips" | "contracts" | "subscriptions" | "facilities" | "setup" | "clientContracts" | "daysWorked">): string => {
   const lines = d.statements.reduce((n, s) => n + s.lines.length, 0);
   const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
+  if (d.daysWorked) return `${plural(d.daysWorked.reduce((n, x) => n + Number(x.days ?? 0), 0), "day")} worked`;
   if (d.clientContracts) return plural(d.clientContracts.length, "client contract");
   if (d.setup) return [plural(d.setup.entities.length, "entity", "entities"), plural(d.setup.accounts.length, "account"), plural(d.setup.loans.length, "loan")].join(", ");
   return (
@@ -1512,6 +1544,61 @@ export const buildClientContracts = async (deps: {
   return ok({ id: deps.id, doc, label: `Send ${drafts.length} client contract${drafts.length === 1 ? "" : "s"} to FinHub for review${warnings.length > 0 ? ` (${warnings.length} warning${warnings.length === 1 ? "" : "s"})` : ""}`, warnings, what: "the client contracts" });
 };
 
+// ── Days worked on a client contract, from what he says ───────────────────────
+
+const monthOf = (date: unknown) => (typeof date === "string" ? date.slice(0, 7) : "");
+const endOf = (c: O) => arr(c.amendments, 50).reduce<string>((end, a) => { const n = str(obj(a).newEndDate, 10); return n > end ? n : end; }, str(c.endDate, 10));
+const allowedOf = (c: O) => money(c.daysAllowed) + arr(c.amendments, 50).reduce<number>((n, a) => n + money(obj(a).addDays), 0);
+
+const monthLabel = (m: string) => `${MONTH_NAMES[Number(m.slice(5, 7)) - 1] ?? m.slice(5, 7)} ${m.slice(0, 4)}`;
+
+/**
+ * His days, matched to FinHub's client contracts: which contract covers each month, what the
+ * month will hold, and the days left after. FinHub merges them again when he adds them.
+ */
+export const planDaysWorked = (deps: { readonly contracts: readonly O[]; readonly handovers: readonly O[]; readonly input: unknown; readonly today: string }): Result<{ readonly drafts: O[]; readonly lines: readonly string[] }, string> => {
+  const i = obj(deps.input);
+  const mode = i.mode === "set" ? "set" : "add";
+  const entries = arr(i.entries, 40).map(obj);
+  if (entries.length === 0) return err("entries: at least one {month, days}");
+  const contracts = deps.contracts.filter((c) => typeof c.id === "string" && c.id && typeof c.startDate === "string");
+  if (contracts.length === 0) return err("FinHub has no client contracts yet; create them first (finhub_client_contracts)");
+  const thisMonth = deps.today.slice(0, 7);
+  const drafts: O[] = [];
+  const month = new Map<string, number>(); // contract|month → the month's days after these
+  for (const e of entries) {
+    const m = String(e.month ?? "");
+    if (!MONTH.test(m)) return err(`month "${m}": YYYY-MM`);
+    if (m > thisMonth) return err(`${monthLabel(m)} hasn't happened yet`);
+    const days = Math.round(Number(e.days) * 2) / 2;
+    if (!(days >= 0 && days <= 31)) return err(`${monthLabel(m)}: ${String(e.days)} isn't a number of days in a month`);
+    const ref = str(e.reference, 100).trim();
+    const covering = contracts.filter((c) => (ref ? str(c.reference, 100).trim() === ref : monthOf(c.startDate) <= m && m <= monthOf(endOf(c))));
+    if (covering.length === 0) return err(ref ? `no client contract ${ref} in FinHub` : `no client contract in FinHub covers ${monthLabel(m)}`);
+    if (covering.length > 1) return err(`${covering.length} contracts cover ${monthLabel(m)} (${covering.map((c) => str(c.reference, 100) || str(c.clientName, 100)).join(", ")}): ask him which, then give its reference`);
+    const c = covering[0] as O;
+    const key = `${String(c.id)}|${m}`;
+    const had = month.get(key) ?? deps.handovers.filter((h) => h.contractId === c.id && h.month === m).reduce((n, h) => n + money(h.days), 0);
+    const now = mode === "set" ? days : had + days;
+    if (now > 31) return err(`${monthLabel(m)} would have ${now} days (${had} already there)`);
+    month.set(key, now);
+    drafts.push({ contractId: String(c.id), reference: str(c.reference, 100), clientName: str(c.clientName, 100), month: m, days, mode });
+  }
+  // One line per contract and month: what it had, what it'll have, and the days left on the contract.
+  const lines = [...month.entries()].map(([key, now]) => {
+    const [id, m] = key.split("|") as [string, string];
+    const c = contracts.find((x) => x.id === id) as O;
+    const had = deps.handovers.filter((h) => h.contractId === id && h.month === m).reduce((n, h) => n + money(h.days), 0);
+    // The contract's days after these: the months these touch at their new totals, the rest as they are.
+    const touched = [...month.entries()].filter(([k]) => k.startsWith(`${id}|`));
+    const untouched = deps.handovers.filter((h) => h.contractId === id && !month.has(`${id}|${String(h.month)}`)).reduce((n, h) => n + money(h.days), 0);
+    const left = allowedOf(c) - untouched - touched.reduce((n, [, v]) => n + v, 0);
+    const rate = money(c.dailyRate);
+    return `${str(c.clientName, 100)} ${str(c.reference, 100)} · ${monthLabel(m)}: ${had === now ? `${now} days (no change)` : `${had > 0 ? `${had} → ` : ""}${now} days`}${rate > 0 ? ` (€${(now * rate).toFixed(2)})` : ""}; ${left} of ${allowedOf(c)} days left${left < 0 ? " ⚠ more than the contract allows" : ""}.`.replace(/\s+/g, " ");
+  });
+  return ok({ drafts, lines });
+};
+
 // ── The book's setup, from the year's first statements ────────────────────────
 
 export const buildSetup = async (deps: {
@@ -1635,6 +1722,8 @@ export type FinhubImports = {
   readonly proposeContracts: (input: unknown, now: Date, signal?: AbortSignal, progress?: (text: string) => void) => Promise<Result<{ readonly id: string; readonly label: string; readonly warnings: readonly string[]; /** Each person's versions and exceptions, for the model to tell him. */ readonly summary: string }, string>>;
   /** Client contracts from the contracts folder (the Malt orders). */
   readonly proposeClientContracts: (input: unknown, now: Date, signal?: AbortSignal, progress?: (text: string) => void) => Promise<Result<{ readonly id: string; readonly label: string; readonly warnings: readonly string[]; readonly summary: string }, string>>;
+  /** Days worked on a client contract, from what he said: no documents, no model. */
+  readonly proposeDaysWorked: (input: unknown, now: Date, signal?: AbortSignal) => Promise<Result<{ readonly id: string; readonly label: string; readonly warnings: readonly string[]; readonly summary: string }, string>>;
   /** The year pass for expenses: one entity's subscriptions and recurring charges from all its statements of a year. */
   readonly proposeRecurring: (input: unknown, now: Date, signal?: AbortSignal, progress?: (text: string) => void) => Promise<Result<{ readonly id: string; readonly label: string; readonly warnings: readonly string[]; readonly summary: string }, string>>;
 };
@@ -1761,6 +1850,34 @@ export const makeFinhubImports = (deps: {
       pending.set(card, { plan: plan.value, until: now() + 60 * 60_000 });
       return ok({ id: card, label: plan.value.label, warnings: plan.value.warnings, summary: plan.value.doc.summary });
     },
+    proposeDaysWorked: async (input, today) => {
+      if (!deps.db.list) return err("FinHub's client contracts can't be read here");
+      const [contracts, handovers] = await Promise.all([deps.db.list("clientContracts", 50), deps.db.list("contractHandovers", 500)]);
+      if (!contracts.ok || !handovers.ok) return err("FinHub's client contracts couldn't be read");
+      const planned = planDaysWorked({ contracts: contracts.value, handovers: handovers.value, input, today: today.toISOString().slice(0, 10) });
+      if (!planned.ok) return planned;
+      const { drafts, lines } = planned.value;
+      const months = [...new Set(drafts.map((d) => String(d.month)))].sort();
+      const total = drafts.reduce((n, d) => n + Number(d.days), 0);
+      const doc: ImportDoc = {
+        entityHint: "Noisy Source",
+        month: months[months.length - 1] ?? today.toISOString().slice(0, 7),
+        summary: ["Days worked, as he told Atlas:", ...lines].join("\n").slice(0, 4000),
+        sources: [],
+        statements: [],
+        payslips: [],
+        contracts: [],
+        subscriptions: [],
+        facilities: [],
+        daysWorked: drafts,
+      };
+      // Each message is its own import: never overwrites one he already added.
+      const plan: ImportPlan = { id: importId("days-worked", today.toISOString().slice(0, 10), now()), doc, label: `Send ${total} day${total === 1 ? "" : "s"} worked to FinHub (${months.map(monthLabel).join(", ")})`, warnings: [], what: "the days worked" };
+      for (const [k, v] of pending) if (v.until <= now()) pending.delete(k);
+      const card = newId();
+      pending.set(card, { plan, until: now() + 60 * 60_000 });
+      return ok({ id: card, label: plan.label, warnings: [], summary: doc.summary });
+    },
     proposeRecurring: async (input, today, signal, progress) => {
       const c = checkContracts(input, today);
       if (!c.ok) return c;
@@ -1795,7 +1912,7 @@ export const makeFinhubImports = (deps: {
         return { ok: false, text: `Nothing was sent: ${written.error.message}.` };
       }
       deps.log?.info("finhub import sent", { month: plan.doc.month });
-      return { ok: true, text: `Sent: ${plan.what ?? `${plan.doc.entityHint} · ${plan.doc.month}`} ${plan.what ? "are" : "is"} in FinHub's "From Atlas" tab (${countsOf(plan.doc)}). Review ${plan.what ? "them" : "it"} in the workbench and commit there.`, tool: plan.doc.setup ? FINHUB_SETUP_TOOL.name : plan.doc.clientContracts ? FINHUB_CLIENT_CONTRACTS_TOOL.name : plan.doc.contracts.length === 0 && plan.what ? FINHUB_RECURRING_TOOL.name : plan.what ? FINHUB_CONTRACTS_TOOL.name : FINHUB_IMPORT_TOOL.name };
+      return { ok: true, text: `Sent: ${plan.what ?? `${plan.doc.entityHint} · ${plan.doc.month}`} ${plan.what ? "are" : "is"} in FinHub's "From Atlas" tab (${countsOf(plan.doc)}). Review ${plan.what ? "them" : "it"} in the workbench and commit there.`, tool: plan.doc.daysWorked ? FINHUB_DAYS_WORKED_TOOL.name : plan.doc.setup ? FINHUB_SETUP_TOOL.name : plan.doc.clientContracts ? FINHUB_CLIENT_CONTRACTS_TOOL.name : plan.doc.contracts.length === 0 && plan.what ? FINHUB_RECURRING_TOOL.name : plan.what ? FINHUB_CONTRACTS_TOOL.name : FINHUB_IMPORT_TOOL.name };
     },
   };
 };

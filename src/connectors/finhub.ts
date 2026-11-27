@@ -3,7 +3,7 @@
 // (finhub/finhub.ts). FinHub itself has no AI.
 
 import { localDate } from "../calendar/read.js";
-import { checkRange, ENTITIES, FINHUB_CLIENT_CONTRACTS_TOOL, FINHUB_CONTRACTS_TOOL, FINHUB_IMPORT_TOOL, FINHUB_RECURRING_TOOL, FINHUB_SETUP_TOOL, FINHUB_INVENTORY_TOOL, inventory, type FinhubDrive, type FinhubImports } from "../finhub/finhub.js";
+import { checkRange, ENTITIES, FINHUB_CLIENT_CONTRACTS_TOOL, FINHUB_DAYS_WORKED_TOOL, FINHUB_CONTRACTS_TOOL, FINHUB_IMPORT_TOOL, FINHUB_RECURRING_TOOL, FINHUB_SETUP_TOOL, FINHUB_INVENTORY_TOOL, inventory, type FinhubDrive, type FinhubImports } from "../finhub/finhub.js";
 import type { Connector } from "./types.js";
 
 export type FinhubDeps = {
@@ -14,13 +14,13 @@ export type FinhubDeps = {
 
 export const FINHUB_PROMPT =
   `You keep FinHub fed: FinHub is the bookkeeping app of ${ENTITIES.join(", ")} (Noisy Source is Renato's IT company, Noisy Phocus runs KidClub, the household is him and Marisa). FinHub has no AI: you read the documents and it keeps the books. ` +
-  "For what FinHub's folder holds or still needs, always call finhub_inventory and answer from it, never from listing Drive folders yourself or from what you remember: it knows whose each file is and which month it covers. finhub_inventory lists what FinHub's Drive folder holds for each entity, month by month (bank statements, payslips, invoices), and what's missing. finhub_import builds one entity's month: it reads the payslips and statements, extracts them, categorises every line and finds the subscriptions, loans and contracts; it takes a minute or two, so say you're on it. It shows him a card and sends nothing before his OK; even then it only lands in FinHub's \"From Atlas\" tab, where he reviews and commits it. On an empty or new book, start with finhub_setup (the companies, the household, each account's 1 January balance and the loans). Before an entity's first month, run finhub_contracts once for its year: it reads all the payslips together and gives each person's contract with the months it changed, so one odd month (leave, a bonus) isn't taken for a contract. For his client contracts (the Malt orders: days at a daily rate), run finhub_client_contracts. For an entity's subscriptions and recurring expenses (software, telecom, utilities, insurance), run finhub_recurring once for its year: it reads all the statements together and keeps what's charged about monthly. Then import one month at a time, oldest first, and say the warnings it gives (a statement that doesn't add up, a file it couldn't read). " +
+  "For what FinHub's folder holds or still needs, always call finhub_inventory and answer from it, never from listing Drive folders yourself or from what you remember: it knows whose each file is and which month it covers. finhub_inventory lists what FinHub's Drive folder holds for each entity, month by month (bank statements, payslips, invoices), and what's missing. finhub_import builds one entity's month: it reads the payslips and statements, extracts them, categorises every line and finds the subscriptions, loans and contracts; it takes a minute or two, so say you're on it. It shows him a card and sends nothing before his OK; even then it only lands in FinHub's \"From Atlas\" tab, where he reviews and commits it. On an empty or new book, start with finhub_setup (the companies, the household, each account's 1 January balance and the loans). Before an entity's first month, run finhub_contracts once for its year: it reads all the payslips together and gives each person's contract with the months it changed, so one odd month (leave, a bonus) isn't taken for a contract. For his client contracts (the Malt orders: days at a daily rate), run finhub_client_contracts. When he says how many days he worked (\"this week I worked 4 days\"), call finhub_days_worked with the month those days fall in (today's date tells you which); for a list of past months use mode set. For an entity's subscriptions and recurring expenses (software, telecom, utilities, insurance), run finhub_recurring once for its year: it reads all the statements together and keeps what's charged about monthly. Then import one month at a time, oldest first, and say the warnings it gives (a statement that doesn't add up, a file it couldn't read). " +
   "Numbers only from what the tools returned. EC invoicing is Noisy Source's (Kiro handles the EC work itself, not its invoices).";
 
 export const finhubConnector = (d: FinhubDeps): Connector => ({
   id: "finhub",
   group: "finhub",
-  tools: [FINHUB_INVENTORY_TOOL, FINHUB_SETUP_TOOL, FINHUB_CONTRACTS_TOOL, FINHUB_CLIENT_CONTRACTS_TOOL, FINHUB_RECURRING_TOOL, FINHUB_IMPORT_TOOL],
+  tools: [FINHUB_INVENTORY_TOOL, FINHUB_SETUP_TOOL, FINHUB_CONTRACTS_TOOL, FINHUB_CLIENT_CONTRACTS_TOOL, FINHUB_DAYS_WORKED_TOOL, FINHUB_RECURRING_TOOL, FINHUB_IMPORT_TOOL],
   prompt: [FINHUB_PROMPT],
   run: async ({ call, now, signal, onStep, onProgress, log }) => {
     if (call.name === FINHUB_INVENTORY_TOOL.name) {
@@ -84,6 +84,18 @@ export const finhubConnector = (d: FinhubDeps): Connector => ({
       onStep?.({ kind: "tool", name: call.name, args: "contracts folder", by: "model", ok: true, result: "waiting for your OK", confirm: { id: proposed.value.id, label: proposed.value.label, kind: "finhub" } });
       const warned = proposed.value.warnings.length > 0 ? ` Warnings to tell him: ${proposed.value.warnings.join("; ")}.` : "";
       return { callId: call.id, content: `Built, not sent yet: the app is asking him "Send it" / "Don't" for: ${proposed.value.label}.${warned} What it read:\n${proposed.value.summary}\nSay in a few sentences what each contract is (period, days, rate); it needs his OK, then he creates them in FinHub. Never say they're in FinHub yet.` };
+    }
+    if (call.name === FINHUB_DAYS_WORKED_TOOL.name) {
+      const input = (call.input ?? {}) as Record<string, unknown>;
+      const entries = Array.isArray(input.entries) ? input.entries : [];
+      const args = entries.map((e) => { const x = (e ?? {}) as Record<string, unknown>; return `${String(x.month ?? "")}: ${String(x.days ?? "")}`; }).join(", ").slice(0, 80);
+      const proposed = await d.imports.proposeDaysWorked(call.input, now, signal);
+      if (!proposed.ok) {
+        onStep?.({ kind: "tool", name: call.name, args, by: "model", ok: false, error: `not built: ${proposed.error.slice(0, 60)}` });
+        return { callId: call.id, content: `Not built: ${proposed.error}. Tell him plainly (ask him which contract if that's what it needs).`, isError: true };
+      }
+      onStep?.({ kind: "tool", name: call.name, args, by: "model", ok: true, result: "waiting for your OK", confirm: { id: proposed.value.id, label: proposed.value.label, kind: "finhub" } });
+      return { callId: call.id, content: `Built, not sent yet: the app is asking him "Send it" / "Don't" for: ${proposed.value.label}.\n${proposed.value.summary}\nSay in a sentence or two what each month will hold and the days left; after his OK he adds them in FinHub ("Add these days"). Never say they're in FinHub yet.` };
     }
     if (call.name === FINHUB_RECURRING_TOOL.name) {
       const input = (call.input ?? {}) as Record<string, unknown>;
