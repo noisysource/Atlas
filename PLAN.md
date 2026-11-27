@@ -1144,6 +1144,12 @@ Confirmed (2026-11-12):
   Each is read once (first 20,000 characters: the order summary; thinking off) into FinHub's
   client contract shape (the supplier's NIF gives the entity); one proposal
   `client-contracts-{year}` with `clientContracts`, created in FinHub's From Atlas tab.
+  `finhub_days_worked` (2026-11-27, #397): "this week I worked 4 days". No documents and no
+  model: Atlas reads FinHub's `clientContracts` and `contractHandovers`, matches each month to
+  the one contract covering it (asks for the reference when two overlap), refuses future months
+  and more than 31 days, and says the days left. Mode `add` (a week) or `set` (a month's total,
+  past months). One proposal per message, `days-worked-{date}-{time}`, with `daysWorked`;
+  FinHub's "Add these days" merges it into the month's handover (noisysource#188).
   Capture now, train later (#379, 2026-11-25): on commit FinHub keeps what he committed
   beside the proposal (`committed` on the import); `finhub/learning.ts` sweeps the book's
   decided imports at start and hourly and records each once in the dataset (#295) as a

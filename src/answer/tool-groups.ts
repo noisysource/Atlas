@@ -28,7 +28,7 @@ export const GROUP_ABOUT: Record<ToolGroup, string> = {
   cloud: "his Google Cloud environments: errors, logs and the database, which holds KidClub's business data (families, bills, income, costs)",
   invoices: "KidClub's invoices in Vendus: totals, VAT, one invoice",
   drive: "his Google Drive: list and read folders and files, create folders, save email attachments (like invoices) into a folder",
-  finhub: "FinHub, the books of Noisy Source, Noisy Phocus and the household: what documents each month has in Drive, and importing a month (payslips, bank statements) for him to review",
+  finhub: "FinHub, the books of Noisy Source, Noisy Phocus and the household: what documents each month has in Drive, importing a month (payslips, bank statements) for him to review, and logging the days he worked on a client contract",
   kanban: "the dev kanban (Tasks app): what's open, his and Atlas's cards, boards per app and the roadmap, adding and moving cards, comments, a card's pull requests",
   house: "the house: heating and its settings, heat pump, thermostats, temperatures, climate history, solar, battery, energy and the electricity bill, the tariff, faults, blinds and lights",
 };
@@ -154,9 +154,15 @@ const RULES: readonly { readonly pattern: RegExp; readonly groups: readonly Tool
       finhub, fin hub, books, bookkeeping, ledger, payslip*, salary, salaries, statement*, bank statement*, balance*,
       import*, opening balance, loan, loans, bpi, social security, irs, cash flow, forecast,
       recurring, recurring expense*, subscription*, standing charge*, client contract*, malt, daily rate, order summary,
+      days worked, day worked, worked days, handover*, timesheet*, dias trabalhados, trabalhei,
       contabilidade, contrato*, employment contract*, payroll, recibo*, vencimento*, salario*, extrato*, saldo*, importa*, emprestimo*, seguranca social, tesouraria, previsao, recorrente*, assinatura*, subscric*`),
     // FinHub's tools read the Drive folder themselves; with drive_list beside them,
     // the model browsed the folders and miscounted what was there.
+    groups: ["finhub"],
+  },
+  {
+    // "This week I worked 4 days": the days on his client contract.
+    pattern: /\bworked\s+(?:\d+(?:[.,]\d+)?|a|one|two|three|four|five|half\s+a)\s+(?:full\s+)?days?\b/,
     groups: ["finhub"],
   },
   {
