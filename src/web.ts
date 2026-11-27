@@ -47,6 +47,7 @@ export const FILES: readonly { path: string; file: string; contentType: string }
   { path: "/reminders.js", file: "reminders.js", contentType: "text/javascript; charset=utf-8" },
   { path: "/reminders-lib.js", file: "reminders-lib.js", contentType: "text/javascript; charset=utf-8" },
   { path: "/costs.js", file: "costs.js", contentType: "text/javascript; charset=utf-8" },
+  { path: "/home.js", file: "home.js", contentType: "text/javascript; charset=utf-8" },
   { path: "/tools-tab.js", file: "tools-tab.js", contentType: "text/javascript; charset=utf-8" },
   { path: "/logs-tab.js", file: "logs-tab.js", contentType: "text/javascript; charset=utf-8" },
   { path: "/logs-lib.js", file: "logs-lib.js", contentType: "text/javascript; charset=utf-8" },

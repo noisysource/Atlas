@@ -299,6 +299,7 @@ export const makeServer = (
           onSentence: (text) => sendSentences([text]),
           // Live path for the brain view (#130): the same steps the final path carries.
           onReach: (tool) => send("reach", { tool }),
+          onProgress: (text) => send("progress", { text }),
           onStep: (step) => {
             steps.push(step);
             send("step", step);
@@ -482,6 +483,32 @@ export const makeServer = (
     });
   }
 
+  // The House Brain's domain panels: read-only, kept a minute.
+  const homePanels = deps.homePanels;
+  if (homePanels)
+    app.get("/home/panels", async (c) => {
+      c.header("Cache-Control", "no-store");
+      return c.json({ panels: await homePanels() });
+    });
+  // The House Brain's unified calendar: read-only, kept a minute.
+  const homeCalendar = deps.homeCalendar;
+  if (homeCalendar)
+    app.get("/home/calendar", async (c) => {
+      c.header("Cache-Control", "no-store");
+      return c.json(await homeCalendar());
+    });
+  // FinHub's version back in Google, for a plan changed there: his click is the OK.
+  const finhubCalendar = deps.finhubCalendar;
+  if (finhubCalendar)
+    app.post("/finhub-calendar/put-back", bodyLimit({ maxSize: 4 * 1024, onError: (c) => c.json(errorBody("The request is too large."), 413) }), async (c) => {
+      if (!isJson(c.req.header("content-type"))) return c.json(errorBody("POST /finhub-calendar/put-back needs Content-Type: application/json."), 415);
+      const body = (await c.req.json().catch(() => ({}))) as { key?: unknown };
+      if (typeof body.key !== "string" || body.key.length > 200) return c.json(errorBody("No key."), 400);
+      const got = await finhubCalendar.putBack(body.key);
+      if (!got.ok) return c.json(errorBody(got.error), 409);
+      if (homeCalendar) await homeCalendar(true).catch(() => undefined);
+      return c.json({ ok: true });
+    });
   // #247: what Atlas costs, per service, for the costs panel.
   const costs = deps.costs;
   if (costs) {
@@ -530,6 +557,30 @@ export const makeServer = (
       const body = ChangeBody.safeParse(await c.req.json().catch(() => undefined));
       if (!body.success) return c.json(errorBody('Send { id, decision: "yes" | "no" }.'), 400);
       return c.json(await houseChanges.decide(body.data.id, body.data.decision));
+    });
+  }
+
+  // FinHub: his answer to sending a month's import. Only "yes" sends it, to the "From Atlas" tab.
+  const finhubImports = deps.finhubImports;
+  if (finhubImports) {
+    const ImportBody = z.object({ id: z.string().regex(/^[a-f0-9]{8,64}$/), decision: z.enum(["yes", "no"]) }).strict();
+    app.post("/finhub/import", bodyLimit({ maxSize: 1024, onError: (c) => c.json(errorBody("The request is too large."), 413) }), async (c) => {
+      if (!isJson(c.req.header("content-type"))) return c.json(errorBody("POST /finhub/import needs Content-Type: application/json."), 415);
+      const body = ImportBody.safeParse(await c.req.json().catch(() => undefined));
+      if (!body.success) return c.json(errorBody('Send { id, decision: "yes" | "no" }.'), 400);
+      return c.json(await finhubImports.decide(body.data.id, body.data.decision));
+    });
+  }
+
+  // The dev kanban: his answer to a new card, a change or a comment. Only "yes" sends it.
+  const kanbanChanges = deps.kanbanChanges;
+  if (kanbanChanges) {
+    const KanbanBody = z.object({ id: z.string().regex(/^[a-f0-9]{8,64}$/), decision: z.enum(["yes", "no"]) }).strict();
+    app.post("/kanban/change", bodyLimit({ maxSize: 1024, onError: (c) => c.json(errorBody("The request is too large."), 413) }), async (c) => {
+      if (!isJson(c.req.header("content-type"))) return c.json(errorBody("POST /kanban/change needs Content-Type: application/json."), 415);
+      const body = KanbanBody.safeParse(await c.req.json().catch(() => undefined));
+      if (!body.success) return c.json(errorBody('Send { id, decision: "yes" | "no" }.'), 400);
+      return c.json(await kanbanChanges.decide(body.data.id, body.data.decision));
     });
   }
 

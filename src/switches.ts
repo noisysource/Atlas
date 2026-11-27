@@ -13,7 +13,7 @@
 //   github / plans                  GitHub (and everything built on it), or only plans
 //   code / code.fix / code.tasks    the code agent, or only fixes / coding tasks
 //   memory / skills / decisions     memory (and skills), skills, the decisions log
-//   cloud / house / house.control / invoices
+//   cloud / house / house.control / invoices / kanban / finhub
 // The answerer is rebuilt only when the switches change.
 
 import { mkdir, readFile, writeFile } from "node:fs/promises";
@@ -50,6 +50,8 @@ export const SWITCHES: readonly SwitchDef[] = [
   { id: "house", node: "house", label: "House", what: "Reading the heating, energy and blinds" },
   { id: "house.control", node: "house", label: "Move the blinds", what: "Moving blinds (each move needs your OK)" },
   { id: "invoices", node: "vendus", label: "Invoices", what: "Reading KidClub's invoices in Vendus" },
+  { id: "finhub", node: "drive", label: "FinHub", what: "Reading the month's documents for FinHub, and sending an import (after your OK)" },
+  { id: "kanban", node: "github", label: "Kanban", what: "Reading the dev boards, and changing cards (each change needs your OK)" },
   { id: "web", node: "web", label: "Web search", what: "Looking things up online (capped per answer and per day)" },
 ];
 
@@ -99,6 +101,10 @@ export const availableSwitches = (deps: BareDeps, accounts: readonly GmailAccoun
         return (deps.connectors ?? []).some((c) => c.tools.some((t) => t.name === "house_blinds"));
       case "invoices":
         return (deps.connectors ?? []).some((c) => c.group === "invoices");
+      case "kanban":
+        return (deps.connectors ?? []).some((c) => c.group === "kanban");
+      case "finhub":
+        return (deps.connectors ?? []).some((c) => c.group === "finhub");
       default:
         return s.id.startsWith("gmail:") && deps.gmail !== undefined && accounts.includes(s.id.slice("gmail:".length) as GmailAccount);
     }

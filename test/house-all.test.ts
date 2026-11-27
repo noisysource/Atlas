@@ -48,6 +48,10 @@ const fakeDomotics = (docs: Record<string, Record<string, unknown>> = {}, opts: 
       writes.push({ kind: "patch", path: path.join("/"), fields });
       return ok(true);
     },
+    put: async (path, fields) => {
+      writes.push({ kind: "put", path: path.join("/"), fields });
+      return ok(true);
+    },
     add: async (collection, fields) => {
       writes.push({ kind: "add", path: collection, fields });
       return ok("new-id");
@@ -237,5 +241,26 @@ describe("asking Atlas", () => {
     expect(steps.map((s) => (s.kind === "tool" ? `${s.name} ${s.ok}` : s.kind))).toEqual(["house_settings true", "house_heating true"]);
     expect(steps[1]).toMatchObject({ confirm: { kind: "house-change", label: "Heating: comfort 23 → 22 °C" } });
     expect(f.writes).toEqual([]);
+  });
+});
+
+describe("a refused sign-in says why", () => {
+  it("keeps Google's reason and says what to do, never the password", async () => {
+    const { signInRefusal } = await import("../src/house/domotics.js");
+    expect(signInRefusal(400, "OPERATION_NOT_ALLOWED : Password sign-in is disabled", "atlas@kidclub.pt", "noisysource-dev")).toBe(
+      "atlas@kidclub.pt couldn't sign in to noisysource-dev (400 OPERATION_NOT_ALLOWED): email/password sign-in is off in noisysource-dev: the monorepo's create-agent-user.sh noisysource-dev turns it on",
+    );
+    expect(signInRefusal(400, "INVALID_LOGIN_CREDENTIALS", "atlas@kidclub.pt", "noisysource-dev")).toContain("wrong email or password");
+    expect(signInRefusal(400, undefined, "atlas@kidclub.pt", "noisysource-prod")).toBe("atlas@kidclub.pt couldn't sign in to noisysource-prod (400): check atlas@kidclub.pt exists in noisysource-prod and connect again");
+  });
+
+  it("reaches the brain through the client", async () => {
+    const d = makeDomotics({
+      user: async () => USER,
+      fetch: (async () => new Response(JSON.stringify({ error: { code: 400, message: "INVALID_LOGIN_CREDENTIALS" } }), { status: 400 })) as unknown as typeof fetch,
+    });
+    const got = await d.get(["finhub_books", "noisysource-group"]);
+    expect(!got.ok && got.error.message).toContain("INVALID_LOGIN_CREDENTIALS");
+    expect(!got.ok && got.error.message).not.toContain(USER.password);
   });
 });

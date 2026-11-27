@@ -8,6 +8,7 @@ import { showMorningBrief } from "./morning.js";
 import { startTasksPanel, taskGlance } from "./tasks.js";
 import { startRemindersPanel } from "./reminders.js";
 import { makeCostsView } from "./costs.js";
+import { makeHomeView } from "./home.js";
 import { makeSourcesPage } from "./sources-page.js";
 import { makeLogsTab } from "./logs-tab.js";
 import { makeSystemPanel } from "./system-panel.js";
@@ -233,7 +234,7 @@ const randomBytes = (count) => crypto.getRandomValues(new Uint8Array(count));
  * voiceSession: the user is talking (last question was spoken and they haven't stopped).
  * autoBlocked: the browser refused to reopen the mic by itself; paused until the toggle is flipped.
  * @type {{
- *   history: import("./chat.js").Turn[], language: "en" | "pt", muted: boolean, readTyped: boolean, busy: boolean,
+ *   progress: string, history: import("./chat.js").Turn[], language: "en" | "pt", muted: boolean, readTyped: boolean, busy: boolean,
  *   listening: boolean, transcribing: boolean, pending: PendingClarify | null,
  *   phase: import("./turn-lib.js").Phase, lastContext: string | undefined,
  *   conversation: boolean, voiceSession: boolean, autoBlocked: boolean,
@@ -241,6 +242,8 @@ const randomBytes = (count) => crypto.getRandomValues(new Uint8Array(count));
  * }}
  */
 const state = {
+  /** What a long tool is doing right now ("Reading March's payslip (3/11)…"), shown instead of "Thinking…". */
+  progress: "",
   history: [],
   language: parseLanguage(load("atlas.language")),
   muted: load("atlas.muted") === "true",
@@ -327,7 +330,18 @@ byId("codemaps").addEventListener("click", () => void codeMapView.open());
 
 // #247: what each service costs, per use or fixed.
 // #300: the costs live in the panel's Costs tab.
-const costsView = makeCostsView(byId("costs-panel"), { show: () => side.open("costs"), close: () => side.close() });
+const costsView = makeCostsView(byId("costs-view"), { show: () => side.open("costs"), close: () => side.close() });
+// The House Brain on top of the Dashboard: Atlas's core, its frontier, the numbers.
+// Talking from the Dashboard goes through the chat (one conversation): typed words are sent as
+// if typed in the chat, the core opens the mic like 🎤, and the last exchange is mirrored back.
+const homeView = makeHomeView(byId("home-view"), {
+  onAsk: (text) => {
+    audio(); // a tap or Enter, so the browser lets Atlas's voice play
+    submit(text);
+  },
+  onTalk: () => micButton.click(),
+  onOpenChat: () => side.close(),
+});
 
 // #143: how he got there, for the current answer, as a tree that grows while he works.
 // #309: in the System panel, under the session and cost cards.
@@ -408,7 +422,10 @@ const side = (() => {
       if (tab === "chat") api.close();
       else if (tab === "memory") void openMemories();
       else if (tab === "skills") void openSkills();
-      else if (tab === "costs") costsView.open();
+      else if (tab === "costs") {
+        costsView.open();
+        void homeView.load();
+      }
       else api.open(tab);
     });
   const api = {
@@ -487,7 +504,7 @@ const refreshReach = async () => {
 };
 
 /** Cards still waiting for an OK, counted per node for the badges (#133). */
-const NODE_OF_CARD = { calendar: "calendar", email: "gmail", "draft-delete": "gmail", skill: "skills", fix: "code", "pr-close": "github", "task-start": "code", "task-publish": "code", "task-merge": "code", "task-close": "code", house: "house", lights: "house", "house-change": "house", "gap-issue": "github", "gmail-tidy": "gmail", "calendar-change": "calendar", drive: "drive", "db-change": "cloud" };
+const NODE_OF_CARD = { calendar: "calendar", email: "gmail", "draft-delete": "gmail", skill: "skills", fix: "code", "pr-close": "github", "task-start": "code", "task-publish": "code", "task-merge": "code", "task-close": "code", house: "house", lights: "house", "house-change": "house", "gap-issue": "github", "gmail-tidy": "gmail", "calendar-change": "calendar", drive: "drive", "db-change": "cloud", kanban: "github", finhub: "drive" };
 const refreshPending = () => {
   /** @type {Record<string, number>} */
   const counts = {};
@@ -498,6 +515,14 @@ const refreshPending = () => {
     if (node && node !== "skills") counts[node] = (counts[node] ?? 0) + 1;
   }
   brainView.setPending(counts);
+  // The House Brain lists them all; its buttons answer through the card in the chat.
+  homeView.setNeeds(
+    [...document.querySelectorAll('.confirm[data-pending="true"]')].flatMap((card) => {
+      const [yes, no] = /** @type {HTMLButtonElement[]} */ ([...card.querySelectorAll(".choices button")]);
+      if (!yes || !no || yes.disabled) return [];
+      return [{ ask: card.querySelector("p")?.textContent ?? "", yes: yes.textContent ?? "Yes", no: no.textContent ?? "No", onYes: () => yes.click(), onNo: () => no.click() }];
+    }),
+  );
 };
 
 // ---- rendering ----
@@ -506,6 +531,7 @@ const refreshPending = () => {
 const setPhase = (phase) => {
   if (state.phase === phase) return;
   state.phase = phase;
+  state.progress = "";
   renderControls();
 };
 
@@ -597,6 +623,8 @@ const CARDS = {
   house: { ask: (/** @type {string} */ l) => `Move the blinds? ${l}.`, yes: "Move them", no: "Leave them", endpoint: "/house/blinds", failed: "nothing moved" },
   lights: { ask: (/** @type {string} */ l) => `Change the lights? ${l}.`, yes: "Do it", no: "Leave them", endpoint: "/house/lights", failed: "nothing changed" },
   "house-change": { ask: (/** @type {string} */ l) => `Change the house? ${l}.`, yes: "Do it", no: "Leave it", endpoint: "/house/change", failed: "nothing changed" },
+  kanban: { ask: (/** @type {string} */ l) => `Change the kanban? ${l}.`, yes: "Do it", no: "Leave it", endpoint: "/kanban/change", failed: "the board didn't change" },
+  finhub: { ask: (/** @type {string} */ l) => `${l}?`, yes: "Send it", no: "Don't", endpoint: "/finhub/import", failed: "nothing was sent" },
   "pr-close": { ask: (/** @type {string} */ l) => `Close pull request ${l}? Nothing is merged; if it's one of my branches, it's deleted.`, yes: "Close it", no: "Keep it", endpoint: "/github/pr-close", failed: "nothing was closed" },
   "task-start": { ask: (/** @type {string} */ l) => `Start a coding task: ${l}? Claude Code works on a copy, on a new branch, and can run the tests. Nothing is pushed without asking you.`, yes: "Start it", no: "Not now", endpoint: "/code/task", failed: "nothing was started" },
   "task-publish": { ask: (/** @type {string} */ l) => `Push ${l}? A pull request into staging deploys a preview to dev.`, yes: "Push it", no: "Not yet", endpoint: "/code/task", failed: "nothing was pushed" },
@@ -611,7 +639,7 @@ const CARDS = {
  * is worded by code and goes into the history with what really ran.
  * #269: a small, undoable change (`auto`) is done at once, with no question:
  * the card becomes one line saying what happened, with Undo for a calendar event.
- * @param {{ id: string, label: string, auto?: boolean, then?: string, kind?: "calendar" | "skill" | "email" | "draft-delete" | "fix" | "pr-close" | "task-start" | "task-publish" | "task-merge" | "task-close" | "house" | "lights" | "house-change" | "gap-issue" | "gmail-tidy" | "calendar-change" | "drive" | "db-change" }} proposal
+ * @param {{ id: string, label: string, auto?: boolean, then?: string, kind?: "calendar" | "skill" | "email" | "draft-delete" | "fix" | "pr-close" | "task-start" | "task-publish" | "task-merge" | "task-close" | "house" | "lights" | "house-change" | "gap-issue" | "gmail-tidy" | "calendar-change" | "drive" | "db-change" | "kanban" | "finhub" }} proposal
  */
 const confirmCard = (proposal) => {
   const auto = proposal.auto === true;
@@ -868,7 +896,10 @@ const renderControls = () => {
   document.body.dataset.phase = state.phase;
   document.body.dataset.voice = String(session !== null);
   phaseBanner.hidden = state.phase === "idle";
-  phaseText.textContent = phaseLabel(state.phase, state.language, session?.bargeIn ?? null);
+  phaseText.textContent =
+    state.phase === "thinking" && state.progress ? state.progress : phaseLabel(state.phase, state.language, session?.bargeIn ?? null);
+  homeView.setPhase(state.phase === "idle" ? "idle" : "thinking", state.phase === "idle" ? "" : phaseText.textContent ?? "");
+  homeView.setListening(session !== null);
   micButton.disabled = !listenAvailable() && session === null;
   if (!listenAvailable()) micButton.title = !micSupported ? "This browser can't record the microphone" : "Listening is English-only for now";
   micNote.hidden = listenAvailable();
@@ -1469,11 +1500,19 @@ const ask = async (question, context, hidden = false) => {
             else appendToMessage(item, sentence);
             // A filler already reacted: don't add the reply's own reaction on top (#92).
             if (!skipSpokenReaction({ usedFiller, first, sentence })) await say(sentence);
+          } else if (ev.event === "progress") {
+            state.progress = String(data.text ?? "").slice(0, 160);
+            renderControls();
           } else if (ev.event === "reach") {
             brainView.reach(String(data.tool ?? ""));
             traceView.reach(String(data.tool ?? ""));
           }
           else if (ev.event === "step") {
+            // A tool finished: its progress line is done.
+            if (state.progress) {
+              state.progress = "";
+              renderControls();
+            }
             // The same steps the final path carries (#130), drawn as they happen.
             const [step] = pathOf({ path: [data] });
             if (step) {
@@ -2876,3 +2915,25 @@ var systemPanel = makeSystemPanel(byId("system"), {
   who: () => people.name(),
   sources: () => ({ on: reachNodes.filter((n) => n.status === "on" || n.status === "ready").length, all: reachNodes.filter((n) => n.status !== "kiro").length }),
 });
+
+// The Dashboard shows the last exchange of the chat under Atlas's core.
+{
+  let queued = false;
+  const mirror = () => {
+    queued = false;
+    const items = /** @type {HTMLElement[]} */ ([...transcript.querySelectorAll("li.message")]);
+    const lastYou = [...items].reverse().find((li) => li.classList.contains("user"));
+    const after = lastYou ? items.slice(items.indexOf(lastYou) + 1) : items;
+    const atlas = [...after].reverse().find((li) => !li.classList.contains("user"));
+    const text = (/** @type {HTMLElement | undefined} */ li) => li?.querySelector("p")?.textContent?.trim() ?? "";
+    homeView.setExchange({ you: text(lastYou), atlas: text(atlas), kind: atlas ? ([...atlas.classList].find((c) => c !== "message") ?? "answer") : "answer" });
+  };
+  new MutationObserver(() => {
+    if (queued) return;
+    queued = true;
+    requestAnimationFrame(mirror);
+  }).observe(transcript, { childList: true, subtree: true, characterData: true });
+}
+
+// Atlas opens on the Dashboard (the House Brain); the chat is a click away.
+/** @type {HTMLButtonElement | null} */ (document.querySelector('.rail [role="tab"][data-tab="costs"]'))?.click();

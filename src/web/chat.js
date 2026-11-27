@@ -42,13 +42,15 @@ export const parseLanguage = (value) => (value === "pt" ? "pt" : DEFAULT_LANGUAG
  */
 export const appendTurn = (history, role, text, tools) => {
   const kept = (tools ?? []).slice(0, LIMITS.toolsPerTurn).map((t) => t.slice(0, LIMITS.toolChars));
-  return [...history, { role, text: text.slice(0, LIMITS.turnChars), ...(kept.length > 0 ? { tools: kept } : {}) }].slice(-LIMITS.historyTurns);
+  // An empty turn (an answer with no words) would make the next question's history invalid.
+  const said = text.trim() === "" ? "—" : text;
+  return [...history, { role, text: said.slice(0, LIMITS.turnChars), ...(kept.length > 0 ? { tools: kept } : {}) }].slice(-LIMITS.historyTurns);
 };
 
 /**
  * Actions waiting for Renato's OK (Reach 2): each one gets a card with
  * "Add it" / "Don't add".
- * @param {readonly PathStep[]} path @returns {{ id: string, label: string, kind?: "calendar" | "skill" | "email" | "draft-delete" | "fix" | "pr-close" | "task-start" | "task-publish" | "task-merge" | "task-close" | "house" | "lights" | "house-change" | "gap-issue" | "gmail-tidy" | "calendar-change" | "drive" | "db-change" }[]}
+ * @param {readonly PathStep[]} path @returns {{ id: string, label: string, kind?: "calendar" | "skill" | "email" | "draft-delete" | "fix" | "pr-close" | "task-start" | "task-publish" | "task-merge" | "task-close" | "house" | "lights" | "house-change" | "gap-issue" | "gmail-tidy" | "calendar-change" | "drive" | "db-change" | "kanban" | "finhub" }[]}
  */
 export const confirmsOf = (path) =>
   path.flatMap((step) =>
@@ -381,7 +383,7 @@ export const voiceNoteVisible = ({ note, voiceInUse }) => note !== "" && voiceIn
  * @typedef {{ kind: "precheck", result: "none" | "handoff" | "route" }
  *   | { kind: "brain", brain: Brain, instead?: { asked: Brain, why: string }, routed?: string }
  *   | { kind: "tools", offered: readonly string[] }
- *   | { kind: "tool" | "skill", name: string, args: string, by: "code" | "model", ok: boolean, result?: string, error?: string, confirm?: { id: string, label: string, auto?: boolean, then?: string, kind?: "calendar" | "skill" | "email" | "draft-delete" | "fix" | "pr-close" | "task-start" | "task-publish" | "task-merge" | "task-close" | "house" | "lights" | "house-change" | "gap-issue" | "gmail-tidy" | "calendar-change" | "drive" | "db-change" } }
+ *   | { kind: "tool" | "skill", name: string, args: string, by: "code" | "model", ok: boolean, result?: string, error?: string, confirm?: { id: string, label: string, auto?: boolean, then?: string, kind?: "calendar" | "skill" | "email" | "draft-delete" | "fix" | "pr-close" | "task-start" | "task-publish" | "task-merge" | "task-close" | "house" | "lights" | "house-change" | "gap-issue" | "gmail-tidy" | "calendar-change" | "drive" | "db-change" | "kanban" | "finhub" } }
  *   | { kind: "guard", claimedAction: number, promise: number, perception: number, toolResult?: number, replaced: boolean }} PathStep
  */
 

@@ -18,10 +18,15 @@ import type { PrCloser } from "./github/pr-close.js";
 import type { Blinds } from "./house/blinds.js";
 import type { Lights } from "./house/lights.js";
 import type { HouseChanges } from "./house/house-changes.js";
+import type { KanbanChanges } from "./kanban/kanban.js";
+import type { FinhubImports } from "./finhub/finhub.js";
 import type { Gaps } from "./gaps/gaps.js";
 import type { Reminders } from "./reminders/reminders.js";
 import type { TalkStore } from "./talk.js";
 import type { AnswerEvent, CostDetail, CostSummary } from "./costs.js";
+import type { Panel } from "./home-panels.js";
+import type { HomeCalendar } from "./home-calendar.js";
+import type { CalendarSync } from "./finhub/calendar-sync.js";
 import type { LiveSessions } from "./live/routes.js";
 import type { CalendarChanges } from "./calendar/change.js";
 import type { InboxTidy } from "./gmail/tidy.js";
@@ -162,7 +167,7 @@ export type PathStep =
        * card with "Add it" / "Don't add", and POSTs `id` to /calendar/confirm.
        * Page only: the path is never logged.
        */
-      readonly confirm?: { readonly id: string; readonly label: string; /** #269: small and undoable: the page does it at once, no card. */ readonly auto?: boolean; /** #278: the next step of his request, carried out by itself after the yes. */ readonly then?: string; readonly kind?: "calendar" | "skill" | "email" | "draft-delete" | "fix" | "pr-close" | "task-start" | "task-publish" | "task-merge" | "task-close" | "house" | "lights" | "house-change" | "gap-issue" | "gmail-tidy" | "calendar-change" | "drive" | "db-change" };
+      readonly confirm?: { readonly id: string; readonly label: string; /** #269: small and undoable: the page does it at once, no card. */ readonly auto?: boolean; /** #278: the next step of his request, carried out by itself after the yes. */ readonly then?: string; readonly kind?: "calendar" | "skill" | "email" | "draft-delete" | "fix" | "pr-close" | "task-start" | "task-publish" | "task-merge" | "task-close" | "house" | "lights" | "house-change" | "gap-issue" | "gmail-tidy" | "calendar-change" | "drive" | "db-change" | "kanban" | "finhub" };
     }
   | {
       readonly kind: "guard";
@@ -304,6 +309,8 @@ export type AnswerInput = {
   readonly onStep?: (step: PathStep) => void;
   /** A tool call is starting (#130): its name, one of the tools offered this turn. For the page's brain view. */
   readonly onReach?: (tool: string) => void;
+  /** What a long tool is doing right now ("Reading March's payslip (3/11)…"): live only, never kept. */
+  readonly onProgress?: (text: string) => void;
   /** The tools offered to the brain this turn (#141), once, before it answers. */
   readonly onOffered?: (tools: readonly string[]) => void;
   /** #290: who's talking; the main user when undefined. */
@@ -397,6 +404,10 @@ export type Deps = {
   readonly codeFixes?: Pick<Fixes, "decide" | "view" | "publish">;
   /** #191: coding tasks: his answers to their cards (POST /code/task), the list (GET /code/tasks), stop (POST /code/tasks/stop). */
   readonly codeTasks?: Pick<Tasks, "decide" | "list" | "stop" | "recover">;
+  /** #379 (capture now): FinHub's decided imports into the dataset, his corrections included; run at start and hourly. */
+  readonly finhubSettle?: () => Promise<number>;
+  /** FinHub's plans in Atlas's "FinHub" Google calendar, and what's out of step (FINHUB_CALENDAR=on). */
+  readonly finhubCalendar?: CalendarSync;
   /** #214: his answer to tidying the inbox (POST /gmail/tidy). Only "yes" archives or labels. */
   readonly gmailTidy?: Pick<InboxTidy, "decide">;
   /** #270: his answer to a Drive change (POST /drive/confirm). Only "yes" creates the folder or saves the file. */
@@ -415,6 +426,10 @@ export type Deps = {
   readonly talk?: TalkStore;
   /** #250: Gemini Live sessions, one per page, when ✦ Google may talk by voice. */
   readonly live?: LiveSessions;
+  /** The House Brain's domain panels (House, FinHub, Dev, KidClub, Comms): GET /home/panels. */
+  readonly homePanels?: () => Promise<readonly Panel[]>;
+  /** The House Brain's unified calendar: GET /home/calendar (fresh after a put-back). */
+  readonly homeCalendar?: (fresh?: boolean) => Promise<HomeCalendar>;
   /** #247: what Atlas costs, per service: GET /costs. */
   readonly costs?: { readonly summary: () => Promise<CostSummary>; /** #299 */ readonly detail?: () => Promise<CostDetail>; readonly answer?: (a: AnswerEvent) => void };
   /** #138: his answer to opening an issue for a gap (POST /gaps/issue). Only "yes" opens it. */
@@ -424,6 +439,10 @@ export type Deps = {
   /** #211: his answer to switching the lights (POST /house/lights). Only "yes" changes them. */
   readonly houseLights?: Pick<Lights, "decide">;
   /** #166: his answer to a change to the house (POST /house/change). Only "yes" changes it. */
+  /** FinHub: his answer to sending a month's import (POST /finhub/import). Only "yes" sends it. */
+  readonly finhubImports?: Pick<FinhubImports, "decide">;
+  /** The dev kanban: his answer to a card change (POST /kanban/change). Only "yes" sends it. */
+  readonly kanbanChanges?: Pick<KanbanChanges, "decide">;
   readonly houseChanges?: Pick<HouseChanges, "decide">;
   /** #183: his answer to closing a pull request (POST /github/pr-close). */
   readonly prClose?: Pick<PrCloser, "decide">;

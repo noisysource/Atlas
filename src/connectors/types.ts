@@ -25,6 +25,8 @@ export type ConnectorCall = {
   readonly now: Date;
   readonly signal?: AbortSignal;
   readonly onStep?: (step: PathStep) => void;
+  /** What a long call is doing right now, shown live in place of "Thinking…" (never kept). */
+  readonly onProgress?: (text: string) => void;
   readonly log?: Logger;
   /** ASK_SMALL off: small, undoable changes (a light, a blind, one thermostat) are done at once, with Undo. */
   readonly autoSmall?: boolean;

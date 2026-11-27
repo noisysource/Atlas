@@ -233,6 +233,21 @@ export const SECTIONS: readonly Section[] = [
     ],
   },
   {
+    id: "finhub",
+    title: "FinHub (the books)",
+    about:
+      "Atlas reads each month's payslips and bank statements from Drive and sends them to FinHub's \"From Atlas\" tab after your OK; you review and commit them there.",
+    node: "drive",
+    fields: [
+      on("FINHUB", "Feed FinHub", "Needs Drive on"),
+      { key: "FINHUB_DRIVE_FOLDER", label: "FinHub's folder in Drive", kind: "text", hint: "The Atlas folder (bank statements, payslips, invoices) or a year folder with one subfolder per month: the part after folders/ in its link", placeholder: "11WH0PSSVyRp8sTdVgCQ55aMpGfrgTldK" },
+      { key: "FINHUB_DRIVE_ACCOUNT", label: "Whose Drive", kind: "select", options: ["noisysource", "personal", "kidclub", "marisa"] },
+      { key: "FINHUB_MODEL", label: "Who reads the documents", kind: "text", hint: "Empty: the answer model (Claude). ollama:<model> reads them on this Mac (start Ollama first), e.g. ollama:qwen3.5:4b", placeholder: "ollama:qwen3.5:4b" },
+      on("FINHUB_CALENDAR", "FinHub's calendar in Google", "Days off and trips in a \"FinHub\" calendar Atlas keeps; needs CALENDAR_FINHUB=on npm run calendar:connect"),
+    ],
+    command: "npm run finhub:connect",
+  },
+  {
     id: "kidclub",
     title: "KidClub (Vendus and the database)",
     about:

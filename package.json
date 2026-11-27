@@ -21,6 +21,7 @@
     "gemini:check": "tsx --env-file-if-exists=.env scripts/gemini-check.ts",
     "vendus:connect": "tsx --env-file-if-exists=.env scripts/vendus-connect.ts",
     "house:connect": "tsx --env-file-if-exists=.env scripts/house-connect.ts",
+    "finhub:connect": "tsx --env-file-if-exists=.env scripts/finhub-connect.ts",
     "gcloud:connect": "tsx --env-file-if-exists=.env scripts/gcloud-connect.ts",
     "github:connect": "tsx --env-file-if-exists=.env scripts/github-connect.ts",
     "memory:reflect": "tsx --env-file-if-exists=.env scripts/memory-reflect.ts",

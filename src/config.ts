@@ -181,6 +181,23 @@ export type Config = {
     readonly control: { readonly enabled: boolean; readonly userPath: string };
   };
   /**
+   * FINHUB=on: Atlas feeds FinHub (noisysource/noisysource, apps/noisysource/finhub):
+   * it lists the documents of FINHUB_DRIVE_FOLDER (the year folder, one
+   * subfolder per month) in FINHUB_DRIVE_ACCOUNT's Drive, and imports a
+   * month into FinHub's "From Atlas" tab after his OK, as its own Firebase
+   * user in FinHub's project (npm run finhub:connect, data/finhub/firebase.json).
+   * Needs DRIVE=on. Local only for now.
+   */
+  readonly finhub: {
+    readonly enabled: boolean;
+    readonly folder: string;
+    readonly account: string;
+    readonly userPath: string;
+    /** FINHUB_MODEL: who reads the documents; default the answer model. */ readonly model?: ModelRef;
+    /** FINHUB_CALENDAR=on: FinHub's plans in Atlas's own "FinHub" Google calendar (needs CALENDAR_FINHUB=on npm run calendar:connect). */
+    readonly calendar: boolean;
+  };
+  /**
    * CODE_AGENT=on (#126): Claude can ask a code agent (Claude Code, read-only,
    * on a local copy in data/repos/) about one of the repos GITHUB=on reaches.
    * Each question is capped: CODE_AGENT_MAX_USD (default 0.50) and
@@ -421,6 +438,12 @@ const EnvSchema = z.object({
   WHATSAPP_PORT: z.coerce.number().int().min(1024).max(65535).default(8788),
   HOUSE: onOff,
   HOUSE_CONTROL: onOff,
+  FINHUB: onOff,
+  // FinHub's plans in Atlas's own "FinHub" Google calendar (needs CALENDAR_FINHUB=on npm run calendar:connect).
+  FINHUB_CALENDAR: onOff,
+  FINHUB_DRIVE_FOLDER: z.preprocess((v) => (typeof v === "string" && v.trim() === "" ? undefined : v), z.string().regex(/^[A-Za-z0-9_-]{10,100}$/, { error: "must be a Drive folder id (the part after folders/ in its link)" }).optional()),
+  FINHUB_MODEL: optionalString,
+  FINHUB_DRIVE_ACCOUNT: z.preprocess((v) => (typeof v === "string" && v.trim() === "" ? undefined : v), z.enum(["personal", "noisysource", "kidclub", "marisa"]).default("noisysource")),
   HOUSE_ENV: z.preprocess((v) => (typeof v === "string" && v.trim() === "" ? undefined : v), z.string().regex(/^[a-z][a-z0-9-]{0,19}$/, { error: "must be an environment name like dev" }).default("dev")),
   CODE_AGENT: onOff,
   CODE_AGENT_AUTH: z.preprocess(
@@ -611,6 +634,8 @@ export const loadConfig = (given: Env): Result<Config, string> => {
 
   const classifier = field("CLASSIFIER_MODEL", parseModelRef(raw("CLASSIFIER_MODEL") ?? DEFAULTS.classifierModel));
   const answer = field("ANSWER_MODEL", parseModelRef(raw("ANSWER_MODEL") ?? DEFAULTS.answerModel));
+  // FINHUB_MODEL (e.g. ollama:qwen3.5:4b): who reads FinHub's documents; unset, the answer model.
+  const finhubModel = raw("FINHUB_MODEL") ? field("FINHUB_MODEL", parseModelRef(raw("FINHUB_MODEL") ?? "")) : undefined;
   const profileSource = field("PROFILE_SOURCE", parseProfileSource(raw("PROFILE_SOURCE") ?? DEFAULTS.profileSource));
   const timeZone = field("TIMEZONE", parseTimeZone(raw("TIMEZONE") ?? DEFAULTS.timeZone));
   const kokoroUrl = field("KOKORO_URL", parseLocalUrl(raw("KOKORO_URL") ?? DEFAULTS.kokoroUrl));
@@ -651,6 +676,11 @@ export const loadConfig = (given: Env): Result<Config, string> => {
     if (production) errors.push("CODE_FIX: local only for now (its write tokens are files on this Mac)");
   }
   if (raw("HOUSE") === "on" && raw("GCLOUD") !== "on" && raw("HOUSE_CONTROL") !== "on") errors.push("HOUSE: needs HOUSE_CONTROL=on (Atlas's domotics user) or GCLOUD=on (read-only, from an environment's database)");
+  if (raw("FINHUB") === "on") {
+    if (raw("DRIVE") !== "on") errors.push("FINHUB: needs DRIVE=on (it reads the documents from Drive)");
+    if (!raw("FINHUB_DRIVE_FOLDER")) errors.push("FINHUB: needs FINHUB_DRIVE_FOLDER, the Drive folder id of the year (e.g. Noisy Source's 2026 folder)");
+    if (production) errors.push("FINHUB: local only for now (Atlas's FinHub user is a file on this Mac, not in Secret Manager)");
+  }
   if (raw("HOUSE_CONTROL") === "on") {
     if (raw("HOUSE") !== "on") errors.push("HOUSE_CONTROL: needs HOUSE=on");
     if (production) errors.push("HOUSE_CONTROL: local only for now (Atlas's domotics user is a file on this Mac, not in Secret Manager)");
@@ -733,6 +763,7 @@ export const loadConfig = (given: Env): Result<Config, string> => {
       env: e.HOUSE_ENV,
       control: { enabled: e.HOUSE === "on" && e.HOUSE_CONTROL === "on", userPath: "data/house/firebase.json" },
     },
+    finhub: { enabled: e.FINHUB === "on" && e.DRIVE === "on" && e.FINHUB_DRIVE_FOLDER !== undefined, folder: e.FINHUB_DRIVE_FOLDER ?? "", account: e.FINHUB_DRIVE_ACCOUNT, userPath: "data/finhub/firebase.json", calendar: e.FINHUB_CALENDAR === "on" && e.CALENDAR === "on", ...(finhubModel ? { model: finhubModel } : {}) },
     codeAgent: { enabled: e.GITHUB === "on" && e.CODE_AGENT === "on", maxUsd: e.CODE_AGENT_MAX_USD, maxTurns: e.CODE_AGENT_MAX_TURNS, reposPath: "data/repos", auth: e.CODE_AGENT_AUTH, model: e.CODE_AGENT_MODEL, study: { maxUsd: e.CODE_STUDY_MAX_USD, maxTurns: e.CODE_STUDY_MAX_TURNS, notesPath: "data/code" }, refresh: { mode: e.CODE_REFRESH, maxStudies: e.CODE_REFRESH_MAX }, tasks: { enabled: e.GITHUB === "on" && e.CODE_AGENT === "on" && e.CODE_TASKS === "on", maxUsd: e.CODE_TASK_MAX_USD, maxTurns: e.CODE_TASK_MAX_TURNS, path: "data/tasks" }, fix: { enabled: e.GITHUB === "on" && e.CODE_AGENT === "on" && e.CODE_FIX === "on", maxUsd: e.CODE_FIX_MAX_USD, maxTurns: e.CODE_FIX_MAX_TURNS, writeTokensPath: "data/github-write-tokens.json", fixesPath: "data/fixes" } },
     ollamaThink: e.OLLAMA_THINK === "on",
     userName: e.ATLAS_USER_NAME,

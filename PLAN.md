@@ -946,6 +946,18 @@ committed.
 
 ## Decisions
 
+**Local only (Renato, 2026-11-25; supersedes the cloud model choices below where they
+conflict):** Atlas answers and runs everything on his own machines; no data goes to a cloud
+AI. Every model role is an Ollama model; Gemini Live, Anthropic web search and the Claude
+Code agent are off; speech stays local (whisper.cpp, Kokoro/Piper). A hard case goes to a
+bigger local model or to him, never to Claude. Atlas still reads and writes his data where
+it lives (Gmail, Drive, Calendar, FinHub/Firebase, Vendus, GitHub); WhatsApp (Meta) is off
+unless he turns it on. Atlas moves to an always-on home Mac, reached from anywhere over a
+private connection (no open ports), and learns from his corrections by training there.
+Plan, in order: #382 (local-only switch) → #383 (home server) → #377 (routine) → #378
+(document inbox) → #384 (from anywhere, voice on the phone) → #379 (learning, local
+training).
+
 Confirmed in #1 (2026-11-05):
 
 - **Models:** Claude Haiku (`claude-haiku-5-5`) for the classifier, Claude
@@ -1071,6 +1083,80 @@ Confirmed (2026-11-12):
   remote execution) and the vendor secrets stay out, in the rules too.
   `HOUSE_CONTROL=on` alone is enough; `house_now` then reads through the
   same user.
+
+- **The dev kanban, after an OK:** the Tasks app's boards (one per app plus
+  "All systems", in noisysource/noisysource) through its callables in
+  `noisysource-prod`, as the same `atlas@kidclub.pt` user as the house (the
+  callables let in Renato, Atlas and Claude Code; the rules keep `tasks_*`
+  from both agents). `src/kanban/kanban.ts` + `src/connectors/kanban.ts`, the
+  `kanban` tool group (its own galaxy switch, on the GitHub node). Reads run
+  at once: `kanban_open` ("what's open?": his cards and Atlas's, not done),
+  `kanban_list`, `kanban_card`, `kanban_prs` (read-only; he merges from the
+  Tasks app). Writes only propose, on a "kanban" card, never at once, Local
+  mode included (the board is shared): `kanban_create`, `kanban_update`
+  (only the fields that change, labelled from → to), `kanban_comment`; an OK
+  lasts ten minutes, 30 writes an hour; nothing can delete. On whenever the
+  house's user is (`HOUSE_CONTROL=on`). Its contract is the monorepo root
+  CLAUDE.md's "Tasks kanban" entry.
+
+- **FinHub, fed by Atlas (FINHUB=on):** FinHub (the books, in the monorepo)
+  has no AI; Atlas reads the documents. `src/finhub/finhub.ts` +
+  `src/connectors/finhub.ts`, the `finhub` tool group (galaxy switch on the
+  Drive node). `finhub_inventory` lists FINHUB_DRIVE_FOLDER: the Atlas folder
+  (bank statements/BPI - <entity>, payslips/<ENTITY>, invoices; whose a payslip
+  is from the employer's NIPC in its name, the month from the name), or a year
+  folder with one subfolder per month ("3mar2026"), entity by entity, month by month, files sorted into
+  payslips, statements, invoices and other by name, and what's missing.
+  `finhub_import` builds one entity's month: reads its payslips and statements
+  as text, extracts each with the answer model (JSON schemas, counted as
+  "finhub" in the costs panel, at most 40 model calls an import and 40 imports
+  a day), checks each statement adds up, categorises its lines and finds the
+  subscriptions, loans and contracts, then shows one "finhub" card ("Send it"),
+  never sent at once. On yes it writes ONE document,
+  `finhub_books/noisysource-group/atlas_imports/{entity}-{month}`, in the
+  shapes of FinHub's review workbench; Renato commits it there. It won't
+  overwrite a month he committed or set aside unless asked `again`. Atlas's
+  FinHub user is its own file (`npm run finhub:connect`,
+  `data/finhub/firebase.json`), so FinHub can be on dev while the house is on
+  prod. Not yet: Gmail as a source (the household's documents), invoices as
+  documents, scans and photos (text PDFs only).
+  `finhub_contracts` (the year pass, 2026-11-24) runs first per entity: it reads
+  ALL of a year's payslips (at most 36) and builds each person's contract as
+  versions, each from a month on (`versionsFrom`: a one-month stretch between
+  steadier ones is an exception, like a month on leave, not a change; a change
+  seen only in the last month is kept and flagged). Same card and OK; one
+  document `{entity}-{year}-contracts`, whose contract drafts carry `versions`
+  (FinHub merges them into the worker's contract, the import's months winning).
+  `finhub_setup` (2026-11-25) comes first on an empty book: each entity's first
+  statement of the year gives its account (product, bank, 1 January balance) and the
+  loans it shows; the companies' NIPCs come from BOOK_ENTITIES. One proposal
+  `setup-{year}` with a `setup` block; FinHub's "Create these" makes them after his
+  OK. Never account numbers (stripped from names too): he adds the IBANs.
+  `finhub_recurring` (2026-11-25), the year pass for expenses: ALL of an entity's
+  statements of a year (at most 24) are extracted, and the code (`recurringFrom`) keeps
+  each merchant (`merchantKey`: no card numbers, dates or bank words) charged about once
+  a month in at least three months; a supermarket, charged many times a month, isn't a
+  subscription. The model only names each one and says its kind; loans (the setup has
+  them), salaries, taxes and transfers are left out and listed. One proposal
+  `{entity}-{year}-recurring` with subscription drafts (usual amount, day, VAT).
+  Capture now, train later (#379, 2026-11-25): on commit FinHub keeps what he committed
+  beside the proposal (`committed` on the import); `finhub/learning.ts` sweeps the book's
+  decided imports at start and hourly and records each once in the dataset (#295) as a
+  `finhub` entry: the proposal item by item (masked: no IBANs or long numbers) and his
+  corrections (removed, edited fields, unticked lines). The nightly review skips them;
+  they're for training the local model.
+  The financial calendar (decided 2026-11-27): FinHub is its master (days off, trips, money
+  dates). `finhub/calendar-sync.ts` writes FinHub's plans to Atlas's own "FinHub" Google
+  calendar (`calendar/finhub-calendar.ts`, scope `calendar.app.created`: only calendars Atlas
+  made; FINHUB_CALENDAR=on, connect with CALENDAR_FINHUB=on), every 15 minutes. A change in
+  FinHub always goes to Google; a FinHub event moved or deleted in Google is never overwritten
+  silently: it's listed as out of step until he changes FinHub or clicks "Put FinHub's back".
+  The Dashboard's unified calendar (`home-calendar.ts`, GET /home/calendar) shows two weeks of
+  every Google calendar (one layer each, EC only as "Busy", the FinHub calendar skipped) plus
+  FinHub's layer from the book (plans and client payments), with the out-of-step ones.
+  FINHUB_MODEL picks who reads the documents (default the answer model;
+  `ollama:<model>` keeps them on this Mac, with a context sized to the document
+  and thinking off).
 
 - **Google Cloud (#161):** Atlas (not the code agent) reads errors and
   logs, read-only, from Cloud Logging. Each environment is a project and a
@@ -1536,3 +1622,20 @@ personal data tools (Gmail, Drive, calendar), phone access (#19), local speech
   many went to Local in 7 days and about what they'd have cost on Claude.
   Rules only; a learned router can come once the dataset has enough.
 
+
+
+## The House Brain (the Dashboard, 2026-11-25)
+
+Mockup: claude.ai/artifact/GqiJQwzQyQzvzNDuaGzYAy. Done: step 1 (#362: Atlas's core and its
+frontier of light, the headline numbers, live activity, tools connected) and step 2 (#364:
+Needs your call, every waiting card in one list, answered through the card in the chat; the
+core turns amber).
+
+Step 3 (the domain panels, House, FinHub, Dev, KidClub, Today): one read-only GET,
+`/home/panels` (`src/home-panels.ts`), running each connector's own read tool with fixed
+input and no model (house_now, kanban_open, vendus_invoices for the month so far), today's
+calendar (EC events left out: Kiro's), and FinHub's book (cash per entity, imports waiting)
+through a subcollection list on the Firebase client. Kept a minute. A panel with no source
+says why. Live activity now shows what Atlas did (answers, tools used, changes, imports,
+cards answered, failures) from the log, not start-up lines, and "sources connected" counts
+like the system panel (on, of every node).

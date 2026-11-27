@@ -27,8 +27,18 @@ import { houseLook, readHouse } from "./house/house-data.js";
 import { makeLights } from "./house/lights.js";
 import { makeVendusGet, type VendusGet } from "./vendus/vendus.js";
 import { forCountry } from "./connectors/types.js";
+import { makeHomePanels } from "./home-panels.js";
+import { makeHomeCalendar } from "./home-calendar.js";
+import { makeFinhubSettle } from "./finhub/learning.js";
+import { makeCalendarSync } from "./finhub/calendar-sync.js";
+import { makeFinhubCalendar } from "./calendar/finhub-calendar.js";
 import { vendusConnector } from "./connectors/vendus.js";
 import { houseConnector } from "./connectors/house.js";
+import { kanbanConnector } from "./connectors/kanban.js";
+import { finhubConnector } from "./connectors/finhub.js";
+import { makeFinhubImports, type FinhubDb } from "./finhub/finhub.js";
+import { isGoogleAccount } from "./google-accounts.js";
+import { makeKanbanChanges, makeKanbanRead } from "./kanban/kanban.js";
 import { makeCodeRefresh } from "./code/freshness.js";
 import { briefSources } from "./brief.js";
 import { makeMorningBriefs, type BriefStore, type MorningBrief } from "./morning.js";
@@ -39,8 +49,8 @@ import { makePersonalAnswerer } from "./answer/personal.js";
 import { makeAnswerRouter, makeBrainRouter } from "./answer/router.js";
 import { makeGoogleCalendarReader, type CalendarReader } from "./calendar/google.js";
 import { makeAccessTokens } from "./calendar/oauth.js";
-import { isEcEvent, localDate, type CalendarError } from "./calendar/read.js";
-import { CALENDAR_ACCOUNTS, calendarTokensPath, type CalendarAccount, type CalendarReaders } from "./calendar/accounts.js";
+import { isEcEvent, localDate, type CalendarError, type DayRange } from "./calendar/read.js";
+import { CALENDAR_ACCOUNTS, calendarTokensPath, readAccounts, type CalendarAccount, type CalendarReaders } from "./calendar/accounts.js";
 import type { CodeAgent } from "./code/agent.js";
 import { makeClaudeCodeAgent } from "./code/claude-code.js";
 import { makeRepoCopies, type RepoCopies, type Run } from "./code/repos.js";
@@ -125,6 +135,8 @@ export type AppInputs = {
   readonly vendusGet?: VendusGet;
   /** #191: tests give their own tasks. */
   readonly codeTasks?: Tasks;
+  /** #295: the dataset, when kept: FinHub's decided imports are recorded in it (#379). */
+  readonly dataset?: Dataset;
   /** Tests: a conversation store that isn't on disk. */
   readonly conversation?: ConversationStore;
   /** #290 tests: a household that isn't on disk. */
@@ -574,6 +586,52 @@ export const buildDeps = async (inputs: AppInputs): Promise<Result<Deps, string>
   const blinds = legrand ? makeBlinds({ legrand, log }) : undefined;
   const lights = legrand ? makeLights({ legrand, log }) : undefined;
   const houseChanges = domotics ? makeHouseChanges({ domotics, log }) : undefined;
+  // The dev kanban: its callables live in the same project as the house (noisysource-prod), so the same user reaches them.
+  const kanbanRead = domotics ? makeKanbanRead(domotics.call) : undefined;
+  const kanbanChanges = domotics ? makeKanbanChanges({ call: domotics.call, ...(kanbanRead ? { read: kanbanRead } : {}), log }) : undefined;
+  // FinHub: the month's documents from Drive, extracted with the answer model (counted as "finhub"),
+  // and sent after his OK as Atlas's own user in FinHub's project (its own file: dev or prod).
+  // FINHUB_MODEL can put the reading on this Mac (Ollama), without thinking: it's extraction.
+  const finhubRef = config.finhub.model ?? config.models.answer;
+  const finhubLlm =
+    config.finhub.enabled && driveClient && config.toolCalling
+      ? metered(buildLlm(finhubRef, keys, { log, ollama: config.ollamaUrl, ollamaThink: false }), finhubRef, "finhub")
+      : undefined;
+  const finhubImports =
+    finhubLlm?.ok && driveClient && isGoogleAccount(config.finhub.account)
+      ? (() => {
+          const fb = makeDomotics({ user: () => readFirebaseUser(config.finhub.userPath) });
+          const db: FinhubDb = {
+            get: async (path, signal) => {
+              const got = await fb.get(path, signal);
+              return got.ok ? ok(got.value ? { fields: got.value.fields } : undefined) : err({ message: got.error.message });
+            },
+            put: fb.put,
+          };
+          const drive = { client: driveClient, account: config.finhub.account, folder: config.finhub.folder };
+          // Documents of the book's collections, plain fields: the House Brain's FinHub panel, and
+          // the year passes (who's on the payroll).
+          const list = async (collection: string, limit: number) => {
+            const got = fb.list ? await fb.list(["finhub_books", "noisysource-group"], collection, limit) : err({ message: "can't list" });
+            return got.ok ? ok(got.value.map((d) => ({ ...d.fields, id: d.path.split("/").pop() ?? "" }))) : err(got.error.message);
+          };
+          // #379, capture now: each import he decided in FinHub, with his corrections, into the dataset.
+          const dataset = inputs.dataset;
+          const settle = dataset ? makeFinhubSettle({ listImports: (limit) => list("atlas_imports", limit), record: (e) => dataset.record(e), who: "renato", root: process.cwd(), log }) : undefined;
+          return { drive, list, settle, imports: makeFinhubImports({ drive, llm: finhubLlm.value, db: { ...db, list }, log }) };
+        })()
+      : undefined;
+  // FINHUB=on but no tools: say why at start-up, rather than a FinHub question quietly getting none.
+  if (config.finhub.enabled && !finhubImports) {
+    const why = !config.toolCalling
+      ? "TOOL_CALLING is off"
+      : !driveClient
+        ? "Drive isn't connected"
+        : finhubLlm && !finhubLlm.ok
+          ? finhubLlm.error
+          : `FINHUB_DRIVE_ACCOUNT ${config.finhub.account} isn't a Google account Atlas reads`;
+    log.warn("finhub tools not loaded", { why });
+  }
   // The live state through the same user; without it, read-only from HOUSE_ENV's database (GCLOUD).
   const houseDb = domotics ? domoticsDb(domotics) : gcloud?.db;
   // #183: closing pull requests after his OK, with the same write token (on with CODE_FIX).
@@ -762,6 +820,58 @@ export const buildDeps = async (inputs: AppInputs): Promise<Result<Deps, string>
         };
       })()
     : undefined;
+  // #168: the plugged-in connectors, in the order their tools are described; the House Brain's panels read them too.
+  const plugged = config.toolCalling
+    ? forCountry(
+        [
+        ...(vendusGet ? [vendusConnector({ get: vendusGet, timeZone: config.timeZone })] : []),
+        // #166: the house, from the domotics bridge's state and Atlas's own domotics user.
+        ...(houseDb && config.house.enabled
+          ? [houseConnector({ db: houseDb, env: domotics ? "domotics" : config.house.env, timeZone: config.timeZone, ...(blinds ? { blinds } : {}), ...(lights ? { lights } : {}), ...(domotics ? { read: readHouse(domotics) } : {}), ...(houseChanges ? { changes: houseChanges } : {}) })]
+          : []),
+        // The dev kanban, through the same user: reads at once, changes after his OK.
+        ...(kanbanRead ? [kanbanConnector({ read: kanbanRead, ...(kanbanChanges ? { changes: kanbanChanges } : {}) })] : []),
+        // FinHub: the month's documents in, after his OK, for him to review in FinHub.
+        ...(finhubImports ? [finhubConnector({ drive: finhubImports.drive, imports: finhubImports.imports, timeZone: config.timeZone })] : []),
+        ],
+        config.country,
+      )
+    : [];
+  // FinHub's plans (days off, trips) in Atlas's own "FinHub" Google calendar; FinHub is the
+  // master, a change made in Google waits for him (FINHUB_CALENDAR=on).
+  const finhubCalendar =
+    finhubImports && config.finhub.calendar
+      ? makeCalendarSync({ calendar: makeFinhubCalendar({ accessToken: () => calendarToken("personal") }), list: finhubImports.list, root: process.cwd(), log })
+      : undefined;
+  // The House Brain's unified calendar: every Google calendar (EC as busy) and FinHub's layer.
+  const homeCalendar = makeHomeCalendar({
+    timeZone: config.timeZone,
+    ...(calendar
+      ? {
+          events: async (range: DayRange) => {
+            const got = await readAccounts(calendar.accounts ?? { personal: calendar.read }, range, undefined);
+            return got.ok ? ok(got.value.events) : got;
+          },
+        }
+      : {}),
+    ...(finhubImports ? { finhub: finhubImports.list } : {}),
+    ...(finhubCalendar ? { drifts: finhubCalendar.drifts } : {}),
+  });
+  // The House Brain's domain panels: fixed read-only reads, no model.
+  const homePanels = makeHomePanels({
+    connectors: plugged,
+    timeZone: config.timeZone,
+    log,
+    ...(calendar
+      ? {
+          calendar: async (range: DayRange) => {
+            const got = await readAccounts(calendar.accounts ?? { personal: calendar.read }, range, undefined);
+            return got.ok ? ok(got.value.events) : got;
+          },
+        }
+      : {}),
+    ...(finhubImports ? { finhub: finhubImports.list } : {}),
+  });
   const answerers = personalWith(answerLlm.value);
   const localAnswerers = personalWith(localLlm.value);
   const background = inputs.background ?? makeBackgroundTasks({ log });
@@ -869,16 +979,22 @@ export const buildDeps = async (inputs: AppInputs): Promise<Result<Deps, string>
     ...(studies ? { codeStudies: studies, codeMaps: async () => mapViews(await noteStore.all()) } : {}),
     ...(fixes ? { codeFixes: fixes } : {}),
     ...(tasks ? { codeTasks: tasks } : {}),
+    ...(finhubImports?.settle ? { finhubSettle: finhubImports.settle } : {}),
+    ...(finhubCalendar ? { finhubCalendar } : {}),
     ...(morningBrief ? { morningBrief } : {}),
     ...(codeRefresh ? { codeRefresh } : {}),
     ...(prs ? { prClose: prs } : {}),
     ...(blinds && config.house.enabled ? { houseBlinds: blinds } : {}),
     ...(lights && config.house.enabled ? { houseLights: lights } : {}),
     ...(houseChanges && config.house.enabled ? { houseChanges } : {}),
+    ...(kanbanChanges ? { kanbanChanges } : {}),
+    ...(finhubImports ? { finhubImports: finhubImports.imports } : {}),
     ...(gaps ? { gapIssue: gaps } : {}),
     ...(calendarChanges ? { calendarChange: calendarChanges } : {}),
     ...(reminders ? { reminders } : {}),
     talk,
+    homePanels,
+    homeCalendar,
     costs: {
       summary: async () => summarize(await costLog.all(), { now: new Date(), timeZone: config.timeZone, subscriptions: config.costs.subscriptions }),
       // #299: per answer, day, model and brain.
@@ -953,16 +1069,7 @@ export const buildDeps = async (inputs: AppInputs): Promise<Result<Deps, string>
               // #168: the plugged-in connectors, in the order their tools are described: Vendus, the house.
               ...(config.toolCalling
                 ? {
-                    connectors: forCountry(
-                      [
-                        ...(vendusGet ? [vendusConnector({ get: vendusGet, timeZone: config.timeZone })] : []),
-                        // #166: the house, from the domotics bridge's state and Atlas's own domotics user.
-                        ...(houseDb && config.house.enabled
-                          ? [houseConnector({ db: houseDb, env: domotics ? "domotics" : config.house.env, timeZone: config.timeZone, ...(blinds ? { blinds } : {}), ...(lights ? { lights } : {}), ...(domotics ? { read: readHouse(domotics) } : {}), ...(houseChanges ? { changes: houseChanges } : {}) })]
-                          : []),
-                      ],
-                      config.country,
-                    ),
+                    connectors: plugged,
                   }
                 : {}),
               // #175: only the tool groups a question needs; the classifier model (Haiku) helps pick.

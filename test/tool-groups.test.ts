@@ -261,3 +261,17 @@ describe("Claude with routed tools", () => {
     expect(barePrompt(undefined, { tools: true })).not.toContain("tools_more");
   });
 });
+
+describe("tool names as words", () => {
+  it("\"use finhub_inventory\" routes to FinHub", async () => {
+    const { groupsByWords } = await import("../src/answer/tool-groups.js");
+    expect(groupsByWords("use finhub_inventory for 2026")).toContain("finhub");
+  });
+});
+
+describe("FinHub questions", () => {
+  it("get FinHub's tools, not Drive's beside them", async () => {
+    const { groupsByWords } = await import("../src/answer/tool-groups.js");
+    expect(groupsByWords("What does FinHub still need for 2026?")).toEqual(["finhub"]);
+  });
+});

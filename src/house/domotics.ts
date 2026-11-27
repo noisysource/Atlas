@@ -34,6 +34,10 @@ export type Domotics = {
   readonly patch: (path: readonly string[], fields: Record<string, unknown>) => Promise<Result<true, DomoticsError>>;
   /** Adds a document with a new id, `createdAt` set by the server. */
   readonly add: (collection: string, fields: Record<string, unknown>) => Promise<Result<string, DomoticsError>>;
+  /** Writes a whole document at a path (creating or replacing it), the named fields set to the server's time. */
+  readonly put: (path: readonly string[], fields: Record<string, unknown>, serverTimes: readonly string[]) => Promise<Result<true, DomoticsError>>;
+  /** Up to `limit` documents of a subcollection under a document (FinHub's book), in no set order. */
+  readonly list?: (parent: readonly string[], collection: string, limit: number, signal?: AbortSignal) => Promise<Result<DbDoc[], DomoticsError>>;
 };
 
 /** A plain value as Firestore's REST value. Integers stay integers; dates are timestamps. */
@@ -49,6 +53,27 @@ export const toValue = (v: unknown): Record<string, unknown> => {
 };
 
 export const toFields = (o: Record<string, unknown>): Record<string, unknown> => Object.fromEntries(Object.entries(o).filter(([, v]) => v !== undefined).map(([k, v]) => [k, toValue(v)]));
+
+/**
+ * Why Firebase refused Atlas's sign-in, in words he can act on. Google's own
+ * reason (e.g. INVALID_LOGIN_CREDENTIALS, OPERATION_NOT_ALLOWED) is kept; the
+ * password never is. Shared by the house's and FinHub's users, so it names
+ * the user and the project, not a script.
+ */
+export const signInRefusal = (status: number, reason: unknown, email: string, project: string): string => {
+  const why = typeof reason === "string" ? reason.split(/[\s:]/)[0]?.slice(0, 60) ?? "" : "";
+  const hint =
+    why === "OPERATION_NOT_ALLOWED" || why === "PASSWORD_LOGIN_DISABLED"
+      ? `email/password sign-in is off in ${project}: the monorepo's create-agent-user.sh ${project} turns it on`
+      : why === "INVALID_LOGIN_CREDENTIALS" || why === "INVALID_PASSWORD" || why === "EMAIL_NOT_FOUND"
+        ? `wrong email or password for ${email} in ${project}: set the password again with create-agent-user.sh ${project}, then connect again with the same one`
+        : why === "USER_DISABLED"
+          ? `${email} is disabled in ${project}`
+          : why.startsWith("API_KEY") || why === "INVALID_API_KEY"
+            ? `the web API key isn't ${project}'s`
+            : `check ${email} exists in ${project} and connect again`;
+  return `${email} couldn't sign in to ${project} (${status}${why ? ` ${why}` : ""}): ${hint}`;
+};
 
 const DOCS = "/documents/";
 const docOf = (raw: unknown): DbDoc | undefined => {
@@ -82,8 +107,8 @@ export const makeDomotics = (deps: { readonly user: () => Promise<FirebaseUser |
       ...(signal ? { signal } : {}),
     }).catch(() => undefined);
     if (!res) return err({ code: "unreachable", message: "Firebase sign-in couldn't be reached" });
-    const body = (await res.json().catch(() => ({}))) as { idToken?: unknown; expiresIn?: unknown };
-    if (!res.ok || typeof body.idToken !== "string") return err({ code: "auth", message: `Atlas's domotics user couldn't sign in (${res.status}): check it exists and run npm run house:connect again` });
+    const body = (await res.json().catch(() => ({}))) as { idToken?: unknown; expiresIn?: unknown; error?: { message?: unknown } };
+    if (!res.ok || typeof body.idToken !== "string") return err({ code: "auth", message: signInRefusal(res.status, body.error?.message, user.email, user.project) });
     const seconds = Number(body.expiresIn);
     token = { value: body.idToken, until: now() + (Number.isFinite(seconds) ? seconds : 3600) * 1000 - 5 * 60_000, email: user.email };
     return ok({ user, token: body.idToken });
@@ -113,21 +138,26 @@ export const makeDomotics = (deps: { readonly user: () => Promise<FirebaseUser |
       return err({ code: "denied", message: `the domotics project doesn't let Atlas ${what}` });
     }
     if (res.status === 404 || status === "NOT_FOUND") return err({ code: "missing", message: `${what}: not found` });
-    if (!res.ok || body.error) return err({ code: "failed", message: `${what} failed (${res.status})` });
+    // A callable's own refusal (HttpsError) says what was wrong: pass it on, short.
+    const said = typeof (body.error as { message?: unknown } | undefined)?.message === "string" ? `: ${String((body.error as { message: string }).message).slice(0, 300)}` : "";
+    if (!res.ok || body.error) return err({ code: "failed", message: `${what} failed (${res.status})${said}` });
     return ok(body);
   };
 
   const base = (u: FirebaseUser) => `https://firestore.googleapis.com/v1/projects/${u.project}/databases/(default)/documents`;
 
-  const runQuery = async (collection: string, structured: Record<string, unknown>, what: string, signal?: AbortSignal): Promise<Result<DbDoc[], DomoticsError>> => {
+  const runQuery = async (collection: string, structured: Record<string, unknown>, what: string, signal?: AbortSignal, parent: readonly string[] = []): Promise<Result<DbDoc[], DomoticsError>> => {
     if (!SEGMENT.test(collection)) return err({ code: "failed", message: "not a collection name" });
-    const got = await request((u) => `${base(u)}:runQuery`, { method: "POST", body: { structuredQuery: { from: [{ collectionId: collection }], ...structured } } }, what, signal);
+    if (parent.length > 0 && (parent.length % 2 !== 0 || !safePath(parent))) return err({ code: "failed", message: "not a document path" });
+    const at = parent.length > 0 ? `/${parent.join("/")}` : "";
+    const got = await request((u) => `${base(u)}${at}:runQuery`, { method: "POST", body: { structuredQuery: { from: [{ collectionId: collection }], ...structured } } }, what, signal);
     if (!got.ok) return got;
     const rows = Array.isArray(got.value) ? got.value : [];
     return ok(rows.flatMap((r) => (typeof r === "object" && r !== null && "document" in r ? [docOf((r as { document: unknown }).document)].filter((d): d is DbDoc => d !== undefined) : [])));
   };
 
   return {
+    list: (parent, collection, limit, signal) => runQuery(collection, { limit: Math.max(1, Math.min(200, limit)) }, `read ${collection}`, signal, parent),
     call: async (name, data, signal) => {
       const got = await request((u) => `https://${u.region}-${u.project}.cloudfunctions.net/${name}`, { method: "POST", body: { data } }, `call ${name}`, signal);
       return got.ok ? ok((got.value as { result?: unknown }).result) : got;
@@ -197,6 +227,25 @@ export const makeDomotics = (deps: { readonly user: () => Promise<FirebaseUser |
         `add to ${collection}`,
       );
       return got.ok ? ok(id) : got;
+    },
+    put: async (path, fields, serverTimes) => {
+      if (!safePath(path)) return err({ code: "failed", message: "not a document path" });
+      const got = await request(
+        (u) => `${base(u)}:commit`,
+        {
+          method: "POST",
+          bodyFor: (u) => ({
+            writes: [
+              {
+                update: { name: `projects/${u.project}/databases/(default)/documents/${path.join("/")}`, fields: toFields(fields) },
+                updateTransforms: serverTimes.map((fieldPath) => ({ fieldPath, setToServerValue: "REQUEST_TIME" })),
+              },
+            ],
+          }),
+        },
+        `write ${path.join("/")}`,
+      );
+      return got.ok ? ok(true) : got;
     },
   };
 };

@@ -61,6 +61,9 @@ import { checkPrClose, GITHUB_PR_CLOSE_TOOL, type PrCloser } from "../github/pr-
 import { attachmentForBrain } from "../gmail/attachments.js";
 import { BRIEF_EMAIL_QUERY, briefForBrain, briefSources, briefSummary, DAY_BRIEF_TOOL, gatherBrief } from "../brief.js";
 import { GROUP_ABOUT, groupOfTool, groupsByWords, groupsUsedLately, pickGroups, TOOL_GROUPS, TOOLS_MORE, toolsMoreTool, type RouterMode, type ToolGroup, type ToolRouter } from "./tool-groups.js";
+
+/** The groups the tool list names one by one (#175); the rest follow in TOOL_GROUPS order. */
+const LISTED_ABOVE: readonly ToolGroup[] = ["calendar", "gmail", "github", "code", "cloud", "invoices", "house", "drive"];
 import { DB_CHANGE_TOOL, type DbWrites } from "../gcloud/db-write.js";
 import { aggregateForBrain, checkDbAggregate, checkDbCollections, checkDbGet, checkDbQuery, collectionsForBrain, DB_AGGREGATE_TOOL, DB_COLLECTIONS_TOOL, DB_QUERY_TOOL, DB_TOOLS, docForBrain, docsForBrain, type DbReader } from "../gcloud/firestore.js";
 import { checkLogsRequest, errorsForBrain, errorsSummary, GCLOUD_ERRORS_TOOL, GCLOUD_LIMITS, GCLOUD_TOOLS, logsForBrain, type GcloudReader } from "../gcloud/gcloud.js";
@@ -957,7 +960,7 @@ export const makeBareAnswerer = (deps: {
                   : [];
   const routing = deps.tools === true && deps.route !== undefined && deps.route.mode !== "all";
 
-  return async ({ question, history, onText, signal, spoken, onStep: onStepAsked, onReach, onOffered, now, remember, onToolSucceeded, user, easy }) => {
+  return async ({ question, history, onText, signal, spoken, onStep: onStepAsked, onReach, onProgress, onOffered, now, remember, onToolSucceeded, user, easy }) => {
     // #290: someone of his household who isn't him: her name, profile, memories, accounts and tools.
     const guest = user && !user.main ? user : undefined;
     // #312: in Local mode nothing leaves the Mac, and the household's limits are off.
@@ -1069,6 +1072,9 @@ export const makeBareAnswerer = (deps: {
         ...(on.includes("invoices") ? toolsOf("invoices") : []),
         ...(on.includes("house") ? toolsOf("house") : []),
         ...(on.includes("drive") ? toolsOf("drive") : []),
+        // Every other group (kanban, FinHub, and any added later), in TOOL_GROUPS order,
+        // so a new connector's group can't be routed to and then left out of the list.
+        ...TOOL_GROUPS.filter((g) => !LISTED_ABOVE.includes(g) && on.includes(g)).flatMap(toolsOf),
         ...(routing && missing.length > 0 ? [toolsMoreTool(missing)] : []),
       ];
       // #290: the brief reads his email, so it isn't hers.
@@ -1411,7 +1417,7 @@ export const makeBareAnswerer = (deps: {
       if (deps.gcloud && GCLOUD_TOOLS.some((t) => t.name === call.name)) return runGcloud(deps.gcloud, call);
       // #168: a plugged-in connector runs its own tools.
       const connector = connectorOf(connectors, call.name);
-      if (connector) return connector.run({ call, now, ...(signal ? { signal } : {}), ...(onStep ? { onStep } : {}), ...(deps.log ? { log: deps.log } : {}), ...(deps.autoSmall ? { autoSmall: true } : {}), ...(deps.local ? { local: true } : {}) });
+      if (connector) return connector.run({ call, now, ...(signal ? { signal } : {}), ...(onStep ? { onStep } : {}), ...(onProgress ? { onProgress } : {}), ...(deps.log ? { log: deps.log } : {}), ...(deps.autoSmall ? { autoSmall: true } : {}), ...(deps.local ? { local: true } : {}) });
       if (deps.gcloud?.db && DB_TOOLS.some((t) => t.name === call.name)) return runGcloudDb(deps.gcloud.reader, deps.gcloud.db, call);
       if (deps.gcloud?.writes && call.name === DB_CHANGE_TOOL.name) {
         const input = typeof call.input === "object" && call.input !== null ? (call.input as Record<string, unknown>) : {};
