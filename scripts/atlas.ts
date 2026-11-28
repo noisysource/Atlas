@@ -25,9 +25,14 @@ import { fileURLToPath } from "node:url";
 import { loadConfig } from "../src/config.js";
 import {
   makeLinePrefixer,
+  managesVoice,
   pageUrl,
   parseLaunchArgs,
   planLaunch,
+  sameServices,
+  serviceNames,
+  voiceServicesOn,
+  type VoiceService,
 } from "../src/launch.js";
 import { applySettings } from "../src/settings.js";
 import { RESTART_CODE } from "../src/settings-routes.js";
@@ -72,15 +77,14 @@ const [atlasUp, voiceUp, ollamaUp] = await Promise.all([
   answers(new URL("/health", c.tts.kokoroUrl).toString()),
   answers(new URL("/api/tags", c.ollamaUrl).toString()),
 ]);
-const plan = planLaunch(
-  { voice, open },
-  {
-    atlasUp,
-    voiceUp,
-    ollamaUp,
-    voiceInstalled: existsSync(path.join(root, ".voice/kokoro-fastapi/.venv")),
-  },
-);
+const launchState = {
+  atlasUp,
+  voiceUp,
+  ollamaUp,
+  voiceInstalled: existsSync(path.join(root, ".voice/kokoro-fastapi/.venv")),
+};
+const plan = planLaunch({ voice, open }, launchState, voiceServicesOn(process.env));
+const ownsVoice = managesVoice({ voice, open }, launchState);
 for (const note of plan.notes) say(note);
 
 const openPage = () => {
@@ -175,8 +179,47 @@ const stop = (code: number) => {
 process.on("SIGINT", () => stop(130));
 process.on("SIGTERM", () => stop(143));
 
-if (plan.startVoice)
-  run("voice", "bash", [path.join(root, "scripts/voice-up.sh")]);
+// The voice services switched on in Tools → Voice. When the page applies new
+// settings, only a change to that set restarts voice: the old services stop
+// first (they hold the ports), then the ones switched on start.
+let voiceRun:
+  | { child: ChildProcess; services: readonly VoiceService[]; replaced: boolean }
+  | undefined;
+const startVoice = (env: NodeJS.ProcessEnv, services: readonly VoiceService[]) => {
+  const v: { child: ChildProcess; services: readonly VoiceService[]; replaced: boolean } = {
+    services,
+    replaced: false,
+    child: run("voice", "bash", [path.join(root, "scripts/voice-up.sh")], {
+      env,
+      // Stopped on purpose (switched in Tools): Atlas carries on.
+      onExit: () => v.replaced,
+    }),
+  };
+  voiceRun = v;
+};
+const syncVoice = (env: NodeJS.ProcessEnv) => {
+  if (!ownsVoice) return;
+  const want = voiceServicesOn(env);
+  if (voiceRun ? sameServices(voiceRun.services, want) : want.length === 0) return;
+  const startWanted = () => {
+    if (stopping) return;
+    if (want.length === 0) return say("Voice: every service is switched off; the page speaks with the browser's voice.");
+    say(`Voice: starting ${serviceNames(want)}.`);
+    startVoice(env, want);
+  };
+  const old = voiceRun;
+  voiceRun = undefined;
+  if (!old || old.child.exitCode !== null || old.child.signalCode !== null) return startWanted();
+  say(`Voice: stopping ${serviceNames(old.services)} to apply the new settings.`);
+  old.replaced = true;
+  const force = setTimeout(() => old.child.kill("SIGKILL"), 8000);
+  old.child.once("exit", () => {
+    clearTimeout(force);
+    startWanted();
+  });
+  old.child.kill("SIGTERM");
+};
+if (plan.startVoice) startVoice(process.env, voiceServicesOn(process.env));
 
 // #310: the Cloudflare tunnel for WhatsApp, when it's on: its address is pointed at Meta once Atlas answers.
 let tunnel: { child: ChildProcess; url?: string } | undefined;
@@ -230,6 +273,7 @@ const startAtlas = (env: NodeJS.ProcessEnv) =>
         applySettings(root, fresh);
         say("Applying the new settings: restarting Atlas.");
         syncTunnel(fresh);
+        syncVoice(fresh);
         startAtlas(fresh);
         return true;
       },

@@ -351,6 +351,10 @@ const optionalString = z.preprocess(
   z.string().trim().optional(),
 );
 
+/** The voice to use: a Kokoro or Piper voice whose service is switched off in Tools speaks with the browser's. */
+export const ttsProviderOn = (provider: TtsProviderId, e: { readonly VOICE_KOKORO?: string; readonly VOICE_PIPER?: string }): TtsProviderId =>
+  (provider === "kokoro" && e.VOICE_KOKORO === "off") || (provider === "piper" && e.VOICE_PIPER === "off") ? "browser" : provider;
+
 const EnvSchema = z.object({
   NODE_ENV: z.preprocess(
     (v) => (typeof v === "string" && v.trim() === "" ? undefined : v),
@@ -389,6 +393,10 @@ const EnvSchema = z.object({
     z.enum(["whisper"], { error: 'must be "whisper"' }).optional(),
   ),
   WHISPER_URL: optionalString,
+  // The voice services npm run atlas runs (on unless "off").
+  VOICE_KOKORO: z.preprocess((v) => (typeof v === "string" && v.trim() === "" ? undefined : v), z.enum(["on", "off"], { error: 'must be "on" or "off"' }).optional()),
+  VOICE_PIPER: z.preprocess((v) => (typeof v === "string" && v.trim() === "" ? undefined : v), z.enum(["on", "off"], { error: 'must be "on" or "off"' }).optional()),
+  VOICE_WHISPER: z.preprocess((v) => (typeof v === "string" && v.trim() === "" ? undefined : v), z.enum(["on", "off"], { error: 'must be "on" or "off"' }).optional()),
   OLLAMA_URL: optionalString,
   OLLAMA_MODEL: z.preprocess(
     (v) => (typeof v === "string" && v.trim() === "" ? undefined : v),
@@ -768,7 +776,7 @@ export const loadConfig = (given: Env): Result<Config, string> => {
     ollamaThink: e.OLLAMA_THINK === "on",
     userName: e.ATLAS_USER_NAME,
     users: e.ATLAS_USERS,
-    tts: { provider: e.TTS_PROVIDER ?? DEFAULTS.ttsProvider, voice: e.TTS_VOICE ?? "", kokoroUrl, piperUrl },
+    tts: { provider: ttsProviderOn(e.TTS_PROVIDER ?? DEFAULTS.ttsProvider, e), voice: e.TTS_VOICE ?? "", kokoroUrl, piperUrl },
     stt: { provider: e.STT_PROVIDER ?? DEFAULTS.sttProvider, whisperUrl, hintsPath: e.WHISPER_HINTS_PATH ?? DEFAULTS.whisperHintsPath },
     turn: {
       endOfTurnMs: e.VOICE_END_OF_TURN_MS,

@@ -10,6 +10,9 @@
 # service is up it gets one short warm-up request, so your first turn isn't
 # the slow one. Compare settings with npm run voice:bench.
 #
+# Each one can be switched off in Tools → Voice (VOICE_KOKORO, VOICE_PIPER,
+# VOICE_WHISPER=off) to free its memory; a service that's off isn't started.
+#
 # Their logs go to .voice/logs/ at warning level, so the text being spoken
 # isn't logged. whisper-server is started without --print-realtime (it
 # doesn't print what it heard) and without --convert (it decodes audio in
@@ -35,7 +38,17 @@ LOGS="$VOICE_DIR/logs"
 # answers, gives up, or this script stops.
 RUN="$VOICE_DIR/run"
 
-if [[ ! -d "$VOICE_DIR/kokoro-fastapi/.venv" || ! -d "$VOICE_DIR/piper/.venv" ]]; then
+# On unless switched off in Tools.
+wanted() { [[ "${1:-on}" != "off" ]]; }
+KOKORO_ON=false; wanted "${VOICE_KOKORO:-}" && KOKORO_ON=true
+PIPER_ON=false; wanted "${VOICE_PIPER:-}" && PIPER_ON=true
+WHISPER_ON=false; wanted "${VOICE_WHISPER:-}" && WHISPER_ON=true
+if ! $KOKORO_ON && ! $PIPER_ON && ! $WHISPER_ON; then
+  echo "Every voice service is switched off in Tools; nothing to start."
+  exit 0
+fi
+
+if { $KOKORO_ON && [[ ! -d "$VOICE_DIR/kokoro-fastapi/.venv" ]]; } || { $PIPER_ON && [[ ! -d "$VOICE_DIR/piper/.venv" ]]; }; then
   echo "Run npm run voice:setup first." >&2
   exit 1
 fi
@@ -56,6 +69,7 @@ trap stop EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
 
+if $KOKORO_ON; then
 starting kokoro
 (
   cd "$VOICE_DIR/kokoro-fastapi"
@@ -65,9 +79,15 @@ starting kokoro
   exec uv run --no-sync uvicorn api.src.main:app --host 127.0.0.1 --port "$KOKORO_PORT" --log-level warning --no-access-log
 ) >"$LOGS/kokoro.log" 2>&1 &
 pids+=($!)
+else
+  echo "Kokoro is switched off in Tools; not starting it."
+fi
 
 # A glob, not ls: under pipefail, ls failing on no voices would stop the script.
 first_voice=""
+if ! $PIPER_ON; then
+  echo "Piper is switched off in Tools; not starting it."
+else
 for f in "$VOICE_DIR/piper/voices"/*.onnx; do
   if [[ -e "$f" ]]; then first_voice="$(basename "$f" .onnx)"; break; fi
 done
@@ -79,9 +99,13 @@ if [[ -n "$first_voice" ]]; then
 else
   echo "No Piper voices downloaded; skipping Piper." >&2
 fi
+fi
 
 whisper_model="$VOICE_DIR/whisper/ggml-$WHISPER_MODEL.bin"
-if [[ -f "$whisper_model" ]] && command -v whisper-server >/dev/null 2>&1; then
+if ! $WHISPER_ON; then
+  echo "Whisper is switched off in Tools; not starting it."
+  whisper_model=""
+elif [[ -f "$whisper_model" ]] && command -v whisper-server >/dev/null 2>&1; then
   starting whisper
   whisper-server --host 127.0.0.1 --port "$WHISPER_PORT" -m "$whisper_model" -l en >"$LOGS/whisper.log" 2>&1 &
   pids+=($!)
@@ -114,7 +138,7 @@ warm_whisper() {
     && echo "  Whisper warmed up ($WHISPER_MODEL)"
   rm -f "$silence"
 }
-wait_for "Kokoro" "http://127.0.0.1:$KOKORO_PORT/health" 180 kokoro && warm_kokoro || true
+$KOKORO_ON && { wait_for "Kokoro" "http://127.0.0.1:$KOKORO_PORT/health" 180 kokoro && warm_kokoro || true; }
 [[ -n "$first_voice" ]] && { wait_for "Piper" "http://127.0.0.1:$PIPER_PORT/voices" 60 piper || true; }
 [[ -n "$whisper_model" ]] && { wait_for "Whisper ($WHISPER_MODEL)" "http://127.0.0.1:$WHISPER_PORT/health" 120 whisper && warm_whisper || true; }
 

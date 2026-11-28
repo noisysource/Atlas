@@ -378,8 +378,32 @@ export const SECTIONS: readonly Section[] = [
   {
     id: "voice",
     title: "Voice",
-    about: "How Atlas sounds and listens.",
+    about: "How Atlas sounds and listens, and which voice services run on this Mac.",
     fields: [
+      {
+        ...on(
+          "VOICE_KOKORO",
+          "Run Kokoro (voice)",
+          "Off frees its memory. Applying starts or stops only the voice services that changed. With it off, a Kokoro voice falls back to the browser's.",
+        ),
+        defaultOn: true,
+      },
+      {
+        ...on(
+          "VOICE_PIPER",
+          "Run Piper (voice)",
+          "Off frees its memory. With it off, a Piper voice falls back to the browser's.",
+        ),
+        defaultOn: true,
+      },
+      {
+        ...on(
+          "VOICE_WHISPER",
+          "Run Whisper (listening)",
+          "Off frees its memory, but the mic can't hear you until it's on again (Gemini Live still can).",
+        ),
+        defaultOn: true,
+      },
       {
         key: "TTS_PROVIDER",
         label: "Voice",

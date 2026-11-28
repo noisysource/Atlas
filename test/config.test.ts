@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { loadConfig, parseProfileSource, type Config, type Env } from "../src/config.js";
+import { loadConfig, parseProfileSource, ttsProviderOn, type Config, type Env } from "../src/config.js";
 import { formatModelRef, parseModelRef } from "../src/llm/model-ref.js";
 
 const loadOk = (env: Env): Config => {
@@ -302,5 +302,17 @@ describe("parseProfileSource", () => {
   it("rejects other schemes", () => {
     const result = parseProfileSource("secret:profile");
     expect(!result.ok && result.error).toContain("unknown scheme");
+  });
+});
+
+describe("voice services switched off in Tools", () => {
+  it("a Kokoro or Piper voice whose service is off speaks with the browser's", () => {
+    expect(loadOk({ TTS_PROVIDER: "kokoro", VOICE_KOKORO: "off" }).tts.provider).toBe("browser");
+    expect(loadOk({ TTS_PROVIDER: "kokoro", VOICE_PIPER: "off" }).tts.provider).toBe("kokoro");
+    expect(ttsProviderOn("piper", { VOICE_PIPER: "off" })).toBe("browser");
+    expect(ttsProviderOn("kokoro", {})).toBe("kokoro");
+  });
+  it("only takes on or off", () => {
+    expect(loadConfig({ VOICE_WHISPER: "maybe" }).ok).toBe(false);
   });
 });
