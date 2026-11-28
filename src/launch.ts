@@ -33,18 +33,42 @@ export type LaunchPlan = {
   readonly notes: readonly string[];
 };
 
-export const planLaunch = (args: LaunchArgs, s: LaunchState): LaunchPlan => {
+/** The local voice services, each switched in Tools → Voice. */
+export type VoiceService = "kokoro" | "piper" | "whisper";
+export const VOICE_SERVICES: readonly VoiceService[] = ["kokoro", "piper", "whisper"];
+const VOICE_KEY: Readonly<Record<VoiceService, string>> = { kokoro: "VOICE_KOKORO", piper: "VOICE_PIPER", whisper: "VOICE_WHISPER" };
+const VOICE_NAME: Readonly<Record<VoiceService, string>> = { kokoro: "Kokoro", piper: "Piper", whisper: "Whisper" };
+
+/** The voice services the settings want running: each is on unless set to "off". */
+export const voiceServicesOn = (env: Readonly<Record<string, string | undefined>>): readonly VoiceService[] =>
+  VOICE_SERVICES.filter((s) => env[VOICE_KEY[s]] !== "off");
+
+export const sameServices = (a: readonly VoiceService[], b: readonly VoiceService[]): boolean => a.join(",") === b.join(",");
+
+/** "Kokoro, Piper and Whisper". */
+export const serviceNames = (services: readonly VoiceService[]): string => {
+  const names = services.map((s) => VOICE_NAME[s]);
+  return names.length <= 1 ? (names[0] ?? "") : `${names.slice(0, -1).join(", ")} and ${names[names.length - 1] ?? ""}`;
+};
+
+export const planLaunch = (args: LaunchArgs, s: LaunchState, services: readonly VoiceService[] = VOICE_SERVICES): LaunchPlan => {
   if (s.atlasUp) return { alreadyRunning: true, startVoice: false, notes: ["Atlas is already running."] };
+  const none = services.length === 0;
   const voice = !args.voice
     ? "Voice: off (--no-voice); the page speaks with the browser's voice."
     : s.voiceUp
       ? "Voice: already running."
-      : s.voiceInstalled
-        ? "Voice: starting Kokoro, Piper and Whisper (the first start takes a minute or two)."
-        : "Voice: not set up (npm run voice:setup); starting without it.";
+      : !s.voiceInstalled
+        ? "Voice: not set up (npm run voice:setup); starting without it."
+        : none
+          ? "Voice: every voice service is switched off in Tools; the page speaks with the browser's voice."
+          : `Voice: starting ${serviceNames(services)} (the first start takes a minute or two).`;
   const ollama = s.ollamaUp ? "Ollama: up (the Local brain works)." : "Ollama: not answering, so the Local brain won't work. Open the Ollama app, or run: ollama serve";
-  return { alreadyRunning: false, startVoice: args.voice && !s.voiceUp && s.voiceInstalled, notes: [voice, ollama] };
+  return { alreadyRunning: false, startVoice: args.voice && !s.voiceUp && s.voiceInstalled && !none, notes: [voice, ollama] };
 };
+
+/** Whether the launcher looks after voice at all: asked for, set up, and not already started some other way. */
+export const managesVoice = (args: LaunchArgs, s: LaunchState): boolean => !s.atlasUp && args.voice && !s.voiceUp && s.voiceInstalled;
 
 /**
  * Splits a child's output into whole lines, each with a prefix. Keeps a
